@@ -11,6 +11,7 @@ def summarizeWorkout(fr) -> workout.Profile:
     duration_from_session = None
     distance_from_session = 0
     elevation_gain_from_session = 0
+    sport_from_file: str | None = None
 
     heart_rate: list[int] = []
     speed: list[float] = []
@@ -21,7 +22,12 @@ def summarizeWorkout(fr) -> workout.Profile:
         if frame.frame_type != fitdecode.FIT_FRAME_DATA:
             continue
 
-        if frame.name == "session":
+        if frame.name == "sport":
+            s = frame.get_value("sport")
+            if s is not None:
+                sport_from_file = str(s)
+
+        elif frame.name == "session":
             total_timer = frame.get_value("total_timer_time")
             if total_timer is not None:
                 duration_from_session = int(total_timer)
@@ -76,4 +82,5 @@ def summarizeWorkout(fr) -> workout.Profile:
         speed=speed,
         power=power,
         cadence=cadence,
+        sport_type=sport_from_file,
     )

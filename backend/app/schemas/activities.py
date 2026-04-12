@@ -1,7 +1,20 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ManualActivityCreate(BaseModel):
+    sport_type: str
+    start_time: datetime
+    duration_s: int = Field(..., gt=0)
+    name: Optional[str] = None
+    # TSS resolution (in priority order): explicit tss > rpe > avg_hr
+    tss: Optional[float] = Field(None, ge=0)
+    rpe: Optional[int] = Field(None, ge=1, le=10)
+    avg_hr: Optional[float] = Field(None, gt=0)
+    distance_m: Optional[float] = None
+    elevation_m: Optional[float] = None
 
 
 class ActivityResponse(BaseModel):

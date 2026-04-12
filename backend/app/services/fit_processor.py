@@ -10,6 +10,27 @@ from backend.app.models.orm import Activity, ActivityStream, Athlete
 from backend.app.services.training_math import normalized_power, calculate_tss
 
 
+_FIT_SPORT_MAP = {
+    "running": "Run",
+    "cycling": "Ride",
+    "training": "WeightTraining",
+    "swimming": "Swim",
+    "walking": "Walk",
+    "hiking": "Hike",
+}
+
+
+def _resolve_sport_type(fit_sport: str | None) -> str:
+    """Normalise a raw fitdecode sport string to a Strava-style name."""
+    if fit_sport is None:
+        return "Cycling"
+    mapped = _FIT_SPORT_MAP.get(fit_sport.lower())
+    if mapped:
+        return mapped
+    # Unknown sport: title-case the raw string rather than defaulting to Cycling.
+    return fit_sport.title()
+
+
 def read_fit_start_time(path: str) -> Optional[datetime]:
     """
     Extract just the start timestamp from a FIT file without full processing.
@@ -51,7 +72,7 @@ async def process_fit_file(
     )
 
     activity.name = activity.name or "Uploaded Activity"
-    activity.sport_type = activity.sport_type or "Cycling"
+    activity.sport_type = activity.sport_type or _resolve_sport_type(profile.sport_type)
     activity.start_time = profile.start_time
     activity.duration_s = profile.duration
     activity.distance_m = float(profile.distance)
@@ -59,6 +80,7 @@ async def process_fit_file(
     activity.avg_power = profile.avgPower if profile.power else None
     activity.normalized_power = np
     activity.avg_hr = profile.avgHeartRate if profile.heartRate else None
+    activity.max_hr = profile.peakHR if profile.heartRate else None
     activity.avg_speed_ms = (profile.avgSpeed / 3.6) if profile.speed else None
     activity.avg_cadence = float(profile.avgCadence) if profile.cadence else None
     activity.tss = tss

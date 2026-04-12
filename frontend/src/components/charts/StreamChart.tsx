@@ -21,9 +21,13 @@ function downsample<T>(arr: T[], target: number): T[] {
 }
 
 export function StreamChart({ streams }: Props) {
-  const time = streams['time'] ?? []
   const power = streams['power']
-  const hr = streams['heart_rate'] ?? streams['hr']
+  const hr = streams['heartrate']
+
+  // Streams are sampled at 1 s intervals; synthesise a time axis from the
+  // length of whichever stream is present.
+  const dataLength = (power ?? hr)?.length ?? 0
+  const time = streams['time'] ?? Array.from({ length: dataLength }, (_, i) => i)
 
   if (!time.length) return <p className="text-sm text-muted-foreground">No stream data</p>
 

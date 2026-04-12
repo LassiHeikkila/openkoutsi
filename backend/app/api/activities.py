@@ -15,9 +15,11 @@ from backend.app.schemas.activities import (
     ActivityDetailResponse,
     ActivityListResponse,
     ActivityResponse,
+    ManualActivityCreate,
 )
 from backend.app.services.fit_processor import process_fit_file, read_fit_start_time
 from backend.app.services.metrics_engine import recalculate_from
+from backend.app.services.training_math import calculate_tss
 
 _DUPLICATE_WINDOW = timedelta(seconds=30)
 
@@ -117,6 +119,55 @@ async def upload_activity(
     background_tasks.add_task(
         _bg_process_and_recalculate, str(file_path), athlete.id, activity.id
     )
+
+    return ActivityResponse.model_validate(activity)
+
+
+@router.post("/", response_model=ActivityResponse, status_code=201)
+async def create_manual_activity(
+    payload: ManualActivityCreate,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    athlete = await _get_athlete(user, session)
+
+    # Resolve TSS: explicit value > RPE estimate > HR-based calculation
+    tss: Optional[float] = None
+    if payload.tss is not None:
+        tss = payload.tss
+    elif payload.rpe is not None:
+        tss = (payload.duration_s / 3600) * (payload.rpe ** 2) * 10
+    elif payload.avg_hr is not None:
+        tss, _ = calculate_tss(
+            payload.duration_s, None, payload.avg_hr, None, athlete.max_hr
+        )
+
+    activity = Activity(
+        id=str(uuid.uuid4()),
+        athlete_id=athlete.id,
+        source="manual",
+        name=payload.name or f"{payload.sport_type} Activity",
+        sport_type=payload.sport_type,
+        start_time=payload.start_time,
+        duration_s=payload.duration_s,
+        avg_hr=payload.avg_hr,
+        distance_m=payload.distance_m,
+        elevation_m=payload.elevation_m,
+        tss=tss,
+        status="processed",
+    )
+    session.add(activity)
+    await session.commit()
+    await session.refresh(activity)
+
+    if tss is not None:
+        start_date = (
+            payload.start_time.date()
+            if hasattr(payload.start_time, "date")
+            else payload.start_time
+        )
+        background_tasks.add_task(_bg_recalculate, athlete.id, start_date)
 
     return ActivityResponse.model_validate(activity)
 

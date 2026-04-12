@@ -23,6 +23,8 @@ class Profile:
     power: list[int]  # W at each second
     cadence: list[int]  # RPM at each second
 
+    sport_type: str | None  # raw sport string from FIT file, e.g. "running"
+
     def __init__(
         self,
         start_time: datetime,
@@ -33,6 +35,7 @@ class Profile:
         speed: list[float],
         power: list[int],
         cadence: list[int],
+        sport_type: str | None = None,
     ):
         self.start_time = start_time
         self.duration = duration
@@ -42,6 +45,7 @@ class Profile:
         self.speed = speed
         self.power = power
         self.cadence = cadence
+        self.sport_type = sport_type
 
         self.avgHeartRate = (sum(heartRate) / len(heartRate)) if heartRate else 0.0
         self.avgSpeed = (sum(speed) / len(speed)) if speed else 0.0

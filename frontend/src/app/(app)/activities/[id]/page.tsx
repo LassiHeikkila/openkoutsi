@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { SourceBadge } from '@/components/activities/SourceBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR } from '@/lib/utils'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
@@ -80,7 +81,10 @@ export default function ActivityDetailPage({ params }: Props) {
           </Button>
           <div>
             <h1 className="text-xl font-bold">{activity.name}</h1>
-            <p className="text-sm text-muted-foreground capitalize">{activity.sport_type}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-sm text-muted-foreground capitalize">{activity.sport_type}</p>
+              <SourceBadge source={activity.source} />
+            </div>
           </div>
         </div>
         <AlertDialog>
@@ -122,7 +126,7 @@ export default function ActivityDetailPage({ params }: Props) {
       </div>
 
       {/* Power/HR stream */}
-      {(activity.streams?.power || activity.streams?.heart_rate) && (
+      {(activity.streams?.power || activity.streams?.heartrate) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Power & Heart Rate</CardTitle>

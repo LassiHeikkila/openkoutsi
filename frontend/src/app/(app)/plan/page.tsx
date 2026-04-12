@@ -18,7 +18,18 @@ import {
 } from '@/components/ui/dialog'
 import { PlanCalendar } from '@/components/plan/PlanCalendar'
 import { toast } from '@/components/ui/use-toast'
-import { Plus } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Plus, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { differenceInWeeks } from 'date-fns'
 
 function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
@@ -58,6 +69,7 @@ function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+
       <DialogTrigger asChild>
         <Button size="sm">
           <Plus className="h-4 w-4 mr-1" />
@@ -124,6 +136,7 @@ function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
 
 export default function PlanPage() {
   const { data: plans, mutate } = useSWR<TrainingPlan[]>('/api/plans/', fetcher)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const activePlan = plans?.find((p) => p.status === 'active')
 
@@ -131,7 +144,15 @@ export default function PlanPage() {
     ? Math.max(1, differenceInWeeks(new Date(), new Date(activePlan.start_date)) + 1)
     : 1
 
-  async function handleArchive(id: number) {
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  async function handleArchive(id: string) {
     try {
       await apiFetch(`/api/plans/${id}`, {
         method: 'PUT',
@@ -139,6 +160,20 @@ export default function PlanPage() {
       })
       await mutate()
       toast({ title: 'Plan archived' })
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await apiFetch(`/api/plans/${id}`, { method: 'DELETE' })
+      await mutate()
+      toast({ title: 'Plan deleted' })
     } catch (err) {
       toast({
         title: 'Error',
@@ -194,16 +229,67 @@ export default function PlanPage() {
           <div className="space-y-2">
             {plans
               .filter((p) => p.status !== 'active')
-              .map((plan) => (
-                <Card key={plan.id} className="opacity-60">
-                  <CardContent className="py-3 flex items-center justify-between">
-                    <p className="text-sm font-medium">{plan.name}</p>
-                    <span className="text-xs text-muted-foreground">
-                      {plan.weeks} weeks · {plan.status}
-                    </span>
-                  </CardContent>
-                </Card>
-              ))}
+              .map((plan) => {
+                const isOpen = expanded.has(plan.id)
+                const planWeek = Math.max(
+                  1,
+                  differenceInWeeks(new Date(), new Date(plan.start_date)) + 1,
+                )
+                return (
+                  <Card key={plan.id}>
+                    <CardContent className="py-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="flex-1 flex items-center justify-between text-left gap-2 min-w-0"
+                          onClick={() => toggleExpanded(plan.id)}
+                        >
+                          <p className="text-sm font-medium truncate">{plan.name}</p>
+                          <span className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+                            {plan.weeks} weeks
+                            {isOpen
+                              ? <ChevronUp className="h-3.5 w-3.5" />
+                              : <ChevronDown className="h-3.5 w-3.5" />
+                            }
+                          </span>
+                        </button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete plan?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                "{plan.name}" will be permanently deleted.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={() => handleDelete(plan.id)}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                      {isOpen && (
+                        <div className="mt-4 border-t pt-4">
+                          <PlanCalendar plan={plan} currentWeek={planWeek} />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
           </div>
         </div>
       )}

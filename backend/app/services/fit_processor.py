@@ -1,0 +1,63 @@
+import uuid
+
+import fitdecode
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from openkoutsi.fit import summarizeWorkout
+from backend.app.models.orm import Activity, ActivityStream, Athlete
+from backend.app.services.training_math import normalized_power, calculate_tss
+
+
+async def process_fit_file(
+    path: str,
+    athlete: Athlete,
+    activity: Activity,
+    session: AsyncSession,
+) -> Activity:
+    with fitdecode.FitReader(path) as fr:
+        profile = summarizeWorkout(fr)
+
+    np = normalized_power(profile.power) if profile.power else None
+    tss, intensity_factor = calculate_tss(
+        profile.duration,
+        np,
+        profile.avgHeartRate if profile.heartRate else None,
+        athlete.ftp,
+        athlete.max_hr,
+    )
+
+    activity.name = activity.name or "Uploaded Activity"
+    activity.sport_type = activity.sport_type or "Cycling"
+    activity.start_time = profile.start_time
+    activity.duration_s = profile.duration
+    activity.distance_m = float(profile.distance)
+    activity.elevation_m = float(profile.elevationGain)
+    activity.avg_power = profile.avgPower if profile.power else None
+    activity.normalized_power = np
+    activity.avg_hr = profile.avgHeartRate if profile.heartRate else None
+    activity.avg_speed_ms = (profile.avgSpeed / 3.6) if profile.speed else None
+    activity.avg_cadence = float(profile.avgCadence) if profile.cadence else None
+    activity.tss = tss
+    activity.intensity_factor = intensity_factor
+    activity.status = "processed"
+
+    stream_map = {
+        "power": [float(v) for v in profile.power],
+        "heartrate": [float(v) for v in profile.heartRate],
+        "cadence": [float(v) for v in profile.cadence],
+        "speed": [v / 3.6 for v in profile.speed],  # km/h -> m/s
+    }
+    for stream_type, data in stream_map.items():
+        if data:
+            session.add(
+                ActivityStream(
+                    id=str(uuid.uuid4()),
+                    activity_id=activity.id,
+                    stream_type=stream_type,
+                    data=data,
+                )
+            )
+
+    await session.commit()
+    await session.refresh(activity)
+    return activity

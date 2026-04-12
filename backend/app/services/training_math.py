@@ -1,0 +1,46 @@
+"""
+Shared training load calculations used by both the FIT processor and Strava sync.
+"""
+
+
+def normalized_power(power_series: list[float]) -> float | None:
+    """30-second rolling average → raise to 4th power → mean → 4th root."""
+    if len(power_series) < 30:
+        return None
+    window = 30
+    rolling = [
+        sum(power_series[i - window + 1 : i + 1]) / window
+        for i in range(window - 1, len(power_series))
+    ]
+    if not rolling:
+        return None
+    return (sum(v**4 for v in rolling) / len(rolling)) ** 0.25
+
+
+def calculate_tss(
+    duration_s: int,
+    np: float | None,
+    avg_hr: float | None,
+    ftp: int | None,
+    max_hr: int | None,
+) -> tuple[float | None, float | None]:
+    """
+    Returns (tss, intensity_factor).
+
+    Priority: power-based TSS if NP and FTP are available, otherwise
+    HR-based TRIMP TSS if avg_hr and max_hr are available.
+    """
+    if np is not None and ftp:
+        intensity_factor = np / ftp
+        tss = (duration_s * np * intensity_factor) / (ftp * 3600) * 100
+        return tss, intensity_factor
+
+    if avg_hr is not None and max_hr:
+        lthr = 0.9 * max_hr
+        if lthr == 0:
+            return None, None
+        trimp_weight = 1.92
+        tss = (duration_s * avg_hr * trimp_weight) / (lthr * 3600) * 100
+        return tss, None
+
+    return None, None

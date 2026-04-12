@@ -12,8 +12,13 @@ import {
 
 interface ZoneEntry {
   zone: string
-  minutes: number
+  seconds: number
   pct: number
+}
+
+function formatTime(s: number): string {
+  if (s >= 60) return `${Math.round(s / 60)}m`
+  return `${Math.round(s)}s`
 }
 
 interface Props {
@@ -43,7 +48,7 @@ export function ZoneBar({ data, title }: Props) {
     <div>
       <p className="text-sm font-medium mb-2 text-center">{title}</p>
       <ResponsiveContainer width="100%" height={180}>
-        <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
+        <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
           <XAxis
             dataKey="zone"
             tick={{ fontSize: 11 }}
@@ -51,21 +56,21 @@ export function ZoneBar({ data, title }: Props) {
             axisLine={false}
           />
           <YAxis
-            tickFormatter={(v: number) => `${v}m`}
+            tickFormatter={(v: number) => formatTime(v)}
             tick={{ fontSize: 10 }}
             tickLine={false}
             axisLine={false}
-            width={32}
+            width={56}
           />
           <Tooltip
             contentStyle={{ fontSize: 12, borderRadius: 8 }}
             formatter={(value: number, _: string, entry) => [
-              `${value} min (${entry.payload.pct.toFixed(0)}%)`,
+              `${formatTime(value)} (${entry.payload.pct.toFixed(0)}%)`,
               entry.payload.zone,
             ]}
             labelFormatter={() => ''}
           />
-          <Bar dataKey="minutes" radius={[3, 3, 0, 0]} maxBarSize={48}>
+          <Bar dataKey="seconds" radius={[3, 3, 0, 0]} maxBarSize={48}>
             {data.map((_, i) => (
               <Cell key={i} fill={zoneColor(i)} />
             ))}
@@ -85,7 +90,7 @@ export function toZoneEntries(raw: Record<string, number>): ZoneEntry[] {
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
     .map(([zone, seconds]) => ({
       zone,
-      minutes: Math.round(seconds / 60),
+      seconds,
       pct: (seconds / total) * 100,
     }))
 }

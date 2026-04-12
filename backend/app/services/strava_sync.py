@@ -3,7 +3,7 @@ Strava activity import and webhook event processing.
 """
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.models.orm import Activity, ActivityStream, Athlete
 from backend.app.services.strava_client import StravaClient
 from backend.app.services.training_math import calculate_tss, normalized_power
+
+_DUPLICATE_WINDOW = timedelta(seconds=30)
 
 
 # ── Token management ──────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ async def sync_strava_activities(
         for raw in activities:
             strava_id = str(raw["id"])
 
-            # Skip duplicates
+            # Already imported via Strava — skip.
             dupe = await session.execute(
                 select(Activity).where(
                     Activity.athlete_id == athlete.id,
@@ -65,6 +67,23 @@ async def sync_strava_activities(
                 )
             )
             if dupe.scalar_one_or_none() is not None:
+                continue
+
+            # Cross-source duplicate: a FIT upload for the same activity already
+            # exists. Link it to this Strava activity instead of creating a new record.
+            raw_start = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
+            cross = await session.execute(
+                select(Activity).where(
+                    Activity.athlete_id == athlete.id,
+                    Activity.strava_id.is_(None),
+                    Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
+                    Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
+                )
+            )
+            existing_upload = cross.scalar_one_or_none()
+            if existing_upload is not None:
+                existing_upload.strava_id = strava_id
+                await session.commit()
                 continue
 
             activity = await _import_strava_activity(raw, athlete, client, session)
@@ -217,6 +236,23 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         access_token = await ensure_fresh_token(athlete, session)
         client = StravaClient(access_token)
         raw = await client.get_activity(int(strava_activity_id))
+
+        # Cross-source duplicate: a FIT upload for this activity may already exist.
+        raw_start = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
+        cross = await session.execute(
+            select(Activity).where(
+                Activity.athlete_id == athlete.id,
+                Activity.strava_id.is_(None),
+                Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
+                Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
+            )
+        )
+        existing_upload = cross.scalar_one_or_none()
+        if existing_upload is not None:
+            existing_upload.strava_id = strava_activity_id
+            await session.commit()
+            return
+
         activity = await _import_strava_activity(raw, athlete, client, session)
 
         if activity.start_time:

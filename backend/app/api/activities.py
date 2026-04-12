@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -16,8 +16,10 @@ from backend.app.schemas.activities import (
     ActivityListResponse,
     ActivityResponse,
 )
-from backend.app.services.fit_processor import process_fit_file
+from backend.app.services.fit_processor import process_fit_file, read_fit_start_time
 from backend.app.services.metrics_engine import recalculate_from
+
+_DUPLICATE_WINDOW = timedelta(seconds=30)
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -76,6 +78,30 @@ async def upload_activity(
     storage_dir.mkdir(parents=True, exist_ok=True)
     file_path = storage_dir / f"{uuid.uuid4()}.fit"
     file_path.write_bytes(await file.read())
+
+    # Duplicate detection: extract the activity's start timestamp and check
+    # whether the athlete already has an activity within a 30-second window.
+    # This catches both re-uploads of the same FIT file and FIT files that
+    # correspond to an activity already imported from Strava.
+    fit_start = read_fit_start_time(str(file_path))
+    if fit_start is not None:
+        dupe_result = await session.execute(
+            select(Activity).where(
+                Activity.athlete_id == athlete.id,
+                Activity.start_time >= fit_start - _DUPLICATE_WINDOW,
+                Activity.start_time <= fit_start + _DUPLICATE_WINDOW,
+            )
+        )
+        duplicate = dupe_result.scalar_one_or_none()
+        if duplicate is not None:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "An activity starting at this time already exists.",
+                    "existing_activity_id": duplicate.id,
+                },
+            )
 
     activity = Activity(
         id=str(uuid.uuid4()),

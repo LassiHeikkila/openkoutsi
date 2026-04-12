@@ -1,17 +1,42 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { apiFetch, fetcher } from '@/lib/api'
-import type { AthleteProfile } from '@/lib/types'
+import type { AthleteProfile, Zone } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
+import { ZoneEditor } from '@/components/profile/ZoneEditor'
 import { Suspense } from 'react'
+
+// ── Default zone templates ────────────────────────────────────────────────
+
+function defaultHrZones(maxHr: number): Zone[] {
+  return [
+    { name: 'Z1 Recovery',   low: Math.round(maxHr * 0.50), high: Math.round(maxHr * 0.60) },
+    { name: 'Z2 Endurance',  low: Math.round(maxHr * 0.60), high: Math.round(maxHr * 0.70) },
+    { name: 'Z3 Tempo',      low: Math.round(maxHr * 0.70), high: Math.round(maxHr * 0.80) },
+    { name: 'Z4 Threshold',  low: Math.round(maxHr * 0.80), high: Math.round(maxHr * 0.90) },
+    { name: 'Z5 VO2max',     low: Math.round(maxHr * 0.90), high: maxHr },
+  ]
+}
+
+function defaultPowerZones(ftp: number): Zone[] {
+  return [
+    { name: 'Z1 Recovery',      low: 0,                       high: Math.round(ftp * 0.55) },
+    { name: 'Z2 Endurance',     low: Math.round(ftp * 0.55),  high: Math.round(ftp * 0.75) },
+    { name: 'Z3 Tempo',         low: Math.round(ftp * 0.75),  high: Math.round(ftp * 0.87) },
+    { name: 'Z4 Threshold',     low: Math.round(ftp * 0.87),  high: Math.round(ftp * 0.95) },
+    { name: 'Z5 VO2max',        low: Math.round(ftp * 0.95),  high: Math.round(ftp * 1.06) },
+    { name: 'Z6 Anaerobic',     low: Math.round(ftp * 1.06),  high: Math.round(ftp * 1.20) },
+    { name: 'Z7 Neuromuscular', low: Math.round(ftp * 1.20),  high: 9999 },
+  ]
+}
 
 function StravaNotice() {
   const params = useSearchParams()
@@ -37,6 +62,19 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
+  const [hrZones, setHrZones] = useState<Zone[]>([])
+  const [powerZones, setPowerZones] = useState<Zone[]>([])
+  const [savingHr, setSavingHr] = useState(false)
+  const [savingPower, setSavingPower] = useState(false)
+
+  // Initialise zone editors once profile data arrives
+  useEffect(() => {
+    if (profile) {
+      setHrZones(profile.hr_zones ?? [])
+      setPowerZones(profile.power_zones ?? [])
+    }
+  }, [profile])
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -61,6 +99,36 @@ export default function ProfilePage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSaveHrZones() {
+    setSavingHr(true)
+    try {
+      await apiFetch('/api/athlete/', {
+        method: 'PUT',
+        body: JSON.stringify({ hr_zones: hrZones }),
+      })
+      toast({ title: 'Heart rate zones saved' })
+    } catch (err) {
+      toast({ title: 'Save failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+    } finally {
+      setSavingHr(false)
+    }
+  }
+
+  async function handleSavePowerZones() {
+    setSavingPower(true)
+    try {
+      await apiFetch('/api/athlete/', {
+        method: 'PUT',
+        body: JSON.stringify({ power_zones: powerZones }),
+      })
+      toast({ title: 'Power zones saved' })
+    } catch (err) {
+      toast({ title: 'Save failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+    } finally {
+      setSavingPower(false)
     }
   }
 
@@ -177,6 +245,66 @@ export default function ProfilePage() {
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Heart rate zones */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Heart rate zones</CardTitle>
+          {hrZones.length === 0 && athlete?.max_hr && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHrZones(defaultHrZones(athlete.max_hr!))}
+            >
+              Populate from max HR
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {hrZones.length === 0 && !athlete?.max_hr && (
+            <p className="text-sm text-muted-foreground">
+              Set your max HR above, then use "Populate from max HR" to generate default zones — or add them manually.
+            </p>
+          )}
+          <ZoneEditor zones={hrZones} unit="bpm" onChange={setHrZones} />
+          {hrZones.length > 0 && (
+            <Button onClick={handleSaveHrZones} disabled={savingHr} size="sm">
+              {savingHr ? 'Saving…' : 'Save HR zones'}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Power zones */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Power zones</CardTitle>
+          {powerZones.length === 0 && athlete?.ftp && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPowerZones(defaultPowerZones(athlete.ftp!))}
+            >
+              Populate from FTP
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {powerZones.length === 0 && !athlete?.ftp && (
+            <p className="text-sm text-muted-foreground">
+              Set your FTP above, then use "Populate from FTP" to generate default zones — or add them manually.
+            </p>
+          )}
+          <ZoneEditor zones={powerZones} unit="W" onChange={setPowerZones} />
+          {powerZones.length > 0 && (
+            <Button onClick={handleSavePowerZones} disabled={savingPower} size="sm">
+              {savingPower ? 'Saving…' : 'Save power zones'}
+            </Button>
+          )}
         </CardContent>
       </Card>
 

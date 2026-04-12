@@ -8,7 +8,7 @@ import type { ActivityDetail } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StreamChart } from '@/components/charts/StreamChart'
-import { ZoneDonut } from '@/components/charts/ZoneDonut'
+import { ZoneBar, toZoneEntries } from '@/components/charts/ZoneBar'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +35,11 @@ export default function ActivityDetailPage({ params }: Props) {
   const { data: activity, isLoading } = useSWR<ActivityDetail>(
     `/api/activities/${id}`,
     fetcher,
+  )
+  const { data: zonesData } = useSWR<{ hr?: Record<string, number>; power?: Record<string, number> }>(
+    `/api/metrics/zones/${id}`,
+    fetcher,
+    { shouldRetryOnError: false },
   )
 
   async function handleDelete() {
@@ -125,6 +130,25 @@ export default function ActivityDetailPage({ params }: Props) {
         ))}
       </div>
 
+      {/* Zone breakdown — HR and power side by side */}
+      {(zonesData?.hr || zonesData?.power) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Zone Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {zonesData.hr && (
+                <ZoneBar title="Heart Rate" data={toZoneEntries(zonesData.hr)} />
+              )}
+              {zonesData.power && (
+                <ZoneBar title="Power" data={toZoneEntries(zonesData.power)} />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Power/HR stream */}
       {(activity.streams?.power || activity.streams?.heartrate) && (
         <Card>
@@ -133,18 +157,6 @@ export default function ActivityDetailPage({ params }: Props) {
           </CardHeader>
           <CardContent>
             <StreamChart streams={activity.streams} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Zone breakdown */}
-      {activity.zone_breakdown && activity.zone_breakdown.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Zone Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ZoneDonut data={activity.zone_breakdown} />
           </CardContent>
         </Card>
       )}

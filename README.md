@@ -117,6 +117,3 @@ docker run -p 8000:8000 -v $(pwd)/data:/data openkoutsi
 
 Early development. Core FIT ingestion and metrics are working. Frontend and Strava sync are in progress.
 
-## License
-
-MIT

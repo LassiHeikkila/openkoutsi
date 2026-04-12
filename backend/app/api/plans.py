@@ -4,10 +4,12 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import get_current_user
+from ..core.config import settings
 from ..db.base import get_session
 from ..models.orm import User, Athlete, TrainingPlan, PlannedWorkout
 from ..schemas.plans import TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse
 from ..services.plan_generator import generate_plan
+from ..services.llm_plan_generator import generate_plan_llm
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
@@ -42,6 +44,9 @@ async def create_plan(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    if body.use_llm and not settings.llm_base_url:
+        raise HTTPException(400, "LLM generation is not configured (LLM_BASE_URL is not set)")
+
     athlete = await _get_athlete(user, session)
 
     # Archive any existing active plans
@@ -53,14 +58,31 @@ async def create_plan(
         old.status = "archived"
     await session.flush()
 
-    plan = await generate_plan(
-        athlete_id=athlete.id,
-        name=body.name,
-        start_date=body.start_date,
-        num_weeks=body.weeks,
-        goal=body.goal,
-        session=session,
-    )
+    if body.use_llm:
+        if not body.config:
+            raise HTTPException(400, "A plan config (training days and types) is required for LLM generation")
+        try:
+            plan = await generate_plan_llm(
+                athlete=athlete,
+                config=body.config,
+                name=body.name,
+                start_date=body.start_date,
+                num_weeks=body.weeks,
+                goal=body.goal,
+                session=session,
+            )
+        except Exception as exc:
+            raise HTTPException(503, f"LLM plan generation failed: {exc}") from exc
+    else:
+        plan = await generate_plan(
+            athlete_id=athlete.id,
+            name=body.name,
+            start_date=body.start_date,
+            num_weeks=body.weeks,
+            goal=body.goal,
+            session=session,
+            config=body.config,
+        )
 
     # Reload with workouts
     result = await session.execute(

@@ -185,6 +185,8 @@ class TrainingPlan(Base):
     weeks: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    generation_method: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     athlete: Mapped["Athlete"] = relationship(
         "Athlete", back_populates="training_plans"

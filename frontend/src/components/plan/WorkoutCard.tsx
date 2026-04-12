@@ -12,6 +12,10 @@ const TYPE_COLORS: Record<string, string> = {
   threshold: 'bg-orange-50 text-orange-700',
   vo2max: 'bg-red-50 text-red-700',
   race: 'bg-purple-50 text-purple-700',
+  long: 'bg-teal-50 text-teal-700',
+  strength: 'bg-emerald-50 text-emerald-700',
+  yoga: 'bg-pink-50 text-pink-700',
+  'cross-training': 'bg-indigo-50 text-indigo-700',
 }
 
 interface Props {

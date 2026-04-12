@@ -1,14 +1,9 @@
 """
-Simple rule-based training plan generator.
+Rule-based training plan generator.
 
-Generates a polarised weekly schedule:
-  Mon: rest
-  Tue: threshold or vo2max (hard)
-  Wed: easy endurance
-  Thu: tempo or endurance (medium)
-  Fri: rest
-  Sat: long endurance
-  Sun: easy recovery
+When no PlanConfig is provided, uses three hardcoded weekly templates for
+backward compatibility. When a PlanConfig is provided, builds each week
+from the user-specified day structure with progressive TSS/duration scaling.
 """
 
 from __future__ import annotations
@@ -16,10 +11,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.orm import TrainingPlan, PlannedWorkout, Athlete
+from ..models.orm import TrainingPlan, PlannedWorkout
+from ..schemas.plans import PlanConfig
 
 
 # day_of_week: 1=Mon ... 7=Sun
@@ -53,28 +48,114 @@ _RECOVERY_WEEK: list[dict] = [
     {"day_of_week": 7, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
 ]
 
+# Base parameters per workout type: (duration_min, target_tss, description)
+_BASE_PARAMS: dict[str, tuple[int, int, str]] = {
+    "easy":          (60,  40,  "Zone 2 aerobic endurance"),
+    "tempo":         (60,  65,  "Tempo effort at ~75-85% FTP"),
+    "threshold":     (60,  80,  "2×20 min at threshold power"),
+    "vo2max":        (60,  90,  "5×5 min VO2max intervals"),
+    "endurance":     (90,  70,  "Steady aerobic endurance ride"),
+    "long":          (120, 90,  "Long steady endurance ride"),
+    "strength":      (45,  20,  "Off-bike strength session"),
+    "yoga":          (30,  10,  "Flexibility and recovery"),
+    "cross-training":(60,  40,  "Cross-training session"),
+    "rest":          (0,   0,   "Rest day"),
+}
+
 
 def _week_template(week_num: int, total_weeks: int, goal: Optional[str]) -> list[dict]:
-    """Choose the template for a given week number."""
-    # Last week before goal event: taper/rest if goal == 'peak_fitness'
+    """Choose the template for a given week number (legacy / no-config path)."""
     if week_num == total_weeks:
         return _RECOVERY_WEEK
-    # Every 4th week is a recovery week
     if week_num % 4 == 0:
         return _RECOVERY_WEEK
-    # Final build block
     if goal == "peak_fitness" and week_num >= total_weeks - 3:
         return _PEAK_WEEK
     return _BASE_WEEK
 
 
+def _progression_factor(week_num: int, total_weeks: int, periodization: str) -> float:
+    """
+    Return a multiplier (0.6 – 1.3) that scales TSS/duration week over week.
+
+    Patterns:
+    - base_building:  gentle 3-week ramp + 1 recovery, reaching ~1.1× at peak
+    - race_prep:      aggressive ramp to 1.3× with a taper in the final 2 weeks
+    - maintenance:    flat at 1.0× with recovery weeks every 4th week
+    """
+    # Every 4th week is a recovery week regardless of periodization
+    if week_num % 4 == 0 or week_num == total_weeks:
+        return 0.7
+
+    if periodization == "race_prep":
+        # Build to 1.3×, taper in final 2 weeks
+        if week_num >= total_weeks - 1:
+            return 0.75
+        progress = week_num / max(total_weeks - 2, 1)
+        return 0.85 + progress * 0.45  # ramps from 0.85 → 1.3
+    elif periodization == "maintenance":
+        return 1.0
+    else:  # base_building (default)
+        progress = week_num / total_weeks
+        return 0.85 + progress * 0.25  # ramps from 0.85 → 1.1
+
+
+def _intensity_multiplier(intensity_preference: str) -> float:
+    return {"low": 0.85, "moderate": 1.0, "high": 1.15}.get(intensity_preference, 1.0)
+
+
+def _build_week_from_config(
+    config: PlanConfig, week_num: int, total_weeks: int
+) -> list[dict]:
+    """Build a week's workout list from the user's PlanConfig."""
+    prog = _progression_factor(week_num, total_weeks, config.periodization)
+    intensity = _intensity_multiplier(config.intensity_preference)
+    scale = prog * intensity
+
+    configured_days = {dc.day_of_week: dc for dc in config.day_configs}
+    week = []
+    for day_num in range(1, 8):
+        if day_num not in configured_days:
+            week.append({
+                "day_of_week": day_num,
+                "workout_type": "rest",
+                "duration_min": None,
+                "target_tss": None,
+                "description": None,
+            })
+        else:
+            dc = configured_days[day_num]
+            base = _BASE_PARAMS.get(dc.workout_type, _BASE_PARAMS["easy"])
+            base_dur, base_tss, base_desc = base
+
+            # Recovery weeks scale down even non-rest days
+            is_recovery = (week_num % 4 == 0 or week_num == total_weeks)
+            if is_recovery and dc.workout_type in ("strength", "yoga", "rest"):
+                # Keep these as-is during recovery weeks
+                duration = base_dur or None
+                tss = base_tss or None
+            else:
+                duration = round(base_dur * scale) if base_dur else None
+                tss = round(base_tss * scale) if base_tss else None
+
+            week.append({
+                "day_of_week": day_num,
+                "workout_type": dc.workout_type,
+                "duration_min": duration,
+                "target_tss": tss,
+                "description": dc.notes or base_desc,
+            })
+    return week
+
+
 async def generate_plan(
-    athlete_id: int,
+    athlete_id: str,
     name: str,
     start_date: date,
     num_weeks: int,
     goal: Optional[str],
     session: AsyncSession,
+    config: Optional[PlanConfig] = None,
 ) -> TrainingPlan:
     """Create a TrainingPlan with PlannedWorkout rows."""
 
@@ -88,17 +169,20 @@ async def generate_plan(
         goal=goal,
         weeks=num_weeks,
         status="active",
+        config=config.model_dump() if config else None,
+        generation_method="rule_based",
     )
     session.add(plan)
     await session.flush()  # get plan.id
 
     workouts: list[PlannedWorkout] = []
     for week_num in range(1, num_weeks + 1):
-        template = _week_template(week_num, num_weeks, goal)
+        if config is not None:
+            template = _build_week_from_config(config, week_num, num_weeks)
+        else:
+            template = _week_template(week_num, num_weeks, goal)
+
         for day in template:
-            if day["workout_type"] == "rest" and day["target_tss"] is None:
-                # Still store rest days so the calendar renders them
-                pass
             workouts.append(
                 PlannedWorkout(
                     plan_id=plan.id,

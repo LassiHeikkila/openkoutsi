@@ -1,3 +1,10 @@
+Features to implement:
+
+- data export button
+  - also downloading individual FIT files
+- deployment guide
+- comprehensive test suite
+
 # Before Strava Integration Goes Live
 
 These steps require external accounts/services and can't be automated.

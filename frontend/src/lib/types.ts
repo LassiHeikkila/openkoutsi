@@ -140,6 +140,8 @@ export interface TrainingPlan {
   status: string
   created_at: string
   workouts: PlannedWorkout[]
+  config: Record<string, unknown> | null
+  generation_method: string | null
 }
 
 export interface PaginatedActivities {

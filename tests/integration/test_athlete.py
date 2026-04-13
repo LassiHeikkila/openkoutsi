@@ -1,6 +1,9 @@
 """
 Integration tests for /api/athlete endpoints.
 """
+import io
+import json
+import zipfile
 
 
 class TestGetAthlete:
@@ -57,4 +60,61 @@ class TestUpdateAthlete:
 
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.put("/api/athlete/", json={"ftp": 300})
+        assert resp.status_code == 401
+
+
+class TestExportAthlete:
+    async def test_export_returns_zip(self, client, auth_headers):
+        resp = await client.get("/api/athlete/export", headers=auth_headers)
+        assert resp.status_code == 200
+        assert "application/zip" in resp.headers["content-type"]
+
+    async def test_export_zip_contains_profile_json(self, client, auth_headers):
+        await client.put(
+            "/api/athlete/",
+            json={"ftp": 280, "name": "Test Rider"},
+            headers=auth_headers,
+        )
+        resp = await client.get("/api/athlete/export", headers=auth_headers)
+        assert resp.status_code == 200
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            assert "profile.json" in zf.namelist()
+            profile = json.loads(zf.read("profile.json"))
+        assert profile["ftp"] == 280
+        assert profile["name"] == "Test Rider"
+        assert "email" in profile
+        assert "exported_at" in profile
+
+    async def test_export_zip_contains_activities_json(self, client, auth_headers):
+        for i in range(2):
+            await client.post(
+                "/api/activities/",
+                json={
+                    "sport_type": "Ride",
+                    "start_time": f"2025-06-0{i + 1}T10:00:00Z",
+                    "duration_s": 3600,
+                },
+                headers=auth_headers,
+            )
+
+        resp = await client.get("/api/athlete/export", headers=auth_headers)
+        assert resp.status_code == 200
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            assert "activities.json" in zf.namelist()
+            activities = json.loads(zf.read("activities.json"))
+        assert len(activities) == 2
+
+    async def test_export_empty_activities_still_valid_zip(self, client, auth_headers):
+        resp = await client.get("/api/athlete/export", headers=auth_headers)
+        assert resp.status_code == 200
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            names = zf.namelist()
+        assert "profile.json" in names
+        assert "activities.json" in names
+
+    async def test_export_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/athlete/export")
         assert resp.status_code == 401

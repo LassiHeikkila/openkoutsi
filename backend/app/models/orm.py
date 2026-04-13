@@ -123,6 +123,10 @@ class Activity(Base):
         "ActivityStream", back_populates="activity", cascade="all, delete-orphan"
     )
 
+    @property
+    def has_fit_file(self) -> bool:
+        return bool(self.fit_file_path)
+
 
 class ActivityStream(Base):
     __tablename__ = "activity_streams"

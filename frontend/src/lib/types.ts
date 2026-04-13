@@ -55,6 +55,7 @@ export interface Activity {
   max_hr: number | null
   tss: number | null
   intensity_factor: number | null
+  has_fit_file: boolean
   source: string
   status: string
   created_at: string

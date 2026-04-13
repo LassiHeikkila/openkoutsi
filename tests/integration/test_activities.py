@@ -313,6 +313,30 @@ class TestFitUpload:
         assert activity.normalized_power is not None
         assert activity.tss is not None
 
+    async def test_has_fit_file_false_for_manual_activity(self, client, auth_headers):
+        resp = await client.post(
+            "/api/activities/",
+            json={
+                "sport_type": "Ride",
+                "start_time": "2025-01-01T10:00:00Z",
+                "duration_s": 3600,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+        assert resp.json()["has_fit_file"] is False
+
+    @pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")
+    async def test_has_fit_file_true_for_uploaded_activity(self, client, auth_headers):
+        with open(SAMPLE_FIT, "rb") as f:
+            resp = await client.post(
+                "/api/activities/upload",
+                files={"file": ("test.fit", f, "application/octet-stream")},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 201
+        assert resp.json()["has_fit_file"] is True
+
     @pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")
     async def test_duplicate_fit_upload_returns_409(self, client, auth_headers, session):
         """Uploading a file whose start time matches an existing activity returns 409."""
@@ -343,3 +367,63 @@ class TestFitUpload:
                 headers=auth_headers,
             )
         assert resp2.status_code == 409
+
+
+# ── Individual FIT file download ───────────────────────────────────────────────
+
+class TestDownloadFitFile:
+    async def test_manual_activity_has_no_fit_file(self, client, auth_headers):
+        create_resp = await client.post(
+            "/api/activities/",
+            json={
+                "sport_type": "Ride",
+                "start_time": "2025-01-01T10:00:00Z",
+                "duration_s": 3600,
+            },
+            headers=auth_headers,
+        )
+        activity_id = create_resp.json()["id"]
+        resp = await client.get(f"/api/activities/{activity_id}/fit", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_nonexistent_activity_returns_404(self, client, auth_headers):
+        resp = await client.get("/api/activities/nonexistent-id/fit", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_another_athletes_activity_returns_404(self, client):
+        from tests.conftest import _register
+        headers_a = await _register(client, "fit_dl_a@test.com")
+        headers_b = await _register(client, "fit_dl_b@test.com")
+
+        create_resp = await client.post(
+            "/api/activities/",
+            json={
+                "sport_type": "Ride",
+                "start_time": "2025-01-01T10:00:00Z",
+                "duration_s": 3600,
+            },
+            headers=headers_a,
+        )
+        activity_id = create_resp.json()["id"]
+        resp = await client.get(f"/api/activities/{activity_id}/fit", headers=headers_b)
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/activities/some-id/fit")
+        assert resp.status_code == 401
+
+    @pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")
+    async def test_download_returns_fit_bytes(self, client, auth_headers):
+        with open(SAMPLE_FIT, "rb") as f:
+            upload_resp = await client.post(
+                "/api/activities/upload",
+                files={"file": ("test.fit", f, "application/octet-stream")},
+                headers=auth_headers,
+            )
+        assert upload_resp.status_code == 201
+        activity_id = upload_resp.json()["id"]
+
+        resp = await client.get(f"/api/activities/{activity_id}/fit", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/octet-stream"
+        assert len(resp.content) == SAMPLE_FIT.stat().st_size

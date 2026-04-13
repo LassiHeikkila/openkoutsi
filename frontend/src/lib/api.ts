@@ -103,3 +103,49 @@ export async function apiFetch<T>(
 
 // SWR fetcher
 export const fetcher = <T>(path: string) => apiFetch<T>(path)
+
+export async function apiDownload(
+  path: string,
+  filename: string,
+  retry = true,
+): Promise<void> {
+  const headers: Record<string, string> = {}
+  if (_accessToken) {
+    headers['Authorization'] = `Bearer ${_accessToken}`
+  }
+
+  const res = await fetch(`${API_URL}${path}`, { headers })
+
+  if (res.status === 401 && retry) {
+    const refreshed = await attemptRefresh()
+    if (refreshed) {
+      return apiDownload(path, filename, false)
+    }
+    clearTokens()
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login'
+    }
+    throw new Error('Unauthorized')
+  }
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`
+    try {
+      const err = await res.json()
+      message = err.detail ?? err.message ?? message
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message)
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}

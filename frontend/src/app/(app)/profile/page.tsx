@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { apiFetch, fetcher } from '@/lib/api'
+import { apiFetch, apiDownload, fetcher } from '@/lib/api'
 import type { AthleteProfile, Zone } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -129,6 +129,18 @@ export default function ProfilePage() {
       toast({ title: 'Save failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSavingPower(false)
+    }
+  }
+
+  async function handleExport() {
+    try {
+      await apiDownload('/api/athlete/export', 'openkoutsi_export.zip')
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -372,6 +384,20 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+      {/* Data export */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Export your data</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Download a ZIP archive containing your profile and all uploaded FIT files.
+          </p>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            Download export
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }

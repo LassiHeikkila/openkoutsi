@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -230,6 +231,41 @@ async def get_activity(
     streams = {s.stream_type: s.data for s in streams_result.scalars()}
 
     return ActivityDetailResponse.from_orm_and_streams(activity, streams)
+
+
+@router.get("/{activity_id}/fit")
+async def download_fit_file(
+    activity_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    athlete = await _get_athlete(user, session)
+
+    result = await session.execute(
+        select(Activity).where(
+            Activity.id == activity_id, Activity.athlete_id == athlete.id
+        )
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    if not activity.fit_file_path:
+        raise HTTPException(status_code=404, detail="No FIT file for this activity")
+
+    fit_path = Path(activity.fit_file_path)
+    if not fit_path.exists():
+        raise HTTPException(status_code=404, detail="FIT file not found on disk")
+
+    safe_name = "".join(
+        c if c.isalnum() or c in " _-" else "_"
+        for c in (activity.name or activity.id)
+    ).strip()
+    return FileResponse(
+        path=str(fit_path),
+        media_type="application/octet-stream",
+        filename=f"{safe_name}.fit",
+    )
 
 
 @router.delete("/{activity_id}", status_code=204)

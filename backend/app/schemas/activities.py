@@ -34,6 +34,7 @@ class ActivityResponse(BaseModel):
     max_hr: Optional[float] = None
     tss: Optional[float] = None
     intensity_factor: Optional[float] = None
+    has_fit_file: bool = False
     status: str
     created_at: datetime
 
@@ -71,6 +72,7 @@ class ActivityDetailResponse(ActivityResponse):
             max_hr=activity.max_hr,
             tss=activity.tss,
             intensity_factor=activity.intensity_factor,
+            has_fit_file=bool(activity.fit_file_path),
             status=activity.status,
             created_at=activity.created_at,
             streams=streams,

@@ -3,7 +3,7 @@
 import { use } from 'react'
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
-import { fetcher, apiFetch } from '@/lib/api'
+import { fetcher, apiFetch, apiDownload } from '@/lib/api'
 import type { ActivityDetail } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { SourceBadge } from '@/components/activities/SourceBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR } from '@/lib/utils'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 interface Props {
@@ -41,6 +41,19 @@ export default function ActivityDetailPage({ params }: Props) {
     fetcher,
     { shouldRetryOnError: false },
   )
+
+  async function handleDownloadFit() {
+    try {
+      const name = activity?.name ?? id
+      await apiDownload(`/api/activities/${id}/fit`, `${name}.fit`)
+    } catch (err) {
+      toast({
+        title: 'Download failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    }
+  }
 
   async function handleDelete() {
     try {
@@ -92,7 +105,13 @@ export default function ActivityDetailPage({ params }: Props) {
             </div>
           </div>
         </div>
-        <AlertDialog>
+        <div className="flex items-center gap-2">
+          {activity.has_fit_file && (
+            <Button variant="outline" size="icon" onClick={handleDownloadFit} title="Download FIT file">
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
+          <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="outline" size="icon" className="text-destructive border-destructive/30 hover:bg-destructive/10">
               <Trash2 className="h-4 w-4" />
@@ -116,6 +135,7 @@ export default function ActivityDetailPage({ params }: Props) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
       </div>
 
       {/* Stats grid */}

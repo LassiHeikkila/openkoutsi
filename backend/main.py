@@ -11,6 +11,22 @@ from backend.app.db.base import Base, engine
 log = logging.getLogger(__name__)
 
 
+async def _apply_column_migrations(conn) -> None:
+    """Add columns that were introduced after the initial schema creation."""
+    from sqlalchemy import text
+
+    migrations = [
+        ("training_plans", "config", "ALTER TABLE training_plans ADD COLUMN config JSON"),
+        ("training_plans", "generation_method", "ALTER TABLE training_plans ADD COLUMN generation_method VARCHAR"),
+    ]
+    for table, column, ddl in migrations:
+        result = await conn.execute(text(f"PRAGMA table_info({table})"))
+        existing = {row[1] for row in result.fetchall()}
+        if column not in existing:
+            log.info("Schema migration: adding column %s.%s", table, column)
+            await conn.execute(text(ddl))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from backend.app.api.strava import strava_bridge_poller
@@ -24,6 +40,9 @@ async def lifespan(app: FastAPI):
             "Skipping automatic DDL (set INIT_DB=true for a fresh install, "
             "or use Alembic for migrations)"
         )
+
+    async with engine.begin() as conn:
+        await _apply_column_migrations(conn)
 
     # Start Strava bridge poller (no-ops if bridge not configured)
     poller = asyncio.create_task(strava_bridge_poller())

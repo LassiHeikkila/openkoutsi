@@ -11,7 +11,78 @@ import { FitnessChart } from '@/components/charts/FitnessChart'
 import { WeeklyTssBar } from '@/components/charts/WeeklyTssBar'
 import { ActivityCard } from '@/components/activities/ActivityCard'
 import { toast } from '@/components/ui/use-toast'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, HelpCircle } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+
+const GLOSSARY = [
+  {
+    term: 'CTL — Chronic Training Load',
+    aka: 'Fitness',
+    description:
+      'A 42-day exponentially weighted average of daily Training Stress Scores (TSS). It represents your long-term fitness level — the higher the number, the more training your body has adapted to.',
+  },
+  {
+    term: 'ATL — Acute Training Load',
+    aka: 'Fatigue',
+    description:
+      'A 7-day exponentially weighted average of TSS. It reflects how much you have trained recently. A high ATL means you are currently fatigued from recent hard training.',
+  },
+  {
+    term: 'TSB — Training Stress Balance',
+    aka: 'Form',
+    description:
+      'Calculated as CTL − ATL. A positive TSB means you are rested relative to your fitness (fresh/peak). A negative TSB means fatigue outweighs fitness (tired/overreached). Aim for a slightly positive TSB before a key event.',
+  },
+  {
+    term: 'FTP — Functional Threshold Power',
+    description:
+      'The highest average power (in watts) you can sustain for approximately one hour. FTP is used to define training zones and to calculate TSS for power-based workouts.',
+  },
+  {
+    term: 'TSS — Training Stress Score',
+    description:
+      'A single number that quantifies the training load of one workout, taking into account both duration and intensity. A one-hour ride at exactly FTP = 100 TSS. Easy rides score lower; hard interval sessions score higher.',
+  },
+]
+
+function MetricsGlossaryDialog() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Explain fitness metrics"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Fitness metrics explained</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          {GLOSSARY.map(({ term, aka, description }) => (
+            <div key={term}>
+              <p className="text-sm font-semibold">
+                {term}
+                {aka && (
+                  <span className="ml-1 font-normal text-muted-foreground">· {aka}</span>
+                )}
+              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function FormBadge({ form }: { form: FitnessCurrent['form'] }) {
   const colors: Record<FitnessCurrent['form'], string> = {
@@ -83,6 +154,11 @@ export default function DashboardPage() {
       </div>
 
       {/* Current metrics */}
+      <div>
+      <div className="flex items-center gap-1.5 mb-3">
+        <p className="text-sm font-medium text-muted-foreground">Current fitness</p>
+        <MetricsGlossaryDialog />
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: 'CTL (Fitness)', value: current?.ctl.toFixed(0) ?? '—' },
@@ -100,6 +176,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
       </div>
 
       {/* Fitness history chart */}

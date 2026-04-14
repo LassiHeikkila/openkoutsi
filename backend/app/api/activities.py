@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -35,6 +36,19 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
     return athlete
 
 
+def _maybe_auto_analyze(activity_id: str, athlete: Athlete) -> bool:
+    """
+    Schedule LLM analysis if auto_analyze is enabled in the athlete's app_settings.
+    Returns True if a task was scheduled (caller should set analysis_status=pending).
+    """
+    app_settings = athlete.app_settings or {}
+    if app_settings.get("auto_analyze") and settings.llm_base_url:
+        from backend.app.services.llm_activity_analyzer import analyze_activity_bg
+        asyncio.create_task(analyze_activity_bg(activity_id, athlete.id))
+        return True
+    return False
+
+
 async def _bg_process_and_recalculate(
     file_path: str, athlete_id: str, activity_id: str
 ) -> None:
@@ -57,6 +71,13 @@ async def _bg_process_and_recalculate(
                 else date.today()
             )
             await recalculate_from(athlete_id, start_date, session)
+
+            # asyncio.create_task schedules the coroutine but won't run it until
+            # the next await, so setting analysis_status and committing first
+            # ensures the task sees the correct state in the DB.
+            if _maybe_auto_analyze(activity_id, athlete):
+                activity.analysis_status = "pending"
+                await session.commit()
         except Exception:
             activity.status = "error"
             await session.commit()
@@ -302,3 +323,33 @@ async def delete_activity(
 
     if start_date:
         background_tasks.add_task(_bg_recalculate, athlete.id, start_date)
+
+
+@router.post("/{activity_id}/analyze", status_code=202)
+async def trigger_analysis(
+    activity_id: str,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Manually trigger LLM analysis for an activity. Idempotent: re-running replaces any prior result."""
+    from backend.app.services.llm_activity_analyzer import analyze_activity_bg
+
+    athlete = await _get_athlete(user, session)
+    result = await session.execute(
+        select(Activity).where(
+            Activity.id == activity_id, Activity.athlete_id == athlete.id
+        )
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.analysis_status == "pending":
+        return {"status": "pending"}
+
+    activity.analysis_status = "pending"
+    activity.analysis = None
+    await session.commit()
+
+    background_tasks.add_task(analyze_activity_bg, activity_id, athlete.id)
+    return {"status": "pending"}

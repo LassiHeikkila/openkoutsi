@@ -29,6 +29,7 @@ class AthleteResponse(BaseModel):
     power_zones: list[ZoneSchema] = []
     ftp_tests: list[FtpTestSchema] = []
     strava_connected: bool = False
+    app_settings: dict = {}
     created_at: datetime
     updated_at: datetime
 
@@ -38,6 +39,11 @@ class AthleteResponse(BaseModel):
     @classmethod
     def coerce_none_to_list(cls, v):
         return v if v is not None else []
+
+    @field_validator("app_settings", mode="before")
+    @classmethod
+    def coerce_app_settings(cls, v):
+        return v if isinstance(v, dict) else {}
 
     @field_validator("strava_connected", mode="before")
     @classmethod
@@ -57,3 +63,4 @@ class AthleteUpdate(BaseModel):
     resting_hr: Optional[int] = None
     hr_zones: Optional[list[ZoneSchema]] = None
     power_zones: Optional[list[ZoneSchema]] = None
+    app_settings: Optional[dict] = None

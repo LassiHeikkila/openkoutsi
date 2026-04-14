@@ -35,6 +35,7 @@ export interface AthleteProfile {
   power_zones: Zone[]
   ftp_tests: FtpTest[]
   strava_connected: boolean
+  app_settings: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -79,6 +80,8 @@ export interface ZoneBreakdown {
 export interface ActivityDetail extends Activity {
   streams: Record<string, number[]>
   zone_breakdown?: ZoneBreakdown[]
+  analysis_status?: string | null
+  analysis?: string | null
 }
 
 export interface FitnessPoint {

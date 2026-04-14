@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
-import { Activity, BarChart2, Target, Calendar, User, LogOut } from 'lucide-react'
+import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/goals', label: 'Goals', icon: Target },
   { href: '/plan', label: 'Plan', icon: Calendar },
   { href: '/profile', label: 'Profile', icon: User },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export function Nav() {

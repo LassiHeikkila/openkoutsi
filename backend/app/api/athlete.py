@@ -39,6 +39,7 @@ def _athlete_response(athlete: Athlete) -> AthleteResponse:
         power_zones=athlete.power_zones or [],
         ftp_tests=athlete.ftp_tests or [],
         strava_connected=bool(athlete.strava_athlete_id),
+        app_settings=athlete.app_settings or {},
         created_at=athlete.created_at,
         updated_at=athlete.updated_at,
     )
@@ -81,6 +82,8 @@ async def update_athlete(
         athlete.hr_zones = [z.model_dump() for z in body.hr_zones]
     if body.power_zones is not None:
         athlete.power_zones = [z.model_dump() for z in body.power_zones]
+    if body.app_settings is not None:
+        athlete.app_settings = body.app_settings
 
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()

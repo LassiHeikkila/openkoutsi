@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { SourceBadge } from '@/components/activities/SourceBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR } from '@/lib/utils'
-import { ArrowLeft, Download, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 interface Props {
@@ -32,9 +32,10 @@ interface Props {
 export default function ActivityDetailPage({ params }: Props) {
   const { id } = use(params)
   const router = useRouter()
-  const { data: activity, isLoading } = useSWR<ActivityDetail>(
+  const { data: activity, isLoading, mutate } = useSWR<ActivityDetail>(
     `/api/activities/${id}`,
     fetcher,
+    { refreshInterval: (data) => data?.analysis_status === 'pending' ? 2000 : 0 },
   )
   const { data: zonesData } = useSWR<{ hr?: Record<string, number>; power?: Record<string, number> }>(
     `/api/metrics/zones/${id}`,
@@ -63,6 +64,19 @@ export default function ActivityDetailPage({ params }: Props) {
     } catch (err) {
       toast({
         title: 'Delete failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  async function handleAnalyze() {
+    try {
+      await apiFetch(`/api/activities/${id}/analyze`, { method: 'POST' })
+      mutate()
+    } catch (err) {
+      toast({
+        title: 'Analysis failed to start',
         description: err instanceof Error ? err.message : 'Unknown error',
         variant: 'destructive',
       })
@@ -180,6 +194,42 @@ export default function ActivityDetailPage({ params }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* AI Analysis */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">AI Analysis</CardTitle>
+          {!activity.analysis_status && (
+            <Button size="sm" variant="outline" onClick={handleAnalyze}>
+              Analyse workout
+            </Button>
+          )}
+          {activity.analysis_status === 'error' && (
+            <Button size="sm" variant="outline" onClick={handleAnalyze}>
+              Retry
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {activity.analysis_status === 'pending' && !activity.analysis && (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <span>Analysing… this may take a few minutes</span>
+            </div>
+          )}
+          {activity.analysis && (
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">{activity.analysis}</p>
+          )}
+          {activity.analysis_status === 'error' && !activity.analysis && (
+            <p className="text-sm text-destructive">Analysis failed. Please try again.</p>
+          )}
+          {!activity.analysis_status && (
+            <p className="text-sm text-muted-foreground">
+              No analysis yet. Click &ldquo;Analyse workout&rdquo; to generate AI coaching feedback.
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

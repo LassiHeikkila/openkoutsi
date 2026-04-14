@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -62,6 +63,8 @@ class Athlete(Base):
     availability: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # JSON column: [{date, ftp, method}]
     ftp_tests: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list)
+    # JSON column: user preferences e.g. {auto_analyze: bool}
+    app_settings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Strava fields (Phase 2)
     strava_athlete_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -116,6 +119,8 @@ class Activity(Base):
     intensity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     fit_file_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
+    analysis_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     athlete: Mapped["Athlete"] = relationship("Athlete", back_populates="activities")

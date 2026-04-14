@@ -24,6 +24,7 @@ async def _apply_column_migrations(conn) -> None:
         ("activities", "analysis_status", "ALTER TABLE activities ADD COLUMN analysis_status VARCHAR"),
         ("activities", "analysis", "ALTER TABLE activities ADD COLUMN analysis TEXT"),
         ("athletes", "app_settings", "ALTER TABLE athletes ADD COLUMN app_settings JSON"),
+        ("athletes", "avatar_path", "ALTER TABLE athletes ADD COLUMN avatar_path VARCHAR"),
     ]
     for table, column, ddl in migrations:
         result = await conn.execute(text(f"PRAGMA table_info({table})"))

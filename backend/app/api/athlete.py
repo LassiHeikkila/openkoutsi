@@ -4,15 +4,20 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import get_current_user
+from backend.app.core.config import settings
 from backend.app.db.base import get_session
 from backend.app.models.orm import Activity, Athlete, User
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
+
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
+_AVATAR_DIR = Path(settings.file_storage_path) / "avatars"
 
 router = APIRouter(prefix="/athlete", tags=["athlete"])
 
@@ -26,6 +31,7 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 
 
 def _athlete_response(athlete: Athlete) -> AthleteResponse:
+    avatar_url = f"{settings.api_url}/api/athlete/{athlete.id}/avatar" if athlete.avatar_path else None
     return AthleteResponse(
         id=athlete.id,
         user_id=athlete.user_id,
@@ -40,6 +46,7 @@ def _athlete_response(athlete: Athlete) -> AthleteResponse:
         ftp_tests=athlete.ftp_tests or [],
         strava_connected=bool(athlete.strava_athlete_id),
         app_settings=athlete.app_settings or {},
+        avatar_url=avatar_url,
         created_at=athlete.created_at,
         updated_at=athlete.updated_at,
     )
@@ -89,6 +96,69 @@ async def update_athlete(
     await session.commit()
     await session.refresh(athlete)
     return _athlete_response(athlete)
+
+
+@router.post("/avatar", response_model=AthleteResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    if file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.")
+
+    data = await file.read(_MAX_AVATAR_BYTES + 1)
+    if len(data) > _MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=400, detail="Image too large (max 5 MB).")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    athlete = await _get_athlete(user, session)
+
+    _AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    dest = _AVATAR_DIR / f"{athlete.id}.{ext}"
+
+    # Remove old avatar file if a different extension was used
+    if athlete.avatar_path:
+        old = Path(athlete.avatar_path)
+        if old.exists() and old != dest:
+            old.unlink(missing_ok=True)
+
+    dest.write_bytes(data)
+    athlete.avatar_path = str(dest)
+    athlete.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(athlete)
+    return _athlete_response(athlete)
+
+
+@router.delete("/avatar", response_model=AthleteResponse)
+async def delete_avatar(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    athlete = await _get_athlete(user, session)
+    if athlete.avatar_path:
+        Path(athlete.avatar_path).unlink(missing_ok=True)
+        athlete.avatar_path = None
+        athlete.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(athlete)
+    return _athlete_response(athlete)
+
+
+@router.get("/{athlete_id}/avatar")
+async def get_avatar(
+    athlete_id: str,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(Athlete).where(Athlete.id == athlete_id))
+    athlete = result.scalar_one_or_none()
+    if athlete is None or not athlete.avatar_path:
+        raise HTTPException(status_code=404, detail="No avatar set")
+    path = Path(athlete.avatar_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Avatar file not found")
+    return FileResponse(path)
 
 
 @router.get("/export")

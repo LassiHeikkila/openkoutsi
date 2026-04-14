@@ -30,6 +30,7 @@ class AthleteResponse(BaseModel):
     ftp_tests: list[FtpTestSchema] = []
     strava_connected: bool = False
     app_settings: dict = {}
+    avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

@@ -66,6 +66,8 @@ class Athlete(Base):
     ftp_tests: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list)
     # JSON column: user preferences e.g. {auto_analyze: bool}
     app_settings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Profile picture stored on disk
+    avatar_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Strava fields (Phase 2)
     strava_athlete_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

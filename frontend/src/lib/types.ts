@@ -35,6 +35,7 @@ export interface AthleteProfile {
   ftp_tests: FtpTest[]
   strava_connected: boolean
   app_settings: Record<string, unknown>
+  avatar_url: string | null
   created_at: string
   updated_at: string
 }

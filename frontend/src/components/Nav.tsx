@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
@@ -30,8 +31,27 @@ export function Nav() {
     <nav className="flex flex-col h-full w-56 border-r bg-card px-3 py-4 gap-1">
       <div className="px-3 pb-4 mb-2 border-b">
         <p className="font-semibold text-lg leading-none">openkoutsi</p>
-        {athlete?.name && (
-          <p className="text-xs text-muted-foreground mt-1 truncate">{athlete.name}</p>
+        {athlete && (
+          <div className="flex items-center gap-2 mt-2">
+            <div className="relative h-7 w-7 shrink-0 rounded-full overflow-hidden bg-muted border">
+              {athlete.avatar_url ? (
+                <Image
+                  src={athlete.avatar_url}
+                  alt="Avatar"
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-xs font-semibold text-muted-foreground select-none">
+                  {athlete.name ? athlete.name.charAt(0).toUpperCase() : '?'}
+                </span>
+              )}
+            </div>
+            {athlete.name && (
+              <p className="text-xs text-muted-foreground truncate">{athlete.name}</p>
+            )}
+          </div>
         )}
       </div>
       <div className="flex-1 flex flex-col gap-1">

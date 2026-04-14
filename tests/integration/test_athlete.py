@@ -4,6 +4,9 @@ Integration tests for /api/athlete endpoints.
 import io
 import json
 import zipfile
+from unittest.mock import patch
+
+import pytest
 
 
 class TestGetAthlete:
@@ -118,3 +121,160 @@ class TestExportAthlete:
     async def test_export_unauthenticated_returns_401(self, client):
         resp = await client.get("/api/athlete/export")
         assert resp.status_code == 401
+
+
+# ── Avatar fixture ─────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def avatar_dir(tmp_path):
+    """Redirect avatar storage to a temp directory for the duration of the test."""
+    d = tmp_path / "avatars"
+    with patch("backend.app.api.athlete._AVATAR_DIR", d):
+        yield d
+
+
+# ── Avatar tests ───────────────────────────────────────────────────────────────
+
+class TestAvatar:
+    async def test_avatar_url_is_null_by_default(self, client, auth_headers):
+        resp = await client.get("/api/athlete/", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["avatar_url"] is None
+
+    async def test_upload_jpeg_returns_populated_avatar_url(self, client, auth_headers, avatar_dir):
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.jpg", b"fake-jpeg", "image/jpeg")},
+        )
+        assert resp.status_code == 200
+        url = resp.json()["avatar_url"]
+        assert url is not None
+        assert "avatar" in url
+
+    async def test_upload_png_accepted(self, client, auth_headers, avatar_dir):
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.png", b"fake-png", "image/png")},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["avatar_url"] is not None
+
+    async def test_upload_webp_accepted(self, client, auth_headers, avatar_dir):
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.webp", b"fake-webp", "image/webp")},
+        )
+        assert resp.status_code == 200
+
+    async def test_upload_unsupported_content_type_returns_400(self, client, auth_headers, avatar_dir):
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("doc.pdf", b"pdf-bytes", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert "Unsupported" in resp.json()["detail"]
+
+    async def test_upload_too_large_returns_400(self, client, auth_headers, avatar_dir):
+        big = b"x" * (5 * 1024 * 1024 + 1)
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("big.jpg", big, "image/jpeg")},
+        )
+        assert resp.status_code == 400
+        assert "too large" in resp.json()["detail"].lower()
+
+    async def test_upload_unauthenticated_returns_401(self, client, avatar_dir):
+        resp = await client.post(
+            "/api/athlete/avatar",
+            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+        )
+        assert resp.status_code == 401
+
+    async def test_get_avatar_requires_no_auth(self, client, auth_headers, avatar_dir):
+        await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.jpg", b"image-data", "image/jpeg")},
+        )
+        athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
+        resp = await client.get(f"/api/athlete/{athlete_id}/avatar")
+        assert resp.status_code == 200
+
+    async def test_get_avatar_returns_exact_uploaded_bytes(self, client, auth_headers, avatar_dir):
+        image_bytes = b"\xff\xd8\xff\xe0fake-jpeg-content"
+        await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.jpg", image_bytes, "image/jpeg")},
+        )
+        athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
+        resp = await client.get(f"/api/athlete/{athlete_id}/avatar")
+        assert resp.status_code == 200
+        assert resp.content == image_bytes
+
+    async def test_get_avatar_unknown_athlete_returns_404(self, client):
+        resp = await client.get("/api/athlete/does-not-exist/avatar")
+        assert resp.status_code == 404
+
+    async def test_get_avatar_when_none_set_returns_404(self, client, auth_headers):
+        athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
+        resp = await client.get(f"/api/athlete/{athlete_id}/avatar")
+        assert resp.status_code == 404
+
+    async def test_delete_avatar_clears_avatar_url(self, client, auth_headers, avatar_dir):
+        await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+        )
+        resp = await client.delete("/api/athlete/avatar", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["avatar_url"] is None
+
+    async def test_delete_avatar_removes_file_from_disk(self, client, auth_headers, avatar_dir):
+        await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+        )
+        await client.delete("/api/athlete/avatar", headers=auth_headers)
+        remaining = list(avatar_dir.glob("*")) if avatar_dir.exists() else []
+        assert remaining == []
+
+    async def test_delete_with_no_avatar_is_idempotent(self, client, auth_headers):
+        resp = await client.delete("/api/athlete/avatar", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["avatar_url"] is None
+
+    async def test_delete_avatar_unauthenticated_returns_401(self, client):
+        resp = await client.delete("/api/athlete/avatar")
+        assert resp.status_code == 401
+
+    async def test_upload_replaces_old_file_on_extension_change(self, client, auth_headers, avatar_dir):
+        await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("first.jpg", b"first", "image/jpeg")},
+        )
+        await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("second.png", b"second", "image/png")},
+        )
+        files = list(avatar_dir.glob("*"))
+        assert len(files) == 1
+        assert files[0].suffix == ".png"
+
+    async def test_avatar_url_includes_athlete_id(self, client, auth_headers, avatar_dir):
+        athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+        )
+        assert athlete_id in resp.json()["avatar_url"]

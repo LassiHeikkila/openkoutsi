@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import useSWR from 'swr'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
@@ -61,6 +62,9 @@ export default function ProfilePage() {
   const [restingHr, setRestingHr] = useState(athlete?.resting_hr?.toString() ?? '')
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [removingAvatar, setRemovingAvatar] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const [hrZones, setHrZones] = useState<Zone[]>([])
   const [powerZones, setPowerZones] = useState<Zone[]>([])
@@ -74,6 +78,37 @@ export default function ProfilePage() {
       setPowerZones(profile.power_zones ?? [])
     }
   }, [profile])
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAvatar(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      await apiFetch('/api/athlete/avatar', { method: 'POST', body: form })
+      await refreshAthlete()
+      toast({ title: 'Profile picture updated' })
+    } catch (err) {
+      toast({ title: 'Upload failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+    } finally {
+      setUploadingAvatar(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    setRemovingAvatar(true)
+    try {
+      await apiFetch('/api/athlete/avatar', { method: 'DELETE' })
+      await refreshAthlete()
+      toast({ title: 'Profile picture removed' })
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+    } finally {
+      setRemovingAvatar(false)
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -196,6 +231,53 @@ export default function ProfilePage() {
           <CardTitle className="text-base">Personal details</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center gap-4 mb-6">
+            <div className="relative h-20 w-20 shrink-0 rounded-full overflow-hidden bg-muted border">
+              {athlete?.avatar_url ? (
+                <Image
+                  src={athlete.avatar_url}
+                  alt="Profile picture"
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-muted-foreground select-none">
+                  {athlete?.name ? athlete.name.charAt(0).toUpperCase() : '?'}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={uploadingAvatar}
+                onClick={() => avatarInputRef.current?.click()}
+              >
+                {uploadingAvatar ? 'Uploading…' : 'Change picture'}
+              </Button>
+              {athlete?.avatar_url && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={removingAvatar}
+                  className="text-destructive hover:text-destructive"
+                  onClick={handleRemoveAvatar}
+                >
+                  {removingAvatar ? 'Removing…' : 'Remove'}
+                </Button>
+              )}
+            </div>
+          </div>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2 col-span-2">

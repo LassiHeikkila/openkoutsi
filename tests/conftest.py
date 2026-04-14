@@ -25,7 +25,7 @@ from backend.main import create_app
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
 
-async def _register(client: AsyncClient, email: str, password: str = "testpass123") -> dict:
+async def _register(client: AsyncClient, email: str, password: str = "Testpass1234") -> dict:
     """Register a user and return auth headers with the token."""
     resp = await client.post(
         "/api/auth/register",
@@ -62,7 +62,10 @@ async def client(session):
     - `get_session` dependency is overridden to use the test session.
     - Background tasks are suppressed (mocked out) so they never touch
       the production SQLite file.
+    - Rate limiting is disabled so tests are not throttled by IP.
     """
+    from backend.app.core.limiter import limiter
+
     app = create_app()
 
     async def _override_get_session():
@@ -70,11 +73,15 @@ async def client(session):
 
     app.dependency_overrides[get_session] = _override_get_session
 
-    with patch("starlette.background.BackgroundTasks.add_task"):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
-            yield c
+    limiter.enabled = False
+    try:
+        with patch("starlette.background.BackgroundTasks.add_task"):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as c:
+                yield c
+    finally:
+        limiter.enabled = True
 
     app.dependency_overrides.clear()
 

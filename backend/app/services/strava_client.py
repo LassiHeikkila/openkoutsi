@@ -96,5 +96,5 @@ class StravaClient:
         async with httpx.AsyncClient() as client:
             await client.post(
                 f"{_STRAVA_BASE}/oauth/deauthorize",
-                params={"access_token": access_token},
+                data={"access_token": access_token},  # form body, not URL param (avoids logging)
             )

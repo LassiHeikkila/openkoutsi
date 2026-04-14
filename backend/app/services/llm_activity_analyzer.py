@@ -97,9 +97,9 @@ async def _stream_analysis(activity: Activity, athlete: Athlete) -> AsyncIterato
         "stream": True,
     }
 
-    # No read timeout — local models can take several minutes.
+    # Local models can take several minutes; use a generous but finite timeout.
     async with httpx.AsyncClient(
-        timeout=httpx.Timeout(None, connect=10.0)
+        timeout=httpx.Timeout(300.0, connect=10.0)  # 5-minute read timeout
     ) as client:
         async with client.stream("POST", url, json=payload, headers=headers) as resp:
             resp.raise_for_status()

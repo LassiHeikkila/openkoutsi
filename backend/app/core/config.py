@@ -1,4 +1,7 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_DEFAULT = "changeme-set-a-real-secret-in-env"
 
 
 class Settings(BaseSettings):
@@ -8,7 +11,16 @@ class Settings(BaseSettings):
     # Set INIT_DB=true (env var) to run create_all on startup.
     # Safe for fresh installs. For existing databases use Alembic migrations instead.
     init_db: bool = False
-    secret_key: str = "changeme-set-a-real-secret-in-env"
+    secret_key: str = _INSECURE_DEFAULT
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> "Settings":
+        if self.secret_key == _INSECURE_DEFAULT or len(self.secret_key) < 32:
+            raise ValueError(
+                "SECRET_KEY is not set or is too weak. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        return self
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
     file_storage_path: str = "uploads"
@@ -25,6 +37,11 @@ class Settings(BaseSettings):
     llm_base_url: str = ""   # e.g. "http://localhost:11434/v1" or "https://api.openai.com/v1"
     llm_api_key: str = ""    # empty is fine for local models
     llm_model: str = ""      # e.g. "llama3.2", "gpt-4o-mini", "mistral"
+
+    # Field-level encryption key for sensitive DB columns (Fernet/base64-urlsafe, 32 bytes).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Leave empty in development to disable encryption (tokens stored as plaintext).
+    encryption_key: str = ""
 
 
 settings = Settings()

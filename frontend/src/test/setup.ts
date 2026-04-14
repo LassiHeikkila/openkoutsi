@@ -23,7 +23,6 @@ Object.defineProperty(globalThis, 'localStorage', {
 beforeEach(() => {
   // Reset the in-memory access token between tests
   setAccessToken(null)
-  // Clear localStorage (refresh token storage)
   localStorage.clear()
 })
 

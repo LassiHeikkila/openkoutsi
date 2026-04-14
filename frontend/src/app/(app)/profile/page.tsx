@@ -146,6 +146,10 @@ export default function ProfilePage() {
 
   async function handleStravaConnect() {
     const res = await apiFetch<{ url: string }>('/api/strava/connect')
+    const parsed = new URL(res.url)
+    if (parsed.origin !== 'https://www.strava.com') {
+      throw new Error('Unexpected redirect target')
+    }
     window.location.href = res.url
   }
 

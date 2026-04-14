@@ -11,10 +11,10 @@ import {
 import {
   apiFetch,
   setAccessToken,
-  setRefreshToken,
   clearTokens,
-  getRefreshToken,
   getAccessToken,
+  setSessionCookie,
+  clearSessionCookie,
 } from './api'
 import type { AthleteProfile, TokenPair } from './types'
 
@@ -42,23 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // On mount, attempt to restore session from refresh token
+  // On mount, attempt to restore session via the httpOnly refresh cookie.
+  // If the cookie is present and valid the refresh endpoint returns a new
+  // access token; if not, we get a 401 and stay logged out.
   useEffect(() => {
     const restore = async () => {
-      const rt = getRefreshToken()
-      if (!rt) {
-        setLoading(false)
-        return
-      }
-      // If we already have an access token in memory (e.g. HMR), skip refresh
+      // Skip if we already have an access token in memory (e.g. hot reload)
       if (!getAccessToken()) {
         try {
           const res = await apiFetch<TokenPair>('/api/auth/refresh', {
             method: 'POST',
-            body: JSON.stringify({ refresh_token: rt }),
           })
           setAccessToken(res.access_token)
-          setRefreshToken(res.refresh_token)
+          setSessionCookie()
         } catch {
           clearTokens()
           setLoading(false)
@@ -78,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       })
       setAccessToken(data.access_token)
-      setRefreshToken(data.refresh_token)
+      setSessionCookie()
       await fetchAthlete()
     },
     [fetchAthlete],
@@ -97,7 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearTokens()
+    clearSessionCookie()
     setAthlete(null)
+    // Clear the httpOnly refresh cookie server-side
+    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
   }, [])
 
   const refreshAthlete = useCallback(async () => {

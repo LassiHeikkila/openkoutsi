@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.app.core.encryption import EncryptedString
 from backend.app.db.base import Base
 
 
@@ -68,8 +69,8 @@ class Athlete(Base):
 
     # Strava fields (Phase 2)
     strava_athlete_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    strava_access_token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    strava_refresh_token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    strava_access_token: Mapped[Optional[str]] = mapped_column(EncryptedString, nullable=True)
+    strava_refresh_token: Mapped[Optional[str]] = mapped_column(EncryptedString, nullable=True)
     strava_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

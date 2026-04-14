@@ -13,40 +13,36 @@ export function getAccessToken(): string | null {
   return _accessToken
 }
 
-export function setRefreshToken(token: string) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('refresh_token', token)
-  }
-}
-
-export function getRefreshToken(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('refresh_token')
-  }
-  return null
-}
-
 export function clearTokens() {
   _accessToken = null
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('refresh_token')
+}
+
+// Non-sensitive session indicator cookie — contains no secret data.
+// Used by the Next.js middleware to gate protected pages before the client-side
+// AuthProvider can run. The real security enforcement is always done by the backend.
+export function setSessionCookie() {
+  if (typeof document !== 'undefined') {
+    const maxAge = 30 * 24 * 60 * 60
+    document.cookie = `session=1; path=/; max-age=${maxAge}; SameSite=Lax`
+  }
+}
+
+export function clearSessionCookie() {
+  if (typeof document !== 'undefined') {
+    document.cookie = 'session=; path=/; max-age=0; SameSite=Lax'
   }
 }
 
 async function attemptRefresh(): Promise<boolean> {
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) return false
-
   try {
+    // Refresh token is in an httpOnly cookie — sent automatically by the browser.
     const res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: 'include',
     })
     if (!res.ok) return false
     const data: TokenPair = await res.json()
     setAccessToken(data.access_token)
-    setRefreshToken(data.refresh_token)
     return true
   } catch {
     return false
@@ -71,7 +67,11 @@ export async function apiFetch<T>(
     headers['Content-Type'] = headers['Content-Type'] ?? 'application/json'
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers })
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  })
 
   if (res.status === 401 && retry) {
     const refreshed = await attemptRefresh()
@@ -114,7 +114,7 @@ export async function apiDownload(
     headers['Authorization'] = `Bearer ${_accessToken}`
   }
 
-  const res = await fetch(`${API_URL}${path}`, { headers })
+  const res = await fetch(`${API_URL}${path}`, { headers, credentials: 'include' })
 
   if (res.status === 401 && retry) {
     const refreshed = await attemptRefresh()

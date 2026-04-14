@@ -3,22 +3,31 @@ import type { NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/login', '/register']
 
+// Note: the httpOnly refresh_token cookie is set by the backend (different origin/port)
+// so the edge runtime cannot read it directly. We use a lightweight non-sensitive
+// "logged_in" indicator cookie (set below on login) to gate page rendering.
+// The real security check always happens on the backend via JWT Bearer tokens.
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public routes
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // Allow public routes and Next.js internals
+  if (
+    PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api')
+  ) {
     return NextResponse.next()
   }
 
-  // Allow API and Next.js internals
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api')) {
-    return NextResponse.next()
+  // Gate protected pages on the presence of the session indicator cookie.
+  // AuthProvider always tries a token refresh on mount as the true auth check.
+  const hasSession = request.cookies.has('session')
+  if (!hasSession) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
-  // We can't check in-memory tokens in middleware (edge runtime), but we
-  // can check for the refresh token cookie if we set one. For now we rely
-  // on client-side redirect from AuthProvider when token refresh fails.
   return NextResponse.next()
 }
 

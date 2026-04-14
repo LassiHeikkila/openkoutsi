@@ -16,6 +16,8 @@ dependencies = [
     "httpx",
     "pydantic-settings",
     "email-validator",
+    "slowapi",
+    "cryptography",
 ]
 
 [dependency-groups]

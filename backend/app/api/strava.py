@@ -94,7 +94,7 @@ async def callback(
         payload = jwt.decode(state, settings.secret_key, algorithms=["HS256"])
         if payload.get("purpose") != "strava_oauth":
             raise JWTError("wrong purpose")
-        user_id = int(payload["sub"])
+        user_id: str = payload["sub"]
     except (JWTError, KeyError, ValueError):
         return RedirectResponse(url=f"{settings.frontend_url}/profile?strava=error")
 

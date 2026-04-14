@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +19,13 @@ from backend.app.schemas.activities import (
     ActivityResponse,
     ManualActivityCreate,
 )
+from backend.app.core.limiter import limiter
 from backend.app.services.fit_processor import process_fit_file, read_fit_start_time
 from backend.app.services.metrics_engine import recalculate_from
 from backend.app.services.training_math import calculate_tss
+
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+_FIT_MAGIC = b".FIT"  # FIT file header signature at bytes 8–11
 
 _DUPLICATE_WINDOW = timedelta(seconds=30)
 
@@ -90,7 +94,9 @@ async def _bg_recalculate(athlete_id: str, from_date: date) -> None:
 
 
 @router.post("/upload", response_model=ActivityResponse, status_code=201)
+@limiter.limit("30/hour")
 async def upload_activity(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
@@ -101,7 +107,29 @@ async def upload_activity(
     storage_dir = Path(settings.file_storage_path) / athlete.id
     storage_dir.mkdir(parents=True, exist_ok=True)
     file_path = storage_dir / f"{uuid.uuid4()}.fit"
-    file_path.write_bytes(await file.read())
+
+    # Stream the file to disk while enforcing the size limit
+    written = 0
+    with file_path.open("wb") as out:
+        while True:
+            chunk = await file.read(65536)  # 64 KB chunks
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > _MAX_UPLOAD_BYTES:
+                file_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File exceeds the {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
+                )
+            out.write(chunk)
+
+    # Validate FIT file magic bytes (bytes 8–11 must be ".FIT")
+    with file_path.open("rb") as f:
+        header = f.read(12)
+    if len(header) < 12 or header[8:12] != _FIT_MAGIC:
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="File is not a valid FIT file")
 
     # Duplicate detection: extract the activity's start timestamp and check
     # whether the athlete already has an activity within a 30-second window.
@@ -121,10 +149,7 @@ async def upload_activity(
             file_path.unlink(missing_ok=True)
             raise HTTPException(
                 status_code=409,
-                detail={
-                    "message": "An activity starting at this time already exists.",
-                    "existing_activity_id": duplicate.id,
-                },
+                detail="An activity starting at this time already exists.",
             )
 
     activity = Activity(
@@ -274,7 +299,10 @@ async def download_fit_file(
     if not activity.fit_file_path:
         raise HTTPException(status_code=404, detail="No FIT file for this activity")
 
-    fit_path = Path(activity.fit_file_path)
+    fit_path = Path(activity.fit_file_path).resolve()
+    expected_dir = Path(settings.file_storage_path).resolve()
+    if not fit_path.is_relative_to(expected_dir):
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not fit_path.exists():
         raise HTTPException(status_code=404, detail="FIT file not found on disk")
 

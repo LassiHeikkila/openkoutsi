@@ -3,9 +3,7 @@ import {
   apiFetch,
   clearTokens,
   getAccessToken,
-  getRefreshToken,
   setAccessToken,
-  setRefreshToken,
 } from '@/lib/api'
 
 // Helper to build a minimal Response mock
@@ -23,23 +21,19 @@ describe('token management', () => {
     expect(getAccessToken()).toBe('my-token')
   })
 
-  it('clearTokens removes access token and refresh token', () => {
+  it('clearTokens removes the access token', () => {
     setAccessToken('tok')
-    setRefreshToken('refresh')
-    expect(localStorage.getItem('refresh_token')).toBe('refresh')
-
     clearTokens()
     expect(getAccessToken()).toBeNull()
-    expect(localStorage.getItem('refresh_token')).toBeNull()
   })
 
-  it('setRefreshToken persists to localStorage', () => {
-    setRefreshToken('rt-value')
-    expect(getRefreshToken()).toBe('rt-value')
-  })
-
-  it('getRefreshToken returns null when not set', () => {
-    expect(getRefreshToken()).toBeNull()
+  it('clearTokens does not affect localStorage (refresh token is httpOnly cookie)', () => {
+    // Refresh token is now managed via httpOnly cookie, not localStorage.
+    // JS code should never read/write refresh_token from localStorage.
+    localStorage.setItem('refresh_token', 'should-stay')
+    clearTokens()
+    // clearTokens should NOT touch localStorage at all
+    expect(localStorage.getItem('refresh_token')).toBe('should-stay')
   })
 })
 
@@ -64,12 +58,21 @@ describe('apiFetch happy path', () => {
   it('omits Authorization header when no access token', async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}))
     vi.stubGlobal('fetch', fetchMock)
-    // access token is null (reset in setup.ts)
 
     await apiFetch('/api/test')
 
     const calledHeaders = fetchMock.mock.calls[0][1].headers
     expect(calledHeaders['Authorization']).toBeUndefined()
+  })
+
+  it('sends credentials: include on all requests (for cookie-based refresh)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiFetch('/api/test')
+
+    const calledOptions = fetchMock.mock.calls[0][1]
+    expect(calledOptions.credentials).toBe('include')
   })
 
   it('returns undefined for 204 No Content', async () => {
@@ -105,16 +108,13 @@ describe('apiFetch happy path', () => {
 })
 
 describe('apiFetch 401 handling', () => {
-  it('refreshes token and retries on 401', async () => {
-    setRefreshToken('valid-refresh')
-
+  it('attempts refresh via cookie and retries on 401', async () => {
+    // Refresh token is in an httpOnly cookie — the browser sends it automatically.
+    // The mock simulates a successful refresh returning a new access_token.
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockResponse(401))                               // first attempt → 401
-      .mockResolvedValueOnce(mockResponse(200, {                              // refresh succeeds
-        access_token: 'new-access',
-        refresh_token: 'new-refresh',
-      }))
+      .mockResolvedValueOnce(mockResponse(200, { access_token: 'new-access', token_type: 'bearer' })) // refresh succeeds
       .mockResolvedValueOnce(mockResponse(200, { data: 'ok' }))              // retry succeeds
 
     vi.stubGlobal('fetch', fetchMock)
@@ -126,24 +126,32 @@ describe('apiFetch 401 handling', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+  it('refresh call is sent without body (cookie-based)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockResponse(401))                               // original → 401
+      .mockResolvedValueOnce(mockResponse(200, { access_token: 'new-access', token_type: 'bearer' }))
+      .mockResolvedValueOnce(mockResponse(200, { data: 'ok' }))
+
+    vi.stubGlobal('fetch', fetchMock)
+    await apiFetch('/api/protected')
+
+    // The second call is the refresh — it should have no body
+    const refreshCall = fetchMock.mock.calls[1]
+    expect(refreshCall[0]).toContain('/api/auth/refresh')
+    expect(refreshCall[1].body).toBeUndefined()
+    expect(refreshCall[1].credentials).toBe('include')
+  })
+
   it('clears tokens and throws when refresh fails', async () => {
-    setRefreshToken('expired-refresh')
+    setAccessToken('old-access')
 
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockResponse(401))   // original → 401
-      .mockResolvedValueOnce(mockResponse(401))   // refresh → 401
+      .mockResolvedValueOnce(mockResponse(401))   // refresh → 401 (cookie absent or expired)
 
     vi.stubGlobal('fetch', fetchMock)
-
-    await expect(apiFetch('/api/protected')).rejects.toThrow('Unauthorized')
-    expect(getAccessToken()).toBeNull()
-    expect(getRefreshToken()).toBeNull()
-  })
-
-  it('clears tokens and throws immediately when no refresh token', async () => {
-    // no refresh token set (cleared in beforeEach)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse(401)))
 
     await expect(apiFetch('/api/protected')).rejects.toThrow('Unauthorized')
     expect(getAccessToken()).toBeNull()
@@ -152,11 +160,10 @@ describe('apiFetch 401 handling', () => {
   it('does not retry when retry=false', async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse(401))
     vi.stubGlobal('fetch', fetchMock)
-    setRefreshToken('some-refresh')
 
     await expect(apiFetch('/api/protected', {}, false)).rejects.toThrow()
 
-    // Should only call fetch once, not attempt refresh
+    // Should only call fetch once — no refresh attempt when retry=false
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

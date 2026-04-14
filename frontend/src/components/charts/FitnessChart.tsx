@@ -42,7 +42,7 @@ export function FitnessChart({ data }: Props) {
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <ReferenceLine yAxisId="left" y={0} stroke="hsl(var(--border))" />
-        <Bar yAxisId="right" dataKey="daily_tss" name="TSS" fill="hsl(var(--muted))" radius={2} />
+        <Bar yAxisId="right" dataKey="daily_tss" name="TSS" fill="hsl(var(--muted-foreground))" radius={2} opacity={0.4} />
         <Line
           yAxisId="left"
           type="monotone"

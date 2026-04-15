@@ -27,11 +27,15 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     api_url: str = "http://localhost:8000"
 
-    # Phase 2
+    # Strava
     strava_client_id: str = ""
     strava_client_secret: str = ""
     bridge_url: str = ""
     bridge_secret: str = ""
+
+    # Wahoo (register at developers.wahooligan.com)
+    wahoo_client_id: str = ""
+    wahoo_client_secret: str = ""
 
     # LLM plan generation (OpenAI-compatible API)
     llm_base_url: str = ""   # e.g. "http://localhost:11434/v1" or "https://api.openai.com/v1"

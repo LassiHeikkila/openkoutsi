@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
 from backend.app.db.base import get_session
-from backend.app.models.orm import Activity, Athlete, User
+from backend.app.models.orm import Activity, Athlete, ProviderConnection, User
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -30,7 +30,9 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
     return athlete
 
 
-def _athlete_response(athlete: Athlete) -> AthleteResponse:
+def _athlete_response(
+    athlete: Athlete, connected_providers: list[str]
+) -> AthleteResponse:
     avatar_url = f"{settings.api_url}/api/athlete/{athlete.id}/avatar" if athlete.avatar_path else None
     return AthleteResponse(
         id=athlete.id,
@@ -44,12 +46,19 @@ def _athlete_response(athlete: Athlete) -> AthleteResponse:
         hr_zones=athlete.hr_zones or [],
         power_zones=athlete.power_zones or [],
         ftp_tests=athlete.ftp_tests or [],
-        strava_connected=bool(athlete.strava_athlete_id),
+        connected_providers=connected_providers,
         app_settings=athlete.app_settings or {},
         avatar_url=avatar_url,
         created_at=athlete.created_at,
         updated_at=athlete.updated_at,
     )
+
+
+async def _get_connected_providers(athlete: Athlete, session: AsyncSession) -> list[str]:
+    result = await session.execute(
+        select(ProviderConnection).where(ProviderConnection.athlete_id == athlete.id)
+    )
+    return [c.provider for c in result.scalars().all()]
 
 
 @router.get("/", response_model=AthleteResponse)
@@ -58,7 +67,8 @@ async def get_athlete(
     session: AsyncSession = Depends(get_session),
 ):
     athlete = await _get_athlete(user, session)
-    return _athlete_response(athlete)
+    providers = await _get_connected_providers(athlete, session)
+    return _athlete_response(athlete, providers)
 
 
 @router.put("/", response_model=AthleteResponse)
@@ -95,7 +105,8 @@ async def update_athlete(
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(athlete)
-    return _athlete_response(athlete)
+    providers = await _get_connected_providers(athlete, session)
+    return _athlete_response(athlete, providers)
 
 
 @router.post("/avatar", response_model=AthleteResponse)
@@ -128,7 +139,8 @@ async def upload_avatar(
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(athlete)
-    return _athlete_response(athlete)
+    providers = await _get_connected_providers(athlete, session)
+    return _athlete_response(athlete, providers)
 
 
 @router.delete("/avatar", response_model=AthleteResponse)
@@ -143,7 +155,8 @@ async def delete_avatar(
         athlete.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(athlete)
-    return _athlete_response(athlete)
+    providers = await _get_connected_providers(athlete, session)
+    return _athlete_response(athlete, providers)
 
 
 @router.get("/{athlete_id}/avatar")

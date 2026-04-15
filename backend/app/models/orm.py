@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,14 +70,6 @@ class Athlete(Base):
     # Profile picture stored on disk
     avatar_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    # Strava fields (Phase 2)
-    strava_athlete_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    strava_access_token: Mapped[Optional[str]] = mapped_column(EncryptedString, nullable=True)
-    strava_refresh_token: Mapped[Optional[str]] = mapped_column(EncryptedString, nullable=True)
-    strava_token_expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -93,6 +86,33 @@ class Athlete(Base):
     training_plans: Mapped[list["TrainingPlan"]] = relationship(
         "TrainingPlan", back_populates="athlete"
     )
+    provider_connections: Mapped[list["ProviderConnection"]] = relationship(
+        "ProviderConnection", back_populates="athlete", cascade="all, delete-orphan"
+    )
+
+
+class ProviderConnection(Base):
+    __tablename__ = "provider_connections"
+    __table_args__ = (UniqueConstraint("athlete_id", "provider"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    athlete_id: Mapped[str] = mapped_column(
+        String, ForeignKey("athletes.id", ondelete="CASCADE")
+    )
+    provider: Mapped[str] = mapped_column(String, nullable=False)  # "strava", "wahoo", …
+    provider_athlete_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    access_token: Mapped[Optional[str]] = mapped_column(EncryptedString, nullable=True)
+    refresh_token: Mapped[Optional[str]] = mapped_column(EncryptedString, nullable=True)
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scopes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+    athlete: Mapped["Athlete"] = relationship("Athlete", back_populates="provider_connections")
 
 
 class Activity(Base):
@@ -103,6 +123,8 @@ class Activity(Base):
         String, ForeignKey("athletes.id", ondelete="CASCADE")
     )
     strava_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True)
+    # Generic deduplication key for non-Strava providers (source + external_id pair is unique per athlete)
+    external_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     source: Mapped[str] = mapped_column(String, default="upload")
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     sport_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)

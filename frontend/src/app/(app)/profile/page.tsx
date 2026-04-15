@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
 import { ZoneEditor } from '@/components/profile/ZoneEditor'
+import { ProviderCard } from '@/components/profile/ProviderCard'
 import { Suspense } from 'react'
 
 // ── Default zone templates ────────────────────────────────────────────────
@@ -39,14 +40,28 @@ function defaultPowerZones(ftp: number): Zone[] {
   ]
 }
 
-function StravaNotice() {
+const PROVIDER_NAMES: Record<string, string> = {
+  strava: 'Strava',
+  wahoo: 'Wahoo',
+}
+
+function ProviderNotice() {
   const params = useSearchParams()
-  if (params.get('strava') === 'connected') {
-    return (
-      <div className="rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-        Strava connected successfully!
-      </div>
-    )
+  for (const [key, name] of Object.entries(PROVIDER_NAMES)) {
+    if (params.get(key) === 'connected') {
+      return (
+        <div className="rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+          {name} connected successfully!
+        </div>
+      )
+    }
+    if (params.get(key) === 'error') {
+      return (
+        <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+          Could not connect {name}. Please try again.
+        </div>
+      )
+    }
   }
   return null
 }
@@ -61,7 +76,7 @@ export default function ProfilePage() {
   const [maxHr, setMaxHr] = useState(athlete?.max_hr?.toString() ?? '')
   const [restingHr, setRestingHr] = useState(athlete?.resting_hr?.toString() ?? '')
   const [saving, setSaving] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [syncingProvider, setSyncingProvider] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [removingAvatar, setRemovingAvatar] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -179,20 +194,16 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleStravaConnect() {
-    const res = await apiFetch<{ url: string }>('/api/strava/connect')
-    const parsed = new URL(res.url)
-    if (parsed.origin !== 'https://www.strava.com') {
-      throw new Error('Unexpected redirect target')
-    }
+  async function handleProviderConnect(provider: string) {
+    const res = await apiFetch<{ url: string }>(`/api/integrations/${provider}/connect`)
     window.location.href = res.url
   }
 
-  async function handleStravaSync() {
-    setSyncing(true)
+  async function handleProviderSync(provider: string) {
+    setSyncingProvider(provider)
     try {
-      const res = await apiFetch<{ synced: number }>('/api/strava/sync', { method: 'POST' })
-      toast({ title: 'Sync complete', description: `${res.synced} activities synced` })
+      await apiFetch(`/api/integrations/${provider}/sync`, { method: 'POST' })
+      toast({ title: 'Sync started', description: 'New activities will appear shortly.' })
     } catch (err) {
       toast({
         title: 'Sync failed',
@@ -200,15 +211,20 @@ export default function ProfilePage() {
         variant: 'destructive',
       })
     } finally {
-      setSyncing(false)
+      setSyncingProvider(null)
     }
   }
 
-  async function handleStravaDisconnect() {
+  async function handleProviderDisconnect(provider: string, deleteData: boolean) {
+    const name = PROVIDER_NAMES[provider] ?? provider
+    const url = `/api/integrations/${provider}/disconnect${deleteData ? '?delete_data=true' : ''}`
     try {
-      await apiFetch('/api/strava/disconnect', { method: 'DELETE' })
+      await apiFetch(url, { method: 'DELETE' })
       await refreshAthlete()
-      toast({ title: 'Strava disconnected' })
+      toast({
+        title: `${name} disconnected`,
+        description: deleteData ? 'All imported activities have been deleted.' : undefined,
+      })
     } catch (err) {
       toast({
         title: 'Error',
@@ -223,7 +239,7 @@ export default function ProfilePage() {
       <h1 className="text-2xl font-bold">Profile</h1>
 
       <Suspense>
-        <StravaNotice />
+        <ProviderNotice />
       </Suspense>
 
       <Card>
@@ -406,39 +422,30 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Strava */}
+      {/* Connected services */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Strava integration</CardTitle>
+          <CardTitle className="text-base">Connected services</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {profile?.strava_connected ? (
-            <div className="flex items-center gap-3">
-              <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-              <span className="text-sm">Connected</span>
-              <div className="ml-auto flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleStravaSync} disabled={syncing}>
-                  {syncing ? 'Syncing…' : 'Sync now'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive border-destructive/30"
-                  onClick={handleStravaDisconnect}
-                >
-                  Disconnect
-                </Button>
-              </div>
+        <CardContent className="space-y-4">
+          {(
+            [
+              { provider: 'strava', name: 'Strava' },
+              { provider: 'wahoo',  name: 'Wahoo'  },
+            ] as const
+          ).map(({ provider, name }) => (
+            <div key={provider}>
+              <p className="text-sm font-medium mb-2">{name}</p>
+              <ProviderCard
+                name={name}
+                connected={profile?.connected_providers?.includes(provider) ?? false}
+                onConnect={() => handleProviderConnect(provider)}
+                onSync={() => handleProviderSync(provider)}
+                onDisconnect={(deleteData) => handleProviderDisconnect(provider, deleteData)}
+                syncing={syncingProvider === provider}
+              />
             </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <span className="inline-block h-2 w-2 rounded-full bg-gray-300" />
-              <span className="text-sm text-muted-foreground">Not connected</span>
-              <Button size="sm" className="ml-auto" onClick={handleStravaConnect}>
-                Connect Strava
-              </Button>
-            </div>
-          )}
+          ))}
         </CardContent>
       </Card>
 

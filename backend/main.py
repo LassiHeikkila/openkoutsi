@@ -15,9 +15,50 @@ log = logging.getLogger(__name__)
 
 
 async def _apply_column_migrations(conn) -> None:
-    """Add columns that were introduced after the initial schema creation."""
+    """Add columns/tables that were introduced after the initial schema creation."""
     from sqlalchemy import text
 
+    # New tables
+    result = await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='provider_connections'")
+    )
+    if result.fetchone() is None:
+        log.info("Schema migration: creating table provider_connections")
+        await conn.execute(text(
+            "CREATE TABLE provider_connections ("
+            "  id VARCHAR NOT NULL PRIMARY KEY,"
+            "  athlete_id VARCHAR NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,"
+            "  provider VARCHAR NOT NULL,"
+            "  provider_athlete_id VARCHAR,"
+            "  access_token VARCHAR,"
+            "  refresh_token VARCHAR,"
+            "  token_expires_at DATETIME,"
+            "  scopes VARCHAR,"
+            "  created_at DATETIME NOT NULL,"
+            "  updated_at DATETIME NOT NULL,"
+            "  UNIQUE (athlete_id, provider)"
+            ")"
+        ))
+        # Migrate existing Strava tokens from athletes table (if columns exist)
+        result2 = await conn.execute(text("PRAGMA table_info(athletes)"))
+        athlete_cols = {row[1] for row in result2.fetchall()}
+        if "strava_athlete_id" in athlete_cols:
+            log.info("Schema migration: migrating Strava tokens to provider_connections")
+            from datetime import datetime, timezone
+            now_iso = datetime.now(timezone.utc).isoformat()
+            await conn.execute(text(
+                "INSERT INTO provider_connections "
+                "  (id, athlete_id, provider, provider_athlete_id, access_token, "
+                "   refresh_token, token_expires_at, created_at, updated_at) "
+                "SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' || "
+                "       hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' || hex(randomblob(6))),"
+                "  id, 'strava', strava_athlete_id, strava_access_token,"
+                "  strava_refresh_token, strava_token_expires_at,"
+                f"  '{now_iso}', '{now_iso}'"
+                " FROM athletes WHERE strava_athlete_id IS NOT NULL"
+            ))
+
+    # New columns on existing tables
     migrations = [
         ("training_plans", "config", "ALTER TABLE training_plans ADD COLUMN config JSON"),
         ("training_plans", "generation_method", "ALTER TABLE training_plans ADD COLUMN generation_method VARCHAR"),
@@ -25,6 +66,7 @@ async def _apply_column_migrations(conn) -> None:
         ("activities", "analysis", "ALTER TABLE activities ADD COLUMN analysis TEXT"),
         ("athletes", "app_settings", "ALTER TABLE athletes ADD COLUMN app_settings JSON"),
         ("athletes", "avatar_path", "ALTER TABLE athletes ADD COLUMN avatar_path VARCHAR"),
+        ("activities", "external_id", "ALTER TABLE activities ADD COLUMN external_id VARCHAR"),
     ]
     for table, column, ddl in migrations:
         result = await conn.execute(text(f"PRAGMA table_info({table})"))
@@ -67,6 +109,7 @@ def create_app() -> FastAPI:
     from backend.app.api.auth import router as auth_router
     from backend.app.api.athlete import router as athlete_router
     from backend.app.api.activities import router as activities_router
+    from backend.app.api.integrations import router as integrations_router
     from backend.app.api.metrics import router as metrics_router
     from backend.app.api.goals import router as goals_router
     from backend.app.api.strava import router as strava_router
@@ -88,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api")
     app.include_router(athlete_router, prefix="/api")
     app.include_router(activities_router, prefix="/api")
+    app.include_router(integrations_router, prefix="/api")
     app.include_router(metrics_router, prefix="/api")
     app.include_router(goals_router, prefix="/api")
     app.include_router(strava_router, prefix="/api")

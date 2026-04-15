@@ -33,7 +33,7 @@ export interface AthleteProfile {
   hr_zones: Zone[]
   power_zones: Zone[]
   ftp_tests: FtpTest[]
-  strava_connected: boolean
+  connected_providers: string[]
   app_settings: Record<string, unknown>
   avatar_url: string | null
   created_at: string

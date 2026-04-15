@@ -1,198 +1,28 @@
 """
-Strava activity import and webhook event processing.
+Strava webhook event processing.
+
+Full activity sync is now handled by the generic provider_sync.py pipeline.
+This module handles only the Strava Bridge webhook events (create / update /
+delete) which require Strava-specific knowledge about the bridge event schema.
 """
 
+import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.orm import Activity, ActivityStream, Athlete
-from backend.app.services.strava_client import StravaClient
+from backend.app.models.orm import Activity, ActivityStream, Athlete, ProviderConnection
+from backend.app.services.provider_sync import ensure_fresh_token
+from backend.app.services.providers.strava import StravaProviderClient
 from backend.app.services.training_math import calculate_tss, normalized_power
+
+log = logging.getLogger(__name__)
 
 _DUPLICATE_WINDOW = timedelta(seconds=30)
 
-
-# ── Token management ──────────────────────────────────────────────────────
-
-async def ensure_fresh_token(athlete: Athlete, session: AsyncSession) -> str:
-    """Refresh the Strava access token if expired. Returns current access token."""
-    if (
-        athlete.strava_token_expires_at
-        and datetime.now(timezone.utc) >= athlete.strava_token_expires_at
-        and athlete.strava_refresh_token
-    ):
-        tokens = await StravaClient.refresh_token_request(athlete.strava_refresh_token)
-        athlete.strava_access_token = tokens["access_token"]
-        athlete.strava_refresh_token = tokens["refresh_token"]
-        athlete.strava_token_expires_at = datetime.fromtimestamp(
-            tokens["expires_at"], tz=timezone.utc
-        )
-        await session.commit()
-    return athlete.strava_access_token or ""
-
-
-# ── Full sync ─────────────────────────────────────────────────────────────
-
-async def sync_strava_activities(
-    athlete: Athlete, session: AsyncSession
-) -> tuple[int, date | None]:
-    """
-    Import all Strava activities that aren't already in the database.
-    Returns (count_imported, earliest_start_date) so the caller can
-    trigger metrics recalculation from the right point.
-    """
-    access_token = await ensure_fresh_token(athlete, session)
-    client = StravaClient(access_token)
-
-    count = 0
-    earliest: date | None = None
-    page = 1
-
-    while True:
-        activities = await client.get_activities(page=page, per_page=200)
-        if not activities:
-            break
-
-        for raw in activities:
-            strava_id = str(raw["id"])
-
-            # Already imported via Strava — skip.
-            dupe = await session.execute(
-                select(Activity).where(
-                    Activity.athlete_id == athlete.id,
-                    Activity.strava_id == strava_id,
-                )
-            )
-            if dupe.scalar_one_or_none() is not None:
-                continue
-
-            # Cross-source duplicate: a FIT upload for the same activity already
-            # exists. Link it to this Strava activity instead of creating a new record.
-            raw_start = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
-            cross = await session.execute(
-                select(Activity).where(
-                    Activity.athlete_id == athlete.id,
-                    Activity.strava_id.is_(None),
-                    Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
-                    Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
-                )
-            )
-            existing_upload = cross.scalar_one_or_none()
-            if existing_upload is not None:
-                existing_upload.strava_id = strava_id
-                await session.commit()
-                continue
-
-            activity = await _import_strava_activity(raw, athlete, client, session)
-            count += 1
-
-            if activity.start_time:
-                day = (
-                    activity.start_time.date()
-                    if hasattr(activity.start_time, "date")
-                    else activity.start_time
-                )
-                if earliest is None or day < earliest:
-                    earliest = day
-
-            app_cfg = athlete.app_settings or {}
-            if app_cfg.get("auto_analyze"):
-                from backend.app.core.config import settings as _settings
-                if _settings.llm_base_url:
-                    import asyncio
-                    from backend.app.services.llm_activity_analyzer import analyze_activity_bg
-                    activity.analysis_status = "pending"
-                    await session.commit()
-                    asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))
-
-        page += 1
-
-    return count, earliest
-
-
-# ── Single activity import ────────────────────────────────────────────────
-
-async def _import_strava_activity(
-    raw: dict,
-    athlete: Athlete,
-    client: StravaClient,
-    session: AsyncSession,
-) -> Activity:
-    strava_id = str(raw["id"])
-    start_time = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
-
-    # Fetch streams (best-effort — activities may not have all streams)
-    try:
-        streams_raw = await client.get_streams(int(strava_id))
-    except Exception:
-        streams_raw = {}
-
-    power_data = [float(v) for v in streams_raw.get("watts", {}).get("data", [])]
-    hr_data = [float(v) for v in streams_raw.get("heartrate", {}).get("data", [])]
-    cadence_data = [float(v) for v in streams_raw.get("cadence", {}).get("data", [])]
-    speed_data = [
-        float(v) for v in streams_raw.get("velocity_smooth", {}).get("data", [])
-    ]
-    altitude_data = [
-        float(v) for v in streams_raw.get("altitude", {}).get("data", [])
-    ]
-
-    np = normalized_power(power_data) if power_data else None
-    avg_hr = (
-        (sum(hr_data) / len(hr_data)) if hr_data else raw.get("average_heartrate")
-    )
-    duration_s = raw.get("elapsed_time", 0)
-
-    tss, intensity_factor = calculate_tss(
-        duration_s, np, avg_hr, athlete.ftp, athlete.max_hr
-    )
-
-    activity = Activity(
-        id=str(uuid.uuid4()),
-        athlete_id=athlete.id,
-        strava_id=strava_id,
-        source="strava",
-        name=raw.get("name"),
-        sport_type=raw.get("sport_type") or raw.get("type"),
-        start_time=start_time,
-        duration_s=duration_s,
-        distance_m=raw.get("distance"),
-        elevation_m=raw.get("total_elevation_gain"),
-        avg_power=raw.get("average_watts"),
-        normalized_power=np,
-        avg_hr=avg_hr,
-        avg_speed_ms=raw.get("average_speed"),
-        avg_cadence=raw.get("average_cadence"),
-        tss=tss,
-        intensity_factor=intensity_factor,
-        status="processed",
-    )
-    session.add(activity)
-    await session.flush()  # get activity.id without committing yet
-
-    for stream_type, data in [
-        ("power", power_data),
-        ("heartrate", hr_data),
-        ("cadence", cadence_data),
-        ("speed", speed_data),
-        ("altitude", altitude_data),
-    ]:
-        if data:
-            session.add(
-                ActivityStream(
-                    id=str(uuid.uuid4()),
-                    activity_id=activity.id,
-                    stream_type=stream_type,
-                    data=data,
-                )
-            )
-
-    await session.commit()
-    await session.refresh(activity)
-    return activity
+_strava_client = StravaProviderClient()
 
 
 # ── Webhook event processing ──────────────────────────────────────────────
@@ -204,7 +34,7 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         "id": "<bridge-uuid>",
         "strava_event_type": "create" | "update" | "delete",
         "strava_owner_id": "<strava athlete id>",
-        "payload": {  # original Strava webhook body
+        "payload": {
             "object_type": "activity",
             "object_id": <strava activity id>,
             "aspect_type": "create" | ...,
@@ -222,52 +52,72 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
 
     aspect_type = event["strava_event_type"]
     strava_activity_id = str(payload.get("object_id", ""))
-    strava_owner_id = event["strava_owner_id"]
+    strava_owner_id = str(event["strava_owner_id"])
 
-    # Resolve the local athlete
-    result = await session.execute(
-        select(Athlete).where(Athlete.strava_athlete_id == strava_owner_id)
+    # Resolve the local athlete via provider_connections
+    conn_result = await session.execute(
+        select(ProviderConnection).where(
+            ProviderConnection.provider == "strava",
+            ProviderConnection.provider_athlete_id == strava_owner_id,
+        )
     )
-    athlete = result.scalar_one_or_none()
-    if athlete is None:
+    conn = conn_result.scalar_one_or_none()
+    if conn is None:
         return  # unknown owner — ignore
+
+    athlete_result = await session.execute(
+        select(Athlete).where(Athlete.id == conn.athlete_id)
+    )
+    athlete = athlete_result.scalar_one_or_none()
+    if athlete is None:
+        return
 
     if aspect_type == "create":
         # Skip if already imported (idempotent)
         dupe = await session.execute(
             select(Activity).where(
                 Activity.athlete_id == athlete.id,
-                Activity.strava_id == strava_activity_id,
+                Activity.source == "strava",
+                Activity.external_id == strava_activity_id,
             )
         )
         if dupe.scalar_one_or_none() is not None:
             return
 
-        access_token = await ensure_fresh_token(athlete, session)
-        client = StravaClient(access_token)
-        raw = await client.get_activity(int(strava_activity_id))
+        access_token = await ensure_fresh_token(conn, session)
 
-        # Cross-source duplicate: a FIT upload for this activity may already exist.
+        # Fetch full activity from Strava
+        import httpx as _httpx
+        async with _httpx.AsyncClient() as http:
+            r = await http.get(
+                f"https://www.strava.com/api/v3/activities/{strava_activity_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            raw = r.json()
+
         raw_start = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
+
+        # Cross-source duplicate: a FIT upload may already exist for this activity.
         cross = await session.execute(
             select(Activity).where(
                 Activity.athlete_id == athlete.id,
-                Activity.strava_id.is_(None),
+                Activity.external_id.is_(None),
                 Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
                 Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
             )
         )
         existing_upload = cross.scalar_one_or_none()
         if existing_upload is not None:
-            existing_upload.strava_id = strava_activity_id
+            existing_upload.external_id = strava_activity_id
+            existing_upload.source = "strava"
             await session.commit()
             return
 
-        activity = await _import_strava_activity(raw, athlete, client, session)
+        activity = await _import_strava_activity(raw, athlete, conn, session)
 
         if activity.start_time:
             from backend.app.services.metrics_engine import recalculate_from
-
             start_date = (
                 activity.start_time.date()
                 if hasattr(activity.start_time, "date")
@@ -289,7 +139,8 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         result = await session.execute(
             select(Activity).where(
                 Activity.athlete_id == athlete.id,
-                Activity.strava_id == strava_activity_id,
+                Activity.source == "strava",
+                Activity.external_id == strava_activity_id,
             )
         )
         activity = result.scalar_one_or_none()
@@ -306,7 +157,6 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
 
         if start_date:
             from backend.app.services.metrics_engine import recalculate_from
-
             await recalculate_from(athlete.id, start_date, session)
 
     elif aspect_type == "update":
@@ -317,7 +167,8 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         result = await session.execute(
             select(Activity).where(
                 Activity.athlete_id == athlete.id,
-                Activity.strava_id == strava_activity_id,
+                Activity.source == "strava",
+                Activity.external_id == strava_activity_id,
             )
         )
         activity = result.scalar_one_or_none()
@@ -329,3 +180,81 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         if "type" in updates or "sport_type" in updates:
             activity.sport_type = updates.get("sport_type") or updates.get("type")
         await session.commit()
+
+
+# ── Single activity import (webhook-specific) ─────────────────────────────
+
+async def _import_strava_activity(
+    raw: dict,
+    athlete: Athlete,
+    conn: ProviderConnection,
+    session: AsyncSession,
+) -> Activity:
+    strava_id = str(raw["id"])
+    start_time = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
+
+    access_token = await ensure_fresh_token(conn, session)
+
+    # Fetch streams (best-effort)
+    try:
+        streams_raw = await _strava_client.get_activity_streams(access_token, strava_id)
+    except Exception:
+        streams_raw = {}
+
+    power_data = streams_raw.get("power", [])
+    hr_data = streams_raw.get("heartrate", [])
+    cadence_data = streams_raw.get("cadence", [])
+    speed_data = streams_raw.get("speed", [])
+    altitude_data = streams_raw.get("altitude", [])
+
+    np = normalized_power(power_data) if power_data else None
+    avg_hr = (sum(hr_data) / len(hr_data)) if hr_data else raw.get("average_heartrate")
+    duration_s = raw.get("elapsed_time", 0)
+
+    tss, intensity_factor = calculate_tss(
+        duration_s, np, avg_hr, athlete.ftp, athlete.max_hr
+    )
+
+    activity = Activity(
+        id=str(uuid.uuid4()),
+        athlete_id=athlete.id,
+        external_id=strava_id,
+        source="strava",
+        name=raw.get("name"),
+        sport_type=raw.get("sport_type") or raw.get("type"),
+        start_time=start_time,
+        duration_s=duration_s,
+        distance_m=raw.get("distance"),
+        elevation_m=raw.get("total_elevation_gain"),
+        avg_power=raw.get("average_watts"),
+        normalized_power=np,
+        avg_hr=avg_hr,
+        avg_speed_ms=raw.get("average_speed"),
+        avg_cadence=raw.get("average_cadence"),
+        tss=tss,
+        intensity_factor=intensity_factor,
+        status="processed",
+    )
+    session.add(activity)
+    await session.flush()
+
+    for stream_type, data in [
+        ("power", power_data),
+        ("heartrate", hr_data),
+        ("cadence", cadence_data),
+        ("speed", speed_data),
+        ("altitude", altitude_data),
+    ]:
+        if data:
+            session.add(
+                ActivityStream(
+                    id=str(uuid.uuid4()),
+                    activity_id=activity.id,
+                    stream_type=stream_type,
+                    data=data,
+                )
+            )
+
+    await session.commit()
+    await session.refresh(activity)
+    return activity

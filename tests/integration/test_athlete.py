@@ -18,7 +18,7 @@ class TestGetAthlete:
         assert data["hr_zones"] == []
         assert data["power_zones"] == []
         assert data["ftp_tests"] == []
-        assert data["strava_connected"] is False
+        assert data["connected_providers"] == []
 
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.get("/api/athlete/")

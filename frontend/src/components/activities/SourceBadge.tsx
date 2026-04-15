@@ -13,17 +13,26 @@ interface Props {
 
 const SOURCE_LABELS: Record<string, string> = {
   strava: 'Strava',
+  wahoo: 'Wahoo',
   upload: 'FIT upload',
   manual: 'Manual',
 }
 
+// Brand colours for providers that require visual attribution per their ToS
+const BRANDED: Record<string, { bg: string; text: string }> = {
+  strava: { bg: '#FC4C02', text: 'white' },   // Strava API ToS §2.3
+  wahoo:  { bg: '#FFD200', text: '#111'   },   // Wahoo brand yellow
+}
+
 export function SourceBadge({ source, className = '' }: Props) {
   const label = SOURCE_LABELS[source] ?? source
+  const brand = BRANDED[source]
 
-  if (source === 'strava') {
+  if (brand) {
     return (
       <span
-        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-[#FC4C02] text-white ${className}`}
+        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${className}`}
+        style={{ backgroundColor: brand.bg, color: brand.text }}
       >
         {label}
       </span>

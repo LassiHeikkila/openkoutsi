@@ -28,7 +28,7 @@ class AthleteResponse(BaseModel):
     hr_zones: list[ZoneSchema] = []
     power_zones: list[ZoneSchema] = []
     ftp_tests: list[FtpTestSchema] = []
-    strava_connected: bool = False
+    connected_providers: list[str] = []
     app_settings: dict = {}
     avatar_url: Optional[str] = None
     created_at: datetime
@@ -45,15 +45,6 @@ class AthleteResponse(BaseModel):
     @classmethod
     def coerce_app_settings(cls, v):
         return v if isinstance(v, dict) else {}
-
-    @field_validator("strava_connected", mode="before")
-    @classmethod
-    def derive_strava_connected(cls, v, info):
-        # v is actually the field value; we need to check strava_athlete_id from the model
-        # This validator receives the raw value — the ORM has no strava_connected column,
-        # so we compute it in the endpoint instead. Accept bool passthrough.
-        return bool(v)
-
 
 class AthleteUpdate(BaseModel):
     name: Optional[str] = None

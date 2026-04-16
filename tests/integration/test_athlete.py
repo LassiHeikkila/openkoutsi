@@ -4,9 +4,15 @@ Integration tests for /api/athlete endpoints.
 import io
 import json
 import zipfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from cryptography.fernet import Fernet
+from sqlalchemy import select
+
+TESTDATA = Path(__file__).parent.parent.parent / "testdata"
+SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"
 
 
 class TestGetAthlete:
@@ -121,6 +127,46 @@ class TestExportAthlete:
     async def test_export_unauthenticated_returns_401(self, client):
         resp = await client.get("/api/athlete/export")
         assert resp.status_code == 401
+
+    @pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")
+    async def test_export_decrypts_encrypted_fit_files(self, client, auth_headers, session):
+        """Exported zip contains valid (decrypted) FIT bytes even when files are encrypted at rest."""
+        from backend.app.core import config as cfg
+        from backend.app.core.file_encryption import encrypt_file
+        from backend.app.models.orm import Activity, Athlete
+
+        test_key = Fernet.generate_key().decode()
+
+        with open(SAMPLE_FIT, "rb") as f:
+            upload_resp = await client.post(
+                "/api/activities/upload",
+                files={"file": ("test.fit", f, "application/octet-stream")},
+                headers=auth_headers,
+            )
+        assert upload_resp.status_code == 201
+        activity_id = upload_resp.json()["id"]
+
+        act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
+        activity = act_result.scalar_one()
+        ath_result = await session.execute(select(Athlete).where(Athlete.id == activity.athlete_id))
+        athlete = ath_result.scalar_one()
+
+        original_bytes = SAMPLE_FIT.read_bytes()
+
+        with patch.object(cfg.settings, "encryption_key", test_key):
+            encrypt_file(Path(activity.fit_file_path), athlete.user_id)
+            activity.fit_file_encrypted = True
+            await session.commit()
+
+            resp = await client.get("/api/athlete/export", headers=auth_headers)
+
+        assert resp.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            fit_names = [n for n in zf.namelist() if n.startswith("fit_files/")]
+            assert len(fit_names) == 1
+            exported_bytes = zf.read(fit_names[0])
+
+        assert exported_bytes == original_bytes
 
 
 # ── Avatar fixture ─────────────────────────────────────────────────────────────

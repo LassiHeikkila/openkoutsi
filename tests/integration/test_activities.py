@@ -6,8 +6,10 @@ FIT upload tests call process_fit_file() and recalculate_from() directly
 """
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy import select
 
 from backend.app.models.orm import Activity, Athlete
@@ -427,3 +429,37 @@ class TestDownloadFitFile:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/octet-stream"
         assert len(resp.content) == SAMPLE_FIT.stat().st_size
+
+    @pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")
+    async def test_encrypted_download_returns_original_bytes(self, client, auth_headers, session):
+        """Download endpoint decrypts the file transparently when fit_file_encrypted=True."""
+        test_key = Fernet.generate_key().decode()
+
+        with open(SAMPLE_FIT, "rb") as f:
+            upload_resp = await client.post(
+                "/api/activities/upload",
+                files={"file": ("test.fit", f, "application/octet-stream")},
+                headers=auth_headers,
+            )
+        assert upload_resp.status_code == 201
+        activity_id = upload_resp.json()["id"]
+
+        act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
+        activity = act_result.scalar_one()
+        ath_result = await session.execute(select(Athlete).where(Athlete.id == activity.athlete_id))
+        athlete = ath_result.scalar_one()
+
+        original_bytes = SAMPLE_FIT.read_bytes()
+
+        from backend.app.core import config as cfg
+        from backend.app.core.file_encryption import encrypt_file
+
+        with patch.object(cfg.settings, "encryption_key", test_key):
+            encrypt_file(Path(activity.fit_file_path), athlete.user_id)
+            activity.fit_file_encrypted = True
+            await session.commit()
+
+            resp = await client.get(f"/api/activities/{activity_id}/fit", headers=auth_headers)
+
+        assert resp.status_code == 200
+        assert resp.content == original_bytes

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
+from backend.app.core.file_encryption import decrypt_file
 from backend.app.db.base import get_session
 from backend.app.models.orm import Activity, Athlete, ProviderConnection, User
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
@@ -235,7 +236,10 @@ async def export_athlete(
             if a.fit_file_path:
                 fit_path = Path(a.fit_file_path)
                 if fit_path.exists():
-                    zf.write(fit_path, f"fit_files/{a.id}.fit")
+                    if a.fit_file_encrypted:
+                        zf.writestr(f"fit_files/{a.id}.fit", decrypt_file(fit_path, athlete.user_id))
+                    else:
+                        zf.write(fit_path, f"fit_files/{a.id}.fit")
     buf.seek(0)
 
     return StreamingResponse(

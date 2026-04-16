@@ -143,6 +143,7 @@ class Activity(Base):
     tss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     intensity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     fit_file_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    fit_file_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String, default="pending")
     analysis_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

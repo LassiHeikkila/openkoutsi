@@ -4,13 +4,16 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Optional
 
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
+from backend.app.core.file_encryption import decrypt_file, encrypt_file
 from backend.app.db.base import get_session, AsyncSessionLocal
 from backend.app.models.orm import Activity, ActivityStream, Athlete, User
 from backend.app.schemas.activities import (
@@ -28,6 +31,8 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _FIT_MAGIC = b".FIT"  # FIT file header signature at bytes 8–11
 
 _DUPLICATE_WINDOW = timedelta(seconds=30)
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -76,12 +81,24 @@ async def _bg_process_and_recalculate(
             )
             await recalculate_from(athlete_id, start_date, session)
 
+            # Encrypt the FIT file now that analysis is complete.
+            try:
+                encrypt_file(Path(file_path), athlete.user_id)
+                activity.fit_file_encrypted = True
+            except Exception:
+                log.warning(
+                    "Failed to encrypt FIT file %s for user %s — file left in plaintext",
+                    file_path,
+                    athlete.user_id,
+                    exc_info=True,
+                )
+
             # asyncio.create_task schedules the coroutine but won't run it until
             # the next await, so setting analysis_status and committing first
             # ensures the task sees the correct state in the DB.
             if _maybe_auto_analyze(activity_id, athlete):
                 activity.analysis_status = "pending"
-                await session.commit()
+            await session.commit()
         except Exception:
             activity.status = "error"
             await session.commit()
@@ -310,10 +327,19 @@ async def download_fit_file(
         c if c.isalnum() or c in " _-" else "_"
         for c in (activity.name or activity.id)
     ).strip()
+    filename = f"{safe_name}.fit"
+
+    if activity.fit_file_encrypted:
+        content = decrypt_file(fit_path, athlete.user_id)
+        return Response(
+            content=content,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     return FileResponse(
         path=str(fit_path),
         media_type="application/octet-stream",
-        filename=f"{safe_name}.fit",
+        filename=filename,
     )
 
 

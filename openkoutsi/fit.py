@@ -23,43 +23,43 @@ def summarizeWorkout(fr) -> workout.Profile:
             continue
 
         if frame.name == "sport":
-            s = frame.get_value("sport")
+            s = frame.get_value("sport", fallback=None)
             if s is not None:
                 sport_from_file = str(s)
 
         elif frame.name == "session":
-            total_timer = frame.get_value("total_timer_time")
+            total_timer = frame.get_value("total_timer_time", fallback=None)
             if total_timer is not None:
                 duration_from_session = int(total_timer)
 
-            total_distance = frame.get_value("total_distance")
+            total_distance = frame.get_value("total_distance", fallback=None)
             if total_distance is not None:
                 distance_from_session = int(total_distance)
 
-            total_ascent = frame.get_value("total_ascent")
+            total_ascent = frame.get_value("total_ascent", fallback=None)
             if total_ascent is not None:
                 elevation_gain_from_session = int(total_ascent)
 
         elif frame.name == "record":
-            ts = frame.get_value("timestamp")
+            ts = frame.get_value("timestamp", fallback=None)
             if ts is not None:
                 if first_ts is None:
                     first_ts = ts
                 last_ts = ts
 
-            hr = frame.get_value("heart_rate")
+            hr = frame.get_value("heart_rate", fallback=None)
             if hr is not None:
                 heart_rate.append(int(hr))
 
-            spd = frame.get_value("speed")
+            spd = frame.get_value("speed", fallback=None)
             if spd is not None:
                 speed.append(float(spd) * 3.6)  # m/s -> km/h
 
-            pwr = frame.get_value("power")
+            pwr = frame.get_value("power", fallback=None)
             if pwr is not None:
                 power.append(int(pwr))
 
-            cad = frame.get_value("cadence")
+            cad = frame.get_value("cadence", fallback=None)
             if cad is not None:
                 cadence.append(int(cad))
 

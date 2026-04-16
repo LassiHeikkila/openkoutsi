@@ -1,10 +1,8 @@
 Features to implement:
 
-- deployment guide
 - add external links to the dashboard metrics glossary (CTL, ATL, TSB, FTP, TSS)
   - previous attempt used TrainingPeaks URLs that turned out to be broken
   - find working URLs and add them to the GLOSSARY array in `frontend/src/app/(app)/dashboard/page.tsx`
-- encrypt files on disk
 - team support
 
 # Before Strava Integration Goes Live

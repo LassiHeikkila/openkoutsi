@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { apiFetch } from '@/lib/api'
 import { toast } from '@/components/ui/use-toast'
 import { Upload } from 'lucide-react'
@@ -13,68 +13,122 @@ interface Props {
 export function UploadDropzone({ onUploaded }: Props) {
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const dropRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      if (!file.name.endsWith('.fit') && !file.name.endsWith('.FIT')) {
+  const uploadFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const fitFiles = Array.from(files).filter(
+        (f) => f.name.endsWith('.fit') || f.name.endsWith('.FIT'),
+      )
+      if (fitFiles.length === 0) {
         toast({ title: 'Invalid file', description: 'Only .fit files are supported', variant: 'destructive' })
         return
       }
+      if (fitFiles.length < Array.from(files).length) {
+        toast({ title: 'Some files skipped', description: 'Only .fit files are supported', variant: 'destructive' })
+      }
       setUploading(true)
-      try {
-        const form = new FormData()
-        form.append('file', file)
-        await apiFetch('/api/activities/upload', { method: 'POST', body: form })
-        toast({ title: 'Uploaded', description: `${file.name} is being processed` })
-        onUploaded?.()
-      } catch (err) {
+      let succeeded = 0
+      for (const file of fitFiles) {
+        try {
+          const form = new FormData()
+          form.append('file', file)
+          await apiFetch('/api/activities/upload', { method: 'POST', body: form })
+          succeeded++
+        } catch (err) {
+          toast({
+            title: `Failed to upload ${file.name}`,
+            description: err instanceof Error ? err.message : 'Unknown error',
+            variant: 'destructive',
+          })
+        }
+      }
+      setUploading(false)
+      if (succeeded > 0) {
         toast({
-          title: 'Upload failed',
-          description: err instanceof Error ? err.message : 'Unknown error',
-          variant: 'destructive',
+          title: succeeded === 1 ? 'Uploaded' : `Uploaded ${succeeded} files`,
+          description: succeeded === 1
+            ? `${fitFiles[0].name} is being processed`
+            : 'Files are being processed',
         })
-      } finally {
-        setUploading(false)
+        onUploaded?.()
       }
     },
     [onUploaded],
   )
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
+  useEffect(() => {
+    const el = dropRef.current
+    if (!el) return
+
+    let counter = 0
+
+    const onDragEnter = (e: DragEvent) => {
       e.preventDefault()
+      counter++
+      setDragging(true)
+    }
+    const onDragLeave = (e: DragEvent) => {
+      e.preventDefault()
+      counter--
+      if (counter === 0) setDragging(false)
+    }
+    const onDragOver = (e: DragEvent) => {
+      e.preventDefault()
+    }
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault()
+      counter = 0
       setDragging(false)
-      const file = e.dataTransfer.files[0]
-      if (file) uploadFile(file)
-    },
-    [uploadFile],
-  )
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+        uploadFiles(e.dataTransfer.files)
+      }
+    }
+
+    el.addEventListener('dragenter', onDragEnter)
+    el.addEventListener('dragleave', onDragLeave)
+    el.addEventListener('dragover', onDragOver)
+    el.addEventListener('drop', onDrop)
+
+    return () => {
+      el.removeEventListener('dragenter', onDragEnter)
+      el.removeEventListener('dragleave', onDragLeave)
+      el.removeEventListener('dragover', onDragOver)
+      el.removeEventListener('drop', onDrop)
+    }
+  }, [uploadFiles])
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) uploadFile(file)
+      if (e.target.files && e.target.files.length > 0) uploadFiles(e.target.files)
       e.target.value = ''
     },
-    [uploadFile],
+    [uploadFiles],
   )
 
   return (
-    <label
+    <div
+      ref={dropRef}
       className={cn(
-        'flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors',
+        'flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors select-none',
         dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50',
         uploading && 'opacity-60 pointer-events-none',
       )}
-      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={handleDrop}
+      onClick={() => !uploading && inputRef.current?.click()}
     >
       <Upload className="h-6 w-6 text-muted-foreground" />
       <span className="text-sm text-muted-foreground text-center">
-        {uploading ? 'Uploading…' : 'Drop a .fit file here, or click to browse'}
+        {uploading ? 'Uploading…' : 'Drop .fit files here, or click to browse'}
       </span>
-      <input type="file" accept=".fit" className="sr-only" onChange={handleChange} />
-    </label>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".fit"
+        multiple
+        className="sr-only"
+        onChange={handleChange}
+      />
+    </div>
   )
 }

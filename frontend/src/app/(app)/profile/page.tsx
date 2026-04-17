@@ -69,6 +69,7 @@ function ProviderNotice() {
 export default function ProfilePage() {
   const { athlete, refreshAthlete } = useAuth()
   const { data: profile } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+  const { data: availableProviders } = useSWR<{ available: string[] }>('/api/integrations/available', fetcher)
 
   const [name, setName] = useState(athlete?.name ?? '')
   const [weight, setWeight] = useState(athlete?.weight_kg?.toString() ?? '')
@@ -439,6 +440,7 @@ export default function ProfilePage() {
               <ProviderCard
                 name={name}
                 connected={profile?.connected_providers?.includes(provider) ?? false}
+                configured={availableProviders ? availableProviders.available.includes(provider) : undefined}
                 onConnect={() => handleProviderConnect(provider)}
                 onSync={() => handleProviderSync(provider)}
                 onDisconnect={(deleteData) => handleProviderDisconnect(provider, deleteData)}

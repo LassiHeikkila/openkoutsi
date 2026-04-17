@@ -78,6 +78,17 @@ def _decode_state(state: str, provider: str) -> str:
 
 # ── Status ─────────────────────────────────────────────────────────────────
 
+@router.get("/available")
+async def available(_: User = Depends(get_current_user)):
+    """Return the list of provider names that have credentials configured on the server."""
+    configured = []
+    if settings.strava_client_id:
+        configured.append("strava")
+    if settings.wahoo_client_id:
+        configured.append("wahoo")
+    return {"available": configured}
+
+
 @router.get("/status")
 async def status(
     user: User = Depends(get_current_user),

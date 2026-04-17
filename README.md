@@ -21,7 +21,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────┐
 │  Next.js frontend  (TypeScript · Tailwind · Recharts)│
 │──────────────────────────────────────────────────────│
 │  FastAPI backend   (Python · SQLAlchemy · Alembic)   │
@@ -29,12 +29,12 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 │  SQLite (WAL mode) · FIT files on disk               │
 │                                                      │
 │  Self-hosted — no public URL needed                  │
-└─────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────┘
               ↕ polls for events
-┌─────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────┐
 │  Strava Bridge  (tiny FastAPI service, cloud-hosted) │
 │  Receives Strava webhooks · queues events            │
-└─────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────┘
 ```
 
 The Strava Bridge is a small separate service (~150 lines) that must be publicly reachable for Strava's webhook API. The main app polls it for events — this means your main app can sit behind NAT with no port forwarding required. The bridge can be deployed for free on Fly.io or Railway.
@@ -105,15 +105,3 @@ Strava sync is optional. To enable it:
 2. Deploy the Strava Bridge (see [`strava_bridge/`](strava_bridge/)) to any host with a public HTTPS URL
 3. Register the webhook subscription with Strava (instructions in [`TODO.md`](TODO.md))
 4. Add `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `BRIDGE_URL`, and `BRIDGE_SECRET` to `.env`
-
-### Docker
-
-```bash
-docker build -t openkoutsi .
-docker run -p 8000:8000 -v $(pwd)/data:/data openkoutsi
-```
-
-## Project Status
-
-Early development. Core FIT ingestion and metrics are working. Frontend and Strava sync are in progress.
-

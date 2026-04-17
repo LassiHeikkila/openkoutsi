@@ -11,10 +11,13 @@ import {
   AlertDialogTitle,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
+import { toast } from '@/components/ui/use-toast'
 
 interface ProviderCardProps {
   name: string
   connected: boolean
+  /** Whether the server has credentials configured for this provider. Undefined = still loading. */
+  configured?: boolean
   onConnect: () => void
   onSync: () => void
   /** Called with deleteData=true or false depending on user's choice */
@@ -25,6 +28,7 @@ interface ProviderCardProps {
 export function ProviderCard({
   name,
   connected,
+  configured,
   onConnect,
   onSync,
   onDisconnect,
@@ -45,6 +49,20 @@ export function ProviderCard({
     setDialogOpen(false)
     onDisconnect(true)
   }
+
+  function handleConnectClick() {
+    if (configured === false) {
+      toast({
+        title: `${name} is not configured`,
+        description: `The server does not have ${name} credentials set up. Ask your server administrator to configure the ${name} integration.`,
+        variant: 'destructive',
+      })
+      return
+    }
+    onConnect()
+  }
+
+  const notConfigured = configured === false
 
   return (
     <>
@@ -71,12 +89,25 @@ export function ProviderCard({
           <>
             <span className="inline-block h-2 w-2 rounded-full bg-gray-300" />
             <span className="text-sm text-muted-foreground">Not connected</span>
-            <Button size="sm" className="ml-auto" onClick={onConnect}>
+            <Button
+              size="sm"
+              className="ml-auto"
+              variant={notConfigured ? 'outline' : 'default'}
+              disabled={configured === undefined}
+              aria-disabled={notConfigured}
+              onClick={handleConnectClick}
+            >
               Connect {name}
             </Button>
           </>
         )}
       </div>
+
+      {notConfigured && (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {name} credentials are not configured on this server.
+        </p>
+      )}
 
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>

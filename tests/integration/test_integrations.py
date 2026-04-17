@@ -61,7 +61,43 @@ def _encode_state(user_id: str, provider: str) -> str:
     )
 
 
-# ── /status ────────────────────────────────────────────────────────────────────
+# ── /available ─────────────────────────────────────────────────────────────────
+
+
+class TestAvailable:
+    async def test_empty_when_no_providers_configured(self, client, auth_headers):
+        # Default test settings have empty strava_client_id and wahoo_client_id
+        resp = await client.get("/api/integrations/available", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"available": []}
+
+    async def test_lists_strava_when_configured(self, client, auth_headers):
+        with patch.object(settings, "strava_client_id", "test-strava-id"):
+            resp = await client.get("/api/integrations/available", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"available": ["strava"]}
+
+    async def test_lists_wahoo_when_configured(self, client, auth_headers):
+        with patch.object(settings, "wahoo_client_id", "test-wahoo-id"):
+            resp = await client.get("/api/integrations/available", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"available": ["wahoo"]}
+
+    async def test_lists_both_when_both_configured(self, client, auth_headers):
+        with (
+            patch.object(settings, "strava_client_id", "test-strava-id"),
+            patch.object(settings, "wahoo_client_id", "test-wahoo-id"),
+        ):
+            resp = await client.get("/api/integrations/available", headers=auth_headers)
+        assert resp.status_code == 200
+        assert set(resp.json()["available"]) == {"strava", "wahoo"}
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/integrations/available")
+        assert resp.status_code == 401
+
+
+# ── /status ─────────────────────────────────────────────────────────────────────
 
 
 class TestStatus:

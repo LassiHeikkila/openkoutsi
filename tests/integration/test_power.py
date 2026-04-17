@@ -1,0 +1,239 @@
+"""
+Integration tests for /api/power/bests endpoint.
+"""
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+from sqlalchemy import select
+
+from backend.app.models.orm import Activity, ActivityPowerBest, ActivityStream, Athlete
+
+TESTDATA = Path(__file__).parent.parent.parent / "testdata"
+SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"
+
+
+async def _get_athlete(client, auth_headers, session) -> Athlete:
+    resp = await client.get("/api/athlete/", headers=auth_headers)
+    athlete_id = resp.json()["id"]
+    result = await session.execute(select(Athlete).where(Athlete.id == athlete_id))
+    return result.scalar_one()
+
+
+async def _insert_activity_with_power(
+    session, athlete: Athlete, power_stream: list[float], start_time: str
+) -> Activity:
+    activity = Activity(
+        athlete_id=athlete.id,
+        name="Test Power Activity",
+        sport_type="Ride",
+        start_time=datetime.fromisoformat(start_time),
+        duration_s=len(power_stream),
+        status="processed",
+    )
+    session.add(activity)
+    await session.flush()
+
+    session.add(
+        ActivityStream(
+            activity_id=activity.id,
+            stream_type="power",
+            data=power_stream,
+        )
+    )
+
+    from backend.app.services.training_math import compute_power_bests
+
+    bests = compute_power_bests(power_stream)
+    for duration_s, power_w in bests.items():
+        session.add(
+            ActivityPowerBest(
+                activity_id=activity.id,
+                athlete_id=athlete.id,
+                duration_s=duration_s,
+                power_w=power_w,
+                activity_start_time=activity.start_time,
+            )
+        )
+
+    await session.commit()
+    await session.refresh(activity)
+    return activity
+
+
+class TestGetPowerBestsEmpty:
+    async def test_empty_for_new_athlete(self, client, auth_headers):
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"bests": []}
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/power/bests")
+        assert resp.status_code == 401
+
+    async def test_no_power_stream_activity_produces_no_bests(
+        self, client, auth_headers, session
+    ):
+        """Manual activity without a power stream should not produce any bests."""
+        await client.post(
+            "/api/activities/",
+            json={
+                "sport_type": "Ride",
+                "start_time": "2025-06-01T10:00:00Z",
+                "duration_s": 3600,
+            },
+            headers=auth_headers,
+        )
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["bests"] == []
+
+
+class TestGetPowerBestsSingleActivity:
+    async def test_returns_bests_after_activity_with_power(
+        self, client, auth_headers, session
+    ):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # 60-second stream at constant 250 W
+        stream = [250.0] * 60
+        await _insert_activity_with_power(session, athlete, stream, "2025-06-01T10:00:00+00:00")
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        assert resp.status_code == 200
+        bests = resp.json()["bests"]
+        assert len(bests) > 0
+
+        # All returned entries should have rank=1 (only one activity)
+        for entry in bests:
+            assert entry["rank"] == 1
+
+        # 1s best from a constant 250 W stream must be 250
+        ones = [e for e in bests if e["duration_s"] == 1]
+        assert len(ones) == 1
+        assert ones[0]["power_w"] == pytest.approx(250.0, abs=0.1)
+
+    async def test_durations_longer_than_stream_absent(
+        self, client, auth_headers, session
+    ):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # Only 30-second stream — durations > 30s must be absent
+        stream = [200.0] * 30
+        await _insert_activity_with_power(session, athlete, stream, "2025-06-02T10:00:00+00:00")
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        bests = resp.json()["bests"]
+        for entry in bests:
+            assert entry["duration_s"] <= 30, (
+                f"duration {entry['duration_s']}s should not appear for a 30s stream"
+            )
+
+    async def test_activity_id_and_name_present(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+        activity = await _insert_activity_with_power(
+            session, athlete, [300.0] * 60, "2025-06-03T10:00:00+00:00"
+        )
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        bests = resp.json()["bests"]
+        assert len(bests) > 0
+        for entry in bests:
+            assert entry["activity_id"] == activity.id
+            assert entry["activity_name"] == "Test Power Activity"
+
+    async def test_entries_ordered_by_duration_then_rank(
+        self, client, auth_headers, session
+    ):
+        athlete = await _get_athlete(client, auth_headers, session)
+        await _insert_activity_with_power(
+            session, athlete, [250.0] * 120, "2025-06-04T10:00:00+00:00"
+        )
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        bests = resp.json()["bests"]
+        durations = [e["duration_s"] for e in bests]
+        assert durations == sorted(durations), "bests must be sorted by duration_s"
+
+
+class TestGetPowerBestsMultipleActivities:
+    async def test_top_3_ranking(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+
+        # Insert 4 activities with different 60s average powers
+        for i, power in enumerate([200.0, 350.0, 300.0, 280.0]):
+            await _insert_activity_with_power(
+                session,
+                athlete,
+                [power] * 60,
+                f"2025-06-0{i + 1}T10:00:00+00:00",
+            )
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        bests = resp.json()["bests"]
+
+        sixty_s = [e for e in bests if e["duration_s"] == 60]
+        # Must have exactly 3 entries (top-3 cap)
+        assert len(sixty_s) == 3
+        assert sixty_s[0]["rank"] == 1
+        assert sixty_s[0]["power_w"] == pytest.approx(350.0, abs=0.1)
+        assert sixty_s[1]["rank"] == 2
+        assert sixty_s[1]["power_w"] == pytest.approx(300.0, abs=0.1)
+        assert sixty_s[2]["rank"] == 3
+        assert sixty_s[2]["power_w"] == pytest.approx(280.0, abs=0.1)
+
+    async def test_rank_capped_at_3(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+
+        for i, power in enumerate([100.0, 200.0, 300.0, 400.0, 500.0]):
+            await _insert_activity_with_power(
+                session,
+                athlete,
+                [power] * 60,
+                f"2025-07-0{i + 1}T10:00:00+00:00",
+            )
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        sixty_s = [e for e in resp.json()["bests"] if e["duration_s"] == 60]
+        assert len(sixty_s) == 3
+        assert max(e["rank"] for e in sixty_s) == 3
+
+
+@pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")
+class TestPowerBestsFromFitFile:
+    async def test_power_bests_created_after_fit_processing(
+        self, client, auth_headers, session
+    ):
+        """End-to-end: upload + process a real FIT file; bests must appear."""
+        with open(SAMPLE_FIT, "rb") as f:
+            resp = await client.post(
+                "/api/activities/upload",
+                files={"file": ("test.fit", f, "application/octet-stream")},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 201
+        activity_id = resp.json()["id"]
+
+        act_result = await session.execute(
+            select(Activity).where(Activity.id == activity_id)
+        )
+        activity = act_result.scalar_one()
+        ath_result = await session.execute(
+            select(Athlete).where(Athlete.id == activity.athlete_id)
+        )
+        athlete = ath_result.scalar_one()
+
+        from backend.app.services.fit_processor import process_fit_file
+
+        await process_fit_file(activity.fit_file_path, athlete, activity, session)
+
+        resp = await client.get("/api/power/bests", headers=auth_headers)
+        assert resp.status_code == 200
+        bests = resp.json()["bests"]
+
+        # The sample FIT is a Zwift ride, so it should have power and cover at least
+        # durations up to 1 min.
+        durations_returned = {e["duration_s"] for e in bests}
+        assert 1 in durations_returned
+        assert 60 in durations_returned
+        # All entries must link back to the uploaded activity
+        for entry in bests:
+            assert entry["activity_id"] == activity_id

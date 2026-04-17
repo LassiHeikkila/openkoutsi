@@ -50,12 +50,16 @@ class ActivityListResponse(BaseModel):
 
 class ActivityDetailResponse(ActivityResponse):
     streams: dict[str, list[Any]] = {}
+    power_bests: dict[int, float] = {}
     analysis_status: Optional[str] = None
     analysis: Optional[str] = None
 
     @classmethod
     def from_orm_and_streams(
-        cls, activity, streams: dict[str, list]
+        cls,
+        activity,
+        streams: dict[str, list],
+        power_bests: dict[int, float] | None = None,
     ) -> "ActivityDetailResponse":
         return cls(
             id=activity.id,
@@ -78,6 +82,7 @@ class ActivityDetailResponse(ActivityResponse):
             status=activity.status,
             created_at=activity.created_at,
             streams=streams,
+            power_bests=power_bests or {},
             analysis_status=activity.analysis_status,
             analysis=activity.analysis,
         )

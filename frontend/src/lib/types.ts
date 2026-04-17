@@ -79,6 +79,7 @@ export interface ZoneBreakdown {
 
 export interface ActivityDetail extends Activity {
   streams: Record<string, number[]>
+  power_bests: Record<number, number>
   zone_breakdown?: ZoneBreakdown[]
   analysis_status?: string | null
   analysis?: string | null
@@ -153,4 +154,17 @@ export interface PaginatedActivities {
   total: number
   page: number
   page_size: number
+}
+
+export interface PowerBestEntry {
+  duration_s: number
+  rank: number
+  power_w: number
+  activity_id: string
+  activity_name: string | null
+  activity_start_time: string | null
+}
+
+export interface AllTimePowerBests {
+  bests: PowerBestEntry[]
 }

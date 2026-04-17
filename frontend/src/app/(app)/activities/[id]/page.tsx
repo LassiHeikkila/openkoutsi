@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { SourceBadge } from '@/components/activities/SourceBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR } from '@/lib/utils'
+import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
 import { ArrowLeft, Download, Loader2, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
@@ -191,6 +192,35 @@ export default function ActivityDetailPage({ params }: Props) {
           </CardHeader>
           <CardContent>
             <StreamChart streams={activity.streams} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Power bests */}
+      {Object.keys(activity.power_bests ?? {}).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Power Bests</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6">
+              {Object.entries(activity.power_bests)
+                .map(([d, w]) => [Number(d), w] as [number, number])
+                .sort((a, b) => a[0] - b[0])
+                .map(([duration_s, power_w]) => (
+                  <div
+                    key={duration_s}
+                    className="flex flex-col items-center py-3 px-2 border-b border-r last:border-r-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {formatPeriod(duration_s)}
+                    </span>
+                    <span className="font-semibold text-sm mt-0.5 tabular-nums">
+                      {Math.round(power_w)} W
+                    </span>
+                  </div>
+                ))}
+            </div>
           </CardContent>
         </Card>
       )}

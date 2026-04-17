@@ -6,23 +6,10 @@ Features to implement:
 - team support
 - setting to sync FTP from wahoo/strava/...
 - setting to sync power zones from wahoo/strava/...
-- power graph
-- tracking highest power numbers per interval
-  - 1s
-  - 3s
-  - 5s
-  - 10s
-  - 15s
-  - 30s
-  - 1m
-  - 5m
-  - 15m
-  - 30m
-  - 45m
-  - 60m
 - generating workouts
   - for zwift
   - for wahoo
+- renaming activities, get initial activity name from fit file or data import if it exists
 
 # Before Strava Integration Goes Live
 

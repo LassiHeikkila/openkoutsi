@@ -6,8 +6,12 @@ import fitdecode
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openkoutsi.fit import summarizeWorkout
-from backend.app.models.orm import Activity, ActivityStream, Athlete
-from backend.app.services.training_math import normalized_power, calculate_tss
+from backend.app.models.orm import Activity, ActivityPowerBest, ActivityStream, Athlete
+from backend.app.services.training_math import (
+    normalized_power,
+    calculate_tss,
+    compute_power_bests,
+)
 
 
 _FIT_SPORT_MAP = {
@@ -87,8 +91,9 @@ async def process_fit_file(
     activity.intensity_factor = intensity_factor
     activity.status = "processed"
 
+    power_data = [float(v) for v in profile.power]
     stream_map = {
-        "power": [float(v) for v in profile.power],
+        "power": power_data,
         "heartrate": [float(v) for v in profile.heartRate],
         "cadence": [float(v) for v in profile.cadence],
         "speed": [v / 3.6 for v in profile.speed],  # km/h -> m/s
@@ -101,6 +106,19 @@ async def process_fit_file(
                     activity_id=activity.id,
                     stream_type=stream_type,
                     data=data,
+                )
+            )
+
+    if power_data:
+        bests = compute_power_bests(power_data)
+        for duration_s, power_w in bests.items():
+            session.add(
+                ActivityPowerBest(
+                    activity_id=activity.id,
+                    athlete_id=athlete.id,
+                    duration_s=duration_s,
+                    power_w=power_w,
+                    activity_start_time=activity.start_time,
                 )
             )
 

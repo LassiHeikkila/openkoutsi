@@ -15,7 +15,7 @@ from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
 from backend.app.core.file_encryption import decrypt_file, encrypt_file
 from backend.app.db.base import get_session, AsyncSessionLocal
-from backend.app.models.orm import Activity, ActivityStream, Athlete, User
+from backend.app.models.orm import Activity, ActivityPowerBest, ActivityStream, Athlete, User
 from backend.app.schemas.activities import (
     ActivityDetailResponse,
     ActivityListResponse,
@@ -293,7 +293,12 @@ async def get_activity(
     )
     streams = {s.stream_type: s.data for s in streams_result.scalars()}
 
-    return ActivityDetailResponse.from_orm_and_streams(activity, streams)
+    bests_result = await session.execute(
+        select(ActivityPowerBest).where(ActivityPowerBest.activity_id == activity_id)
+    )
+    power_bests = {b.duration_s: b.power_w for b in bests_result.scalars()}
+
+    return ActivityDetailResponse.from_orm_and_streams(activity, streams, power_bests)
 
 
 @router.get("/{activity_id}/fit")

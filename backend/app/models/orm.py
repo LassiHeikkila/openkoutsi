@@ -153,6 +153,9 @@ class Activity(Base):
     streams: Mapped[list["ActivityStream"]] = relationship(
         "ActivityStream", back_populates="activity", cascade="all, delete-orphan"
     )
+    power_bests: Mapped[list["ActivityPowerBest"]] = relationship(
+        "ActivityPowerBest", back_populates="activity", cascade="all, delete-orphan"
+    )
 
     @property
     def has_fit_file(self) -> bool:
@@ -170,6 +173,27 @@ class ActivityStream(Base):
     data: Mapped[list] = mapped_column(JSON)
 
     activity: Mapped["Activity"] = relationship("Activity", back_populates="streams")
+
+
+class ActivityPowerBest(Base):
+    __tablename__ = "activity_power_bests"
+    __table_args__ = (UniqueConstraint("activity_id", "duration_s"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    activity_id: Mapped[str] = mapped_column(
+        String, ForeignKey("activities.id", ondelete="CASCADE")
+    )
+    athlete_id: Mapped[str] = mapped_column(
+        String, ForeignKey("athletes.id", ondelete="CASCADE"), index=True
+    )
+    duration_s: Mapped[int] = mapped_column(Integer)
+    power_w: Mapped[float] = mapped_column(Float)
+    # Denormalised so all-time queries need no JOIN
+    activity_start_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    activity: Mapped["Activity"] = relationship("Activity", back_populates="power_bests")
 
 
 class DailyMetric(Base):

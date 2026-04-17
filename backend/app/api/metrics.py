@@ -143,8 +143,10 @@ async def recalculate_all(
 
 
 async def _bg_full_recalculate(athlete_id: str) -> None:
-    from backend.app.services.training_math import normalized_power, calculate_tss
+    from sqlalchemy import delete
+    from backend.app.services.training_math import normalized_power, calculate_tss, compute_power_bests
     from backend.app.services.metrics_engine import recalculate_from
+    from backend.app.models.orm import ActivityPowerBest
 
     async with AsyncSessionLocal() as session:
         athlete_result = await session.execute(
@@ -197,6 +199,25 @@ async def _bg_full_recalculate(athlete_id: str) -> None:
             activity.intensity_factor = intensity_factor
             if np is not None:
                 activity.normalized_power = np
+
+            # Recompute power bests from the stored stream
+            if power_data:
+                await session.execute(
+                    delete(ActivityPowerBest).where(
+                        ActivityPowerBest.activity_id == activity.id
+                    )
+                )
+                bests = compute_power_bests(power_data)
+                for duration_s, power_w in bests.items():
+                    session.add(
+                        ActivityPowerBest(
+                            activity_id=activity.id,
+                            athlete_id=athlete_id,
+                            duration_s=duration_s,
+                            power_w=power_w,
+                            activity_start_time=activity.start_time,
+                        )
+                    )
 
             if activity.start_time is not None:
                 day = (

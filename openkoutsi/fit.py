@@ -17,6 +17,7 @@ def summarizeWorkout(fr) -> workout.Profile:
     speed: list[float] = []
     power: list[int] = []
     cadence: list[int] = []
+    altitude: list[float] = []
 
     for frame in fr:
         if frame.frame_type != fitdecode.FIT_FRAME_DATA:
@@ -63,6 +64,10 @@ def summarizeWorkout(fr) -> workout.Profile:
             if cad is not None:
                 cadence.append(int(cad))
 
+            alt = frame.get_value("altitude", fallback=None)
+            if alt is not None:
+                altitude.append(float(alt))
+
     if duration_from_session is not None:
         duration = duration_from_session
     elif first_ts is not None and last_ts is not None:
@@ -82,5 +87,6 @@ def summarizeWorkout(fr) -> workout.Profile:
         speed=speed,
         power=power,
         cadence=cadence,
+        altitude=altitude,
         sport_type=sport_from_file,
     )

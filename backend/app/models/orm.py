@@ -156,6 +156,9 @@ class Activity(Base):
     power_bests: Mapped[list["ActivityPowerBest"]] = relationship(
         "ActivityPowerBest", back_populates="activity", cascade="all, delete-orphan"
     )
+    distance_bests: Mapped[list["ActivityDistanceBest"]] = relationship(
+        "ActivityDistanceBest", back_populates="activity", cascade="all, delete-orphan"
+    )
 
     @property
     def has_fit_file(self) -> bool:
@@ -194,6 +197,27 @@ class ActivityPowerBest(Base):
     )
 
     activity: Mapped["Activity"] = relationship("Activity", back_populates="power_bests")
+
+
+class ActivityDistanceBest(Base):
+    __tablename__ = "activity_distance_bests"
+    __table_args__ = (UniqueConstraint("activity_id", "distance_m"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    activity_id: Mapped[str] = mapped_column(
+        String, ForeignKey("activities.id", ondelete="CASCADE")
+    )
+    athlete_id: Mapped[str] = mapped_column(
+        String, ForeignKey("athletes.id", ondelete="CASCADE"), index=True
+    )
+    distance_m: Mapped[int] = mapped_column(Integer)
+    time_s: Mapped[int] = mapped_column(Integer)
+    # Denormalised so all-time queries need no JOIN
+    activity_start_time: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    activity: Mapped["Activity"] = relationship("Activity", back_populates="distance_bests")
 
 
 class DailyMetric(Base):

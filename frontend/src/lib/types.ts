@@ -80,6 +80,7 @@ export interface ZoneBreakdown {
 export interface ActivityDetail extends Activity {
   streams: Record<string, number[]>
   power_bests: Record<number, number>
+  distance_bests: Record<number, number>
   zone_breakdown?: ZoneBreakdown[]
   analysis_status?: string | null
   analysis?: string | null
@@ -167,4 +168,17 @@ export interface PowerBestEntry {
 
 export interface AllTimePowerBests {
   bests: PowerBestEntry[]
+}
+
+export interface DistanceBestEntry {
+  distance_m: number
+  rank: number
+  time_s: number
+  activity_id: string
+  activity_name: string | null
+  activity_start_time: string | null
+}
+
+export interface AllTimeDistanceBests {
+  bests: DistanceBestEntry[]
 }

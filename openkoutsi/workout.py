@@ -22,6 +22,7 @@ class Profile:
     speed: list[float]  # km/h at each second
     power: list[int]  # W at each second
     cadence: list[int]  # RPM at each second
+    altitude: list[float]  # metres at each second
 
     sport_type: str | None  # raw sport string from FIT file, e.g. "running"
 
@@ -35,6 +36,7 @@ class Profile:
         speed: list[float],
         power: list[int],
         cadence: list[int],
+        altitude: list[float] | None = None,
         sport_type: str | None = None,
     ):
         self.start_time = start_time
@@ -45,6 +47,7 @@ class Profile:
         self.speed = speed
         self.power = power
         self.cadence = cadence
+        self.altitude = altitude or []
         self.sport_type = sport_type
 
         self.avgHeartRate = (sum(heartRate) / len(heartRate)) if heartRate else 0.0

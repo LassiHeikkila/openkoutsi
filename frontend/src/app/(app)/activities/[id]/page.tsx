@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { StreamChart } from '@/components/charts/StreamChart'
+import { SpeedElevationChart } from '@/components/charts/SpeedElevationChart'
 import { ZoneBar, toZoneEntries } from '@/components/charts/ZoneBar'
 import {
   AlertDialog,
@@ -22,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { SourceBadge } from '@/components/activities/SourceBadge'
-import { formatDate, formatDuration, formatDistance, formatPower, formatHR } from '@/lib/utils'
+import { formatDate, formatDuration, formatDistance, formatPower, formatHR, formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
 import { ArrowLeft, Download, Loader2, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
@@ -252,6 +253,18 @@ export default function ActivityDetailPage({ params }: Props) {
         </Card>
       )}
 
+      {/* Speed & elevation stream */}
+      {(activity.streams?.speed || activity.streams?.altitude) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Speed & Elevation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SpeedElevationChart streams={activity.streams} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Power bests */}
       {Object.keys(activity.power_bests ?? {}).length > 0 && (
         <Card>
@@ -273,6 +286,38 @@ export default function ActivityDetailPage({ params }: Props) {
                     </span>
                     <span className="font-semibold text-sm mt-0.5 tabular-nums">
                       {Math.round(power_w)} W
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Distance bests */}
+      {Object.keys(activity.distance_bests ?? {}).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Distance Bests</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6">
+              {Object.entries(activity.distance_bests)
+                .map(([d, t]) => [Number(d), t] as [number, number])
+                .sort((a, b) => a[0] - b[0])
+                .map(([distance_m, time_s]) => (
+                  <div
+                    key={distance_m}
+                    className="flex flex-col items-center py-3 px-2 border-b border-r last:border-r-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {formatDistanceLabel(distance_m)}
+                    </span>
+                    <span className="font-semibold text-sm mt-0.5 tabular-nums">
+                      {formatTime(time_s)}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      ({formatSpeedKmh(distance_m, time_s)})
                     </span>
                   </div>
                 ))}

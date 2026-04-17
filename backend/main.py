@@ -81,6 +81,28 @@ async def _apply_column_migrations(conn) -> None:
             "ON activity_power_bests (athlete_id)"
         ))
 
+    # New table: activity_distance_bests
+    result = await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='activity_distance_bests'")
+    )
+    if result.fetchone() is None:
+        log.info("Schema migration: creating table activity_distance_bests")
+        await conn.execute(text(
+            "CREATE TABLE activity_distance_bests ("
+            "  id VARCHAR NOT NULL PRIMARY KEY,"
+            "  activity_id VARCHAR NOT NULL REFERENCES activities(id) ON DELETE CASCADE,"
+            "  athlete_id VARCHAR NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,"
+            "  distance_m INTEGER NOT NULL,"
+            "  time_s INTEGER NOT NULL,"
+            "  activity_start_time DATETIME,"
+            "  UNIQUE (activity_id, distance_m)"
+            ")"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX ix_activity_distance_bests_athlete_id "
+            "ON activity_distance_bests (athlete_id)"
+        ))
+
     migrations = [
         ("training_plans", "config", "ALTER TABLE training_plans ADD COLUMN config JSON"),
         ("training_plans", "generation_method", "ALTER TABLE training_plans ADD COLUMN generation_method VARCHAR"),
@@ -135,6 +157,7 @@ def create_app() -> FastAPI:
     from backend.app.api.integrations import router as integrations_router
     from backend.app.api.metrics import router as metrics_router
     from backend.app.api.goals import router as goals_router
+    from backend.app.api.distance import router as distance_router
     from backend.app.api.power import router as power_router
     from backend.app.api.strava import router as strava_router
     from backend.app.api.plans import router as plans_router
@@ -158,6 +181,7 @@ def create_app() -> FastAPI:
     app.include_router(integrations_router, prefix="/api")
     app.include_router(metrics_router, prefix="/api")
     app.include_router(goals_router, prefix="/api")
+    app.include_router(distance_router, prefix="/api")
     app.include_router(power_router, prefix="/api")
     app.include_router(strava_router, prefix="/api")
     app.include_router(plans_router, prefix="/api")

@@ -1,4 +1,4 @@
-import type { AllTimePowerBests, TokenPair } from './types'
+import type { AllTimeDistanceBests, AllTimePowerBests, TokenPair } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -106,6 +106,10 @@ export const fetcher = <T>(path: string) => apiFetch<T>(path)
 
 export async function getPowerBests(): Promise<AllTimePowerBests> {
   return apiFetch<AllTimePowerBests>('/api/power/bests')
+}
+
+export async function getDistanceBests(): Promise<AllTimeDistanceBests> {
+  return apiFetch<AllTimeDistanceBests>('/api/distance/bests')
 }
 
 export async function apiDownload(

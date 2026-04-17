@@ -6,11 +6,12 @@ import fitdecode
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openkoutsi.fit import summarizeWorkout
-from backend.app.models.orm import Activity, ActivityPowerBest, ActivityStream, Athlete
+from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete
 from backend.app.services.training_math import (
     normalized_power,
     calculate_tss,
     compute_power_bests,
+    compute_distance_bests,
 )
 
 
@@ -97,6 +98,7 @@ async def process_fit_file(
         "heartrate": [float(v) for v in profile.heartRate],
         "cadence": [float(v) for v in profile.cadence],
         "speed": [v / 3.6 for v in profile.speed],  # km/h -> m/s
+        "altitude": [float(v) for v in profile.altitude],
     }
     for stream_type, data in stream_map.items():
         if data:
@@ -118,6 +120,20 @@ async def process_fit_file(
                     athlete_id=athlete.id,
                     duration_s=duration_s,
                     power_w=power_w,
+                    activity_start_time=activity.start_time,
+                )
+            )
+
+    speed_data_ms = stream_map["speed"]  # already converted to m/s above
+    if speed_data_ms:
+        dbests = compute_distance_bests(speed_data_ms)
+        for distance_m, time_s in dbests.items():
+            session.add(
+                ActivityDistanceBest(
+                    activity_id=activity.id,
+                    athlete_id=athlete.id,
+                    distance_m=distance_m,
+                    time_s=time_s,
                     activity_start_time=activity.start_time,
                 )
             )

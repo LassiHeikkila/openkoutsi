@@ -9,7 +9,6 @@ Features to implement:
 - generating workouts
   - for zwift
   - for wahoo
-- renaming activities, get initial activity name from fit file or data import if it exists
 
 # Before Strava Integration Goes Live
 

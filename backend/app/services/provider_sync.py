@@ -14,9 +14,9 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.orm import Activity, ActivityStream, Athlete, ProviderConnection
+from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete, ProviderConnection
 from backend.app.services.providers.registry import PROVIDERS
-from backend.app.services.training_math import calculate_tss, normalized_power
+from backend.app.services.training_math import calculate_tss, compute_distance_bests, compute_power_bests, normalized_power
 
 log = logging.getLogger(__name__)
 
@@ -215,6 +215,30 @@ async def _import_activity(
                     activity_id=activity.id,
                     stream_type=stream_type,
                     data=data,
+                )
+            )
+
+    if power_data:
+        for duration_s, power_w in compute_power_bests(power_data).items():
+            session.add(
+                ActivityPowerBest(
+                    activity_id=activity.id,
+                    athlete_id=athlete.id,
+                    duration_s=duration_s,
+                    power_w=power_w,
+                    activity_start_time=activity.start_time,
+                )
+            )
+
+    if speed_data:
+        for distance_m, time_s in compute_distance_bests(speed_data).items():
+            session.add(
+                ActivityDistanceBest(
+                    activity_id=activity.id,
+                    athlete_id=athlete.id,
+                    distance_m=distance_m,
+                    time_s=time_s,
+                    activity_start_time=activity.start_time,
                 )
             )
 

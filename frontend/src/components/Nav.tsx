@@ -5,13 +5,14 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
-import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap } from 'lucide-react'
+import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart2 },
   { href: '/activities', label: 'Activities', icon: Activity },
   { href: '/power', label: 'Power', icon: Zap },
+  { href: '/records', label: 'Records', icon: Timer },
   { href: '/goals', label: 'Goals', icon: Target },
   { href: '/plan', label: 'Plan', icon: Calendar },
   { href: '/profile', label: 'Profile', icon: User },

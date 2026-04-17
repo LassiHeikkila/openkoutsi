@@ -55,6 +55,7 @@ class ActivityListResponse(BaseModel):
 class ActivityDetailResponse(ActivityResponse):
     streams: dict[str, list[Any]] = {}
     power_bests: dict[int, float] = {}
+    distance_bests: dict[int, int] = {}
     analysis_status: Optional[str] = None
     analysis: Optional[str] = None
 
@@ -64,6 +65,7 @@ class ActivityDetailResponse(ActivityResponse):
         activity,
         streams: dict[str, list],
         power_bests: dict[int, float] | None = None,
+        distance_bests: dict[int, int] | None = None,
     ) -> "ActivityDetailResponse":
         return cls(
             id=activity.id,
@@ -87,6 +89,7 @@ class ActivityDetailResponse(ActivityResponse):
             created_at=activity.created_at,
             streams=streams,
             power_bests=power_bests or {},
+            distance_bests=distance_bests or {},
             analysis_status=activity.analysis_status,
             analysis=activity.analysis,
         )

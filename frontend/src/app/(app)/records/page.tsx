@@ -3,15 +3,16 @@
 import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/api'
-import type { AllTimePowerBests, PowerBestEntry } from '@/lib/types'
+import type { AllTimeDistanceBests, DistanceBestEntry } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { PowerCurveChart, formatDuration } from '@/components/charts/PowerCurveChart'
+import { formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 
-// All 24 standard power durations
-const POWER_DURATIONS = [
-  1, 3, 5, 10, 15, 30, 45, 60, 120, 180, 300, 480,
-  900, 1200, 1800, 2700, 3600, 7200, 10800, 14400,
-  18000, 21600, 25200, 28800,
+// All 20 standard distances (metres)
+const DISTANCE_DISTANCES = [
+  1_000, 2_000, 3_000, 5_000, 8_000,
+  10_000, 20_000, 30_000, 40_000, 50_000,
+  60_000, 70_000, 80_000, 90_000, 100_000,
+  110_000, 120_000, 130_000, 140_000, 150_000,
 ]
 
 function formatDate(iso: string | null): string {
@@ -23,7 +24,7 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function PowerMedalCell({ entry }: { entry: PowerBestEntry | undefined }) {
+function DistanceMedalCell({ entry }: { entry: DistanceBestEntry | undefined }) {
   if (!entry) {
     return <td className="px-3 py-2 text-center text-muted-foreground text-sm">—</td>
   }
@@ -33,8 +34,11 @@ function PowerMedalCell({ entry }: { entry: PowerBestEntry | undefined }) {
         href={`/activities/${entry.activity_id}`}
         className="hover:underline font-medium tabular-nums"
       >
-        {Math.round(entry.power_w)} W
+        {formatTime(entry.time_s)}
       </Link>
+      <div className="text-xs text-muted-foreground tabular-nums">
+        {formatSpeedKmh(entry.distance_m, entry.time_s)}
+      </div>
       {entry.activity_start_time && (
         <div className="text-xs text-muted-foreground">
           {formatDate(entry.activity_start_time)}
@@ -50,67 +54,49 @@ const MEDAL_HEADERS = [
   <th key="3" className="px-3 py-2 text-center font-medium text-amber-700 w-32">#3</th>,
 ]
 
-export default function PowerPage() {
-  const { data: powerData, isLoading: powerLoading } = useSWR<AllTimePowerBests>('/api/power/bests', fetcher)
+export default function RecordsPage() {
+  const { data: distanceData, isLoading } = useSWR<AllTimeDistanceBests>('/api/distance/bests', fetcher)
 
-  // Power lookup: duration_s → { rank → entry }
-  const byDuration = new Map<number, Map<number, PowerBestEntry>>()
-  for (const entry of powerData?.bests ?? []) {
-    if (!byDuration.has(entry.duration_s)) byDuration.set(entry.duration_s, new Map())
-    byDuration.get(entry.duration_s)!.set(entry.rank, entry)
+  const byDistance = new Map<number, Map<number, DistanceBestEntry>>()
+  for (const entry of distanceData?.bests ?? []) {
+    if (!byDistance.has(entry.distance_m)) byDistance.set(entry.distance_m, new Map())
+    byDistance.get(entry.distance_m)!.set(entry.rank, entry)
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Power</h1>
+      <h1 className="text-2xl font-semibold">Distance Records</h1>
 
-      {/* Power curve */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Power Curve</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {powerLoading ? (
-            <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-              Loading…
-            </div>
-          ) : (
-            <PowerCurveChart bests={powerData?.bests ?? []} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Power all-time bests */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Best Power</CardTitle>
+          <CardTitle className="text-base">Best Times</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {powerLoading ? (
+          {isLoading ? (
             <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">Loading…</div>
-          ) : byDuration.size === 0 ? (
+          ) : byDistance.size === 0 ? (
             <div className="flex h-32 items-center justify-center text-sm text-muted-foreground px-6 text-center">
-              No power data yet. Upload a workout with a power meter to see your bests.
+              No distance data yet. Upload a workout with a GPS track to see your records.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-24">Duration</th>
+                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-24">Distance</th>
                     {MEDAL_HEADERS}
                   </tr>
                 </thead>
                 <tbody>
-                  {POWER_DURATIONS.map((d) => {
-                    const row = byDuration.get(d)
+                  {DISTANCE_DISTANCES.map((d) => {
+                    const row = byDistance.get(d)
                     if (!row) return null
                     return (
                       <tr key={d} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="px-3 py-2 font-mono text-sm text-muted-foreground">{formatDuration(d)}</td>
-                        <PowerMedalCell entry={row.get(1)} />
-                        <PowerMedalCell entry={row.get(2)} />
-                        <PowerMedalCell entry={row.get(3)} />
+                        <td className="px-3 py-2 font-mono text-sm text-muted-foreground">{formatDistanceLabel(d)}</td>
+                        <DistanceMedalCell entry={row.get(1)} />
+                        <DistanceMedalCell entry={row.get(2)} />
+                        <DistanceMedalCell entry={row.get(3)} />
                       </tr>
                     )
                   })}

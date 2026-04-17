@@ -144,9 +144,9 @@ async def recalculate_all(
 
 async def _bg_full_recalculate(athlete_id: str) -> None:
     from sqlalchemy import delete
-    from backend.app.services.training_math import normalized_power, calculate_tss, compute_power_bests
+    from backend.app.services.training_math import normalized_power, calculate_tss, compute_power_bests, compute_distance_bests
     from backend.app.services.metrics_engine import recalculate_from
-    from backend.app.models.orm import ActivityPowerBest
+    from backend.app.models.orm import ActivityDistanceBest, ActivityPowerBest
 
     async with AsyncSessionLocal() as session:
         athlete_result = await session.execute(
@@ -207,14 +207,40 @@ async def _bg_full_recalculate(athlete_id: str) -> None:
                         ActivityPowerBest.activity_id == activity.id
                     )
                 )
-                bests = compute_power_bests(power_data)
-                for duration_s, power_w in bests.items():
+                for duration_s, power_w in compute_power_bests(power_data).items():
                     session.add(
                         ActivityPowerBest(
                             activity_id=activity.id,
                             athlete_id=athlete_id,
                             duration_s=duration_s,
                             power_w=power_w,
+                            activity_start_time=activity.start_time,
+                        )
+                    )
+
+            # Recompute distance bests from the stored speed stream
+            speed_result = await session.execute(
+                select(ActivityStream).where(
+                    ActivityStream.activity_id == activity.id,
+                    ActivityStream.stream_type == "speed",
+                )
+            )
+            speed_stream_row = speed_result.scalar_one_or_none()
+            speed_data: list[float] = speed_stream_row.data if speed_stream_row else []
+
+            if speed_data:
+                await session.execute(
+                    delete(ActivityDistanceBest).where(
+                        ActivityDistanceBest.activity_id == activity.id
+                    )
+                )
+                for distance_m, time_s in compute_distance_bests(speed_data).items():
+                    session.add(
+                        ActivityDistanceBest(
+                            activity_id=activity.id,
+                            athlete_id=athlete_id,
+                            distance_m=distance_m,
+                            time_s=time_s,
                             activity_start_time=activity.start_time,
                         )
                     )

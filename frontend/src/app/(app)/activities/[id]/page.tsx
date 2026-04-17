@@ -1,12 +1,13 @@
 'use client'
 
-import { use } from 'react'
+import { use, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
 import { fetcher, apiFetch, apiDownload } from '@/lib/api'
 import type { ActivityDetail } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { StreamChart } from '@/components/charts/StreamChart'
 import { ZoneBar, toZoneEntries } from '@/components/charts/ZoneBar'
 import {
@@ -33,6 +34,9 @@ interface Props {
 export default function ActivityDetailPage({ params }: Props) {
   const { id } = use(params)
   const router = useRouter()
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const titleInputRef = useRef<HTMLInputElement>(null)
   const { data: activity, isLoading, mutate } = useSWR<ActivityDetail>(
     `/api/activities/${id}`,
     fetcher,
@@ -43,6 +47,40 @@ export default function ActivityDetailPage({ params }: Props) {
     fetcher,
     { shouldRetryOnError: false },
   )
+
+  function startEditingTitle() {
+    setTitleDraft(activity?.name ?? '')
+    setEditingTitle(true)
+    setTimeout(() => titleInputRef.current?.select(), 0)
+  }
+
+  async function commitTitle() {
+    const name = titleDraft.trim()
+    if (!name || name === activity?.name) {
+      setEditingTitle(false)
+      return
+    }
+    try {
+      await apiFetch(`/api/activities/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      })
+      await mutate()
+    } catch (err) {
+      toast({
+        title: 'Rename failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    } finally {
+      setEditingTitle(false)
+    }
+  }
+
+  function handleTitleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') commitTitle()
+    if (e.key === 'Escape') setEditingTitle(false)
+  }
 
   async function handleDownloadFit() {
     try {
@@ -113,7 +151,25 @@ export default function ActivityDetailPage({ params }: Props) {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold">{activity.name}</h1>
+            {editingTitle ? (
+              <Input
+                ref={titleInputRef}
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={handleTitleKeyDown}
+                className="h-8 text-xl font-bold px-1 w-72"
+                autoFocus
+              />
+            ) : (
+              <h1
+                className="text-xl font-bold cursor-pointer hover:text-muted-foreground transition-colors"
+                onClick={startEditingTitle}
+                title="Click to rename"
+              >
+                {activity.name}
+              </h1>
+            )}
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-sm text-muted-foreground capitalize">{activity.sport_type}</p>
               <SourceBadge source={activity.source} />

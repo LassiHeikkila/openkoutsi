@@ -4,6 +4,10 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+class ActivityUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+
+
 class ManualActivityCreate(BaseModel):
     sport_type: str
     start_time: datetime

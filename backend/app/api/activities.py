@@ -20,6 +20,7 @@ from backend.app.schemas.activities import (
     ActivityDetailResponse,
     ActivityListResponse,
     ActivityResponse,
+    ActivityUpdate,
     ManualActivityCreate,
 )
 from backend.app.core.limiter import limiter
@@ -346,6 +347,30 @@ async def download_fit_file(
         media_type="application/octet-stream",
         filename=filename,
     )
+
+
+@router.patch("/{activity_id}", response_model=ActivityResponse)
+async def update_activity(
+    activity_id: str,
+    payload: ActivityUpdate,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    athlete = await _get_athlete(user, session)
+
+    result = await session.execute(
+        select(Activity).where(
+            Activity.id == activity_id, Activity.athlete_id == athlete.id
+        )
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity.name = payload.name.strip()
+    await session.commit()
+    await session.refresh(activity)
+    return ActivityResponse.model_validate(activity)
 
 
 @router.delete("/{activity_id}", status_code=204)

@@ -9,6 +9,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
+import { formatChartTime, niceTickStepMinutes } from '@/lib/utils'
 
 interface Props {
   streams: Record<string, number[]>
@@ -43,12 +44,20 @@ export function StreamChart({ streams }: Props) {
     ...(hr ? { hr: hr[i] } : {}),
   }))
 
+  const maxMinutes = data[data.length - 1]?.time ?? 0
+  const tickStep = niceTickStepMinutes(maxMinutes)
+  const ticks = Array.from(
+    { length: Math.floor(maxMinutes / tickStep) + 1 },
+    (_, i) => i * tickStep,
+  )
+
   return (
     <ResponsiveContainer width="100%" height={240}>
       <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <XAxis
           dataKey="time"
-          tickFormatter={(v) => `${v}m`}
+          ticks={ticks}
+          tickFormatter={formatChartTime}
           tick={{ fontSize: 11 }}
           tickLine={false}
         />
@@ -73,7 +82,7 @@ export function StreamChart({ streams }: Props) {
         )}
         <Tooltip
           contentStyle={{ fontSize: 12, borderRadius: 8 }}
-          labelFormatter={(v) => `${v} min`}
+          labelFormatter={(v) => formatChartTime(Number(v))}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {power && (

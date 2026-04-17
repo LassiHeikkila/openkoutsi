@@ -42,6 +42,27 @@ export function formatDistanceLabel(metres: number): string {
   return `${metres / 1000} km`
 }
 
+/**
+ * Pick a round tick interval (in minutes) that gives roughly 6–10 ticks
+ * for the given total duration.
+ */
+export function niceTickStepMinutes(totalMinutes: number): number {
+  if (totalMinutes <= 20)  return 5
+  if (totalMinutes <= 60)  return 10
+  if (totalMinutes <= 120) return 15
+  if (totalMinutes <= 240) return 30
+  return 60
+}
+
+/** Format a minute value for chart x-axis tick labels: <60 → "45m", ≥60 → "1h 30m" */
+export function formatChartTime(minutes: number): string {
+  const m = Math.round(minutes)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`
+}
+
 /** Format average speed in km/h derived from distance (m) and time (s) */
 export function formatSpeedKmh(distance_m: number, time_s: number): string {
   const kmh = (distance_m / time_s) * 3.6

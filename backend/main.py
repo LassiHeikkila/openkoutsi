@@ -103,6 +103,13 @@ async def _apply_column_migrations(conn) -> None:
             "ON activity_distance_bests (athlete_id)"
         ))
 
+    # Rename users.email → users.username
+    result = await conn.execute(text("PRAGMA table_info(users)"))
+    user_cols = {row[1] for row in result.fetchall()}
+    if "email" in user_cols and "username" not in user_cols:
+        log.info("Schema migration: renaming users.email to users.username")
+        await conn.execute(text("ALTER TABLE users RENAME COLUMN email TO username"))
+
     migrations = [
         ("training_plans", "config", "ALTER TABLE training_plans ADD COLUMN config JSON"),
         ("training_plans", "generation_method", "ALTER TABLE training_plans ADD COLUMN generation_method VARCHAR"),

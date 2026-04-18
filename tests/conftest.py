@@ -25,11 +25,11 @@ from backend.main import create_app
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
 
-async def _register(client: AsyncClient, email: str, password: str = "Testpass1234") -> dict:
+async def _register(client: AsyncClient, username: str, password: str = "Testpass1234") -> dict:
     """Register a user and return auth headers with the token."""
     resp = await client.post(
         "/api/auth/register",
-        json={"email": email, "password": password},
+        json={"username": username, "password": password},
     )
     assert resp.status_code == 201, resp.text
     token = resp.json()["access_token"]
@@ -89,4 +89,4 @@ async def client(session):
 @pytest.fixture
 async def auth_headers(client):
     """Auth headers for a registered test athlete."""
-    return await _register(client, "athlete@test.com")
+    return await _register(client, "athlete_test")

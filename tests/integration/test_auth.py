@@ -15,7 +15,7 @@ class TestRegister:
     async def test_valid_registration_returns_access_token(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "new@example.com", "password": _GOOD_PW},
+            json={"username": "newuser", "password": _GOOD_PW},
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -27,59 +27,59 @@ class TestRegister:
     async def test_register_sets_refresh_cookie(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "cookie@example.com", "password": _GOOD_PW},
+            json={"username": "cookieuser", "password": _GOOD_PW},
         )
         assert resp.status_code == 201
         assert "refresh_token" in resp.cookies
 
-    async def test_duplicate_email_returns_400(self, client):
-        payload = {"email": "dup@example.com", "password": _GOOD_PW}
+    async def test_duplicate_username_returns_400(self, client):
+        payload = {"username": "dupuser", "password": _GOOD_PW}
         await client.post("/api/auth/register", json=payload)
         resp = await client.post("/api/auth/register", json=payload)
         assert resp.status_code == 400
 
-    async def test_invalid_email_returns_422(self, client):
+    async def test_missing_username_returns_422(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "not-an-email", "password": _GOOD_PW},
+            json={"password": _GOOD_PW},
         )
         assert resp.status_code == 422
 
     async def test_missing_password_returns_422(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "ok@example.com"},
+            json={"username": "okuser"},
         )
         assert resp.status_code == 422
 
     async def test_weak_password_no_uppercase_returns_422(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "weak@example.com", "password": "password1234"},
+            json={"username": "weakuser", "password": "password1234"},
         )
         assert resp.status_code == 422
 
     async def test_weak_password_too_short_returns_422(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "short@example.com", "password": "Short1"},
+            json={"username": "shortuser", "password": "Short1"},
         )
         assert resp.status_code == 422
 
     async def test_weak_password_no_digit_returns_422(self, client):
         resp = await client.post(
             "/api/auth/register",
-            json={"email": "nodigit@example.com", "password": "Passwordwithoutdigit"},
+            json={"username": "nodigituser", "password": "Passwordwithoutdigit"},
         )
         assert resp.status_code == 422
 
 
 class TestLogin:
     async def test_valid_credentials_returns_access_token(self, client):
-        email = "login@example.com"
-        await client.post("/api/auth/register", json={"email": email, "password": _GOOD_PW})
+        username = "loginuser"
+        await client.post("/api/auth/register", json={"username": username, "password": _GOOD_PW})
 
-        resp = await client.post("/api/auth/login", json={"email": email, "password": _GOOD_PW})
+        resp = await client.post("/api/auth/login", json={"username": username, "password": _GOOD_PW})
         assert resp.status_code == 200
         assert "access_token" in resp.json()
         assert "refresh_token" in resp.cookies
@@ -87,18 +87,18 @@ class TestLogin:
     async def test_wrong_password_returns_401(self, client):
         await client.post(
             "/api/auth/register",
-            json={"email": "real@example.com", "password": _GOOD_PW},
+            json={"username": "realuser", "password": _GOOD_PW},
         )
         resp = await client.post(
             "/api/auth/login",
-            json={"email": "real@example.com", "password": "wrong"},
+            json={"username": "realuser", "password": "wrong"},
         )
         assert resp.status_code == 401
 
-    async def test_nonexistent_email_returns_401(self, client):
+    async def test_nonexistent_username_returns_401(self, client):
         resp = await client.post(
             "/api/auth/login",
-            json={"email": "ghost@example.com", "password": "anything"},
+            json={"username": "ghostuser", "password": "anything"},
         )
         assert resp.status_code == 401
 
@@ -106,7 +106,7 @@ class TestLogin:
         await client.delete("/api/auth/account", headers=auth_headers)
         resp = await client.post(
             "/api/auth/login",
-            json={"email": "athlete@test.com", "password": "Testpass1234"},
+            json={"username": "athlete_test", "password": "Testpass1234"},
         )
         assert resp.status_code == 401
 
@@ -116,7 +116,7 @@ class TestRefresh:
         # Register — httpx client stores the Set-Cookie automatically
         await client.post(
             "/api/auth/register",
-            json={"email": "ref@example.com", "password": _GOOD_PW},
+            json={"username": "refuser", "password": _GOOD_PW},
         )
 
         # Refresh uses the cookie stored in the client session (no body needed)
@@ -134,7 +134,7 @@ class TestRefresh:
     async def test_access_token_as_cookie_returns_401(self, client):
         reg_resp = await client.post(
             "/api/auth/register",
-            json={"email": "badref@example.com", "password": _GOOD_PW},
+            json={"username": "badrefuser", "password": _GOOD_PW},
         )
         access_token = reg_resp.json()["access_token"]
 
@@ -155,7 +155,7 @@ class TestLogout:
     async def test_logout_clears_cookie(self, client):
         await client.post(
             "/api/auth/register",
-            json={"email": "logout@example.com", "password": _GOOD_PW},
+            json={"username": "logoutuser", "password": _GOOD_PW},
         )
         resp = await client.post("/api/auth/logout")
         assert resp.status_code == 204
@@ -173,7 +173,7 @@ class TestDeleteAccount:
         await client.delete("/api/auth/account", headers=auth_headers)
         resp = await client.post(
             "/api/auth/login",
-            json={"email": "athlete@test.com", "password": "Testpass1234"},
+            json={"username": "athlete_test", "password": "Testpass1234"},
         )
         assert resp.status_code == 401
 

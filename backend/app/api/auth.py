@@ -56,13 +56,13 @@ async def register(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ):
-    existing = await session.execute(select(User).where(User.email == body.email))
+    existing = await session.execute(select(User).where(User.username == body.username))
     if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="Username already taken")
 
     user = User(
         id=str(uuid.uuid4()),
-        email=body.email,
+        username=body.username,
         password_hash=hash_password(body.password),
     )
     session.add(user)
@@ -90,7 +90,7 @@ async def login(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(User).where(User.email == body.email, User.deleted_at.is_(None))
+        select(User).where(User.username == body.username, User.deleted_at.is_(None))
     )
     user = result.scalar_one_or_none()
     if user is None or not verify_password(body.password, user.password_hash):

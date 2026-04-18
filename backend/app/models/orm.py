@@ -32,7 +32,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(

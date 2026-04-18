@@ -21,8 +21,8 @@ import type { AthleteProfile, TokenPair } from './types'
 interface AuthState {
   athlete: AthleteProfile | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<void>
+  register: (username: string, password: string) => Promise<void>
   logout: () => void
   refreshAthlete: () => Promise<void>
 }
@@ -68,10 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchAthlete])
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (username: string, password: string) => {
       const data = await apiFetch<TokenPair>('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       })
       setAccessToken(data.access_token)
       setSessionCookie()
@@ -81,12 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const register = useCallback(
-    async (email: string, password: string) => {
+    async (username: string, password: string) => {
       await apiFetch('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       })
-      await login(email, password)
+      await login(username, password)
     },
     [login],
   )

@@ -184,7 +184,7 @@ async def export_athlete(
 
     profile_data = {
         "id": athlete.id,
-        "email": user.email,
+        "username": user.username,
         "name": athlete.name,
         "date_of_birth": athlete.date_of_birth.isoformat() if athlete.date_of_birth else None,
         "weight_kg": athlete.weight_kg,

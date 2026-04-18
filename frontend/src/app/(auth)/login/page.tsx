@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 export default function LoginPage() {
   const { login } = useAuth()
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,7 +22,7 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      await login(email, password)
+      await login(username, password)
       router.replace('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
@@ -43,15 +43,15 @@ export default function LoginPage() {
             <p className="text-sm text-destructive">{error}</p>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="username"
+              type="text"
+              placeholder="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
           <div className="space-y-2">

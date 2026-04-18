@@ -24,7 +24,7 @@ async def _make_athlete(session) -> Athlete:
     """Create a minimal User + Athlete in the test DB and return the Athlete."""
     user = User(
         id=str(uuid.uuid4()),
-        email=f"u{uuid.uuid4().hex[:6]}@test.com",
+        username=f"u{uuid.uuid4().hex[:6]}",
         password_hash="x",
     )
     session.add(user)

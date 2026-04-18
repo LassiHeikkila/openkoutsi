@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 export default function RegisterPage() {
   const { register } = useAuth()
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +27,7 @@ export default function RegisterPage() {
     setError(null)
     setLoading(true)
     try {
-      await register(email, password)
+      await register(username, password)
       router.replace('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
@@ -48,15 +48,15 @@ export default function RegisterPage() {
             <p className="text-sm text-destructive">{error}</p>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="username"
+              type="text"
+              placeholder="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
           <div className="space-y-2">

@@ -92,7 +92,7 @@ class TestExportAthlete:
             profile = json.loads(zf.read("profile.json"))
         assert profile["ftp"] == 280
         assert profile["name"] == "Test Rider"
-        assert "email" in profile
+        assert "username" in profile
         assert "exported_at" in profile
 
     async def test_export_zip_contains_activities_json(self, client, auth_headers):

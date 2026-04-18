@@ -158,6 +158,24 @@ A `{"id": N}` response confirms the subscription. Keep the ID to manage the subs
 
 ---
 
+## 5. systemd Services
+
+Service files are provided in the `systemd/` directory as [template units](https://www.freedesktop.org/software/systemd/man/systemd.unit.html#Description). The `@username` suffix at enable time fills in the user and home directory automatically.
+
+```bash
+sudo cp systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now openkoutsi-backend@$(whoami) openkoutsi-frontend@$(whoami)
+# Only needed if using the Strava bridge:
+sudo systemctl enable --now openkoutsi-bridge@$(whoami)
+```
+
+The frontend service uses a hardcoded nvm Node path. If you upgrade Node, update the `ExecStart` line in `systemd/openkoutsi-frontend@.service` and re-copy the file.
+
+Check logs with `journalctl -u openkoutsi-backend@$(whoami) -f` (replace the unit name as needed).
+
+---
+
 ## Checklist
 
 - [ ] `SECRET_KEY` set to a strong random value

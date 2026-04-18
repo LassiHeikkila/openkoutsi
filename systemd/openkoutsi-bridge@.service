@@ -1,0 +1,15 @@
+[Unit]
+Description=openkoutsi Strava bridge
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/projects/openkoutsi/strava_bridge
+EnvironmentFile=%h/projects/openkoutsi/strava_bridge/.env
+ExecStart=%h/.local/bin/uv run uvicorn main:app --host 0.0.0.0 --port 8084
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

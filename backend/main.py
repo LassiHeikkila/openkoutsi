@@ -103,6 +103,23 @@ async def _apply_column_migrations(conn) -> None:
             "ON activity_distance_bests (athlete_id)"
         ))
 
+    # New table: password_reset_tokens
+    result = await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='password_reset_tokens'")
+    )
+    if result.fetchone() is None:
+        log.info("Schema migration: creating table password_reset_tokens")
+        await conn.execute(text(
+            "CREATE TABLE password_reset_tokens ("
+            "  id VARCHAR NOT NULL PRIMARY KEY,"
+            "  user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
+            "  token_hash VARCHAR NOT NULL UNIQUE,"
+            "  expires_at DATETIME NOT NULL,"
+            "  used_at DATETIME,"
+            "  created_at DATETIME NOT NULL"
+            ")"
+        ))
+
     # Rename users.email → users.username
     result = await conn.execute(text("PRAGMA table_info(users)"))
     user_cols = {row[1] for row in result.fetchall()}

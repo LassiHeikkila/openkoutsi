@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await apiFetch<TokenPair>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
-      })
+      }, false)
       setAccessToken(data.access_token)
       setSessionCookie()
       await fetchAthlete()
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiFetch('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
-      })
+      }, false)
       await login(username, password)
     },
     [login],

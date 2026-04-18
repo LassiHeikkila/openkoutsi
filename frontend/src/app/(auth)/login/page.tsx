@@ -76,6 +76,11 @@ export default function LoginPage() {
               Register
             </Link>
           </p>
+          <p className="text-sm text-muted-foreground text-center">
+            <Link href="/reset-password" className="underline underline-offset-4 hover:text-primary">
+              Forgot password?
+            </Link>
+          </p>
         </CardFooter>
       </form>
     </Card>

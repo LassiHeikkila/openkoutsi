@@ -1,7 +1,9 @@
+import hashlib
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,10 +18,12 @@ from backend.app.core.auth import (
 )
 from backend.app.core.config import settings
 from backend.app.db.base import get_session
-from backend.app.models.orm import Athlete, User
+from backend.app.models.orm import Athlete, PasswordResetToken, User
 from backend.app.schemas.auth import (
+    AdminResetTokenRequest,
     LoginRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
 )
 from backend.app.core.limiter import limiter
@@ -142,3 +146,77 @@ async def delete_account(
     user.deleted_at = datetime.now(timezone.utc)
     await session.commit()
     _clear_refresh_cookie(response)
+
+
+@router.post("/admin/reset-token")
+@limiter.limit("5/hour")
+async def admin_generate_reset_token(
+    request: Request,
+    body: AdminResetTokenRequest,
+    x_admin_secret: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    if not settings.admin_secret or not x_admin_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not secrets.compare_digest(x_admin_secret, settings.admin_secret):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await session.execute(
+        select(User).where(User.username == body.username, User.deleted_at.is_(None))
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Invalidate any existing unused tokens for this user
+    existing = await session.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    for token_row in existing.scalars():
+        token_row.used_at = datetime.now(timezone.utc)
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    session.add(PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    ))
+    await session.commit()
+
+    reset_url = f"{settings.frontend_url}/reset-password?token={token}"
+    return {"reset_url": reset_url, "expires_at": expires_at.isoformat()}
+
+
+@router.post("/reset-password", status_code=204)
+@limiter.limit("10/hour")
+async def reset_password(
+    request: Request,
+    body: ResetPasswordRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+    result = await session.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    )
+    token_row = result.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if token_row is None or token_row.used_at is not None or token_row.expires_at <= now:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user_result = await session.execute(
+        select(User).where(User.id == token_row.user_id, User.deleted_at.is_(None))
+    )
+    user = user_result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user.password_hash = hash_password(body.new_password)
+    token_row.used_at = now
+    await session.commit()

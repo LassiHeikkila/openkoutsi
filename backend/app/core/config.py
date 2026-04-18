@@ -47,5 +47,9 @@ class Settings(BaseSettings):
     # Leave empty in development to disable encryption (tokens stored as plaintext).
     encryption_key: str = ""
 
+    # Admin secret for privileged endpoints (e.g. generating password reset links).
+    # If unset, admin endpoints return 403.
+    admin_secret: str | None = None
+
 
 settings = Settings()

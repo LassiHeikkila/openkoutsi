@@ -62,6 +62,15 @@ async def get_fitness_current(
     )
     metric = result.scalar_one_or_none()
     if metric is None:
+        # Today's row hasn't been calculated yet — return the most recent available row.
+        fallback = await session.execute(
+            select(DailyMetric)
+            .where(DailyMetric.athlete_id == athlete.id)
+            .order_by(DailyMetric.date.desc())
+            .limit(1)
+        )
+        metric = fallback.scalar_one_or_none()
+    if metric is None:
         return FitnessCurrentResponse(
             date=today, ctl=0.0, atl=0.0, tsb=0.0, tss_day=0.0
         )

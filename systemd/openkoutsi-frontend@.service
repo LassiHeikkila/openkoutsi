@@ -5,10 +5,10 @@ After=network.target
 [Service]
 Type=simple
 User=%i
-WorkingDirectory=%h/projects/openkoutsi/frontend
+WorkingDirectory=%h/projects/openkoutsi/frontend/.next/standalone
 Environment=PORT=3000
-# Adjust the npm path if you switch Node versions via nvm.
-ExecStart=%h/.nvm/versions/node/v25.2.1/bin/npm start
+# Adjust the node path if you switch Node versions via nvm.
+ExecStart=%h/.nvm/versions/node/v25.2.1/bin/node server.js
 Restart=on-failure
 RestartSec=5
 

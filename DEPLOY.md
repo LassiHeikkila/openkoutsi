@@ -88,11 +88,34 @@ NEXT_PUBLIC_API_URL=https://api.your-domain
 
 ### Build and run
 
+The frontend can be built on any machine (e.g. your laptop) and the output copied to the server — no build step needed on the server.
+
+**Build locally:**
+
 ```bash
 cd frontend
 npm install
-npm run build
-npm start            # listens on port 3000 by default
+NEXT_PUBLIC_API_URL=https://api.your-domain npm run build
+```
+
+The build produces a self-contained server under `.next/standalone/`. Copy the static assets into it:
+
+```bash
+cp -r .next/static .next/standalone/.next/static
+cp -r public        .next/standalone/public
+```
+
+**Deploy to server:**
+
+```bash
+rsync -a --delete frontend/.next/standalone/ user@your-server:~/projects/openkoutsi/frontend/.next/standalone/
+```
+
+**Run on server** (or via the systemd service):
+
+```bash
+cd ~/projects/openkoutsi/frontend/.next/standalone
+PORT=3000 node server.js
 ```
 
 ---

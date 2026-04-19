@@ -4,7 +4,8 @@ import { use, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { useRouter } from 'next/navigation'
 import { fetcher, apiFetch, apiDownload } from '@/lib/api'
-import type { ActivityDetail } from '@/lib/types'
+import type { ActivityDetail, AthleteProfile } from '@/lib/types'
+import { getLlmConfig, streamAnalysis } from '@/lib/llm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +49,13 @@ export default function ActivityDetailPage({ params }: Props) {
     fetcher,
     { shouldRetryOnError: false },
   )
+  const { data: athlete } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+
+  // Frontend LLM streaming state
+  const [streamingText, setStreamingText] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const llmConfig = getLlmConfig(athlete?.app_settings)
 
   function startEditingTitle() {
     setTitleDraft(activity?.name ?? '')
@@ -111,15 +119,49 @@ export default function ActivityDetailPage({ params }: Props) {
   }
 
   async function handleAnalyze() {
-    try {
-      await apiFetch(`/api/activities/${id}/analyze`, { method: 'POST' })
-      mutate()
-    } catch (err) {
-      toast({
-        title: 'Analysis failed to start',
-        description: err instanceof Error ? err.message : 'Unknown error',
-        variant: 'destructive',
-      })
+    if (llmConfig && activity && athlete) {
+      // Frontend LLM path: stream directly from browser
+      abortRef.current = new AbortController()
+      setStreamingText('')
+      try {
+        const full = await streamAnalysis(
+          activity,
+          athlete,
+          llmConfig,
+          (chunk) => setStreamingText((t) => (t ?? '') + chunk),
+          abortRef.current.signal,
+        )
+        // Persist result to backend
+        await apiFetch(`/api/activities/${id}/analysis`, {
+          method: 'PATCH',
+          body: JSON.stringify({ analysis: full }),
+        })
+        setStreamingText(null)
+        mutate()
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          setStreamingText(null)
+          return
+        }
+        setStreamingText(null)
+        toast({
+          title: 'Analysis failed',
+          description: err instanceof Error ? err.message : 'Unknown error',
+          variant: 'destructive',
+        })
+      }
+    } else {
+      // Server-side LLM path
+      try {
+        await apiFetch(`/api/activities/${id}/analyze`, { method: 'POST' })
+        mutate()
+      } catch (err) {
+        toast({
+          title: 'Analysis failed to start',
+          description: err instanceof Error ? err.message : 'Unknown error',
+          variant: 'destructive',
+        })
+      }
     }
   }
 
@@ -130,6 +172,9 @@ export default function ActivityDetailPage({ params }: Props) {
   if (!activity) {
     return <p className="text-muted-foreground">Activity not found</p>
   }
+
+  const isStreaming = streamingText !== null
+  const isAnalysisPending = activity.analysis_status === 'pending' && !isStreaming
 
   const stats = [
     { label: 'Date', value: formatDate(activity.start_time) },
@@ -330,31 +375,56 @@ export default function ActivityDetailPage({ params }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-base">AI Analysis</CardTitle>
-          {!activity.analysis_status && (
+          {!isStreaming && !activity.analysis_status && (
             <Button size="sm" variant="outline" onClick={handleAnalyze}>
               Analyse workout
             </Button>
           )}
-          {activity.analysis_status === 'error' && (
+          {!isStreaming && activity.analysis_status === 'error' && (
             <Button size="sm" variant="outline" onClick={handleAnalyze}>
               Retry
             </Button>
           )}
+          {!isStreaming && activity.analysis_status === 'done' && (
+            <Button size="sm" variant="outline" onClick={handleAnalyze}>
+              Re-analyse
+            </Button>
+          )}
+          {isStreaming && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => abortRef.current?.abort()}
+            >
+              Stop
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
-          {activity.analysis_status === 'pending' && !activity.analysis && (
+          {isStreaming && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span>Analysing…</span>
+              </div>
+              {streamingText && (
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{streamingText}</p>
+              )}
+            </div>
+          )}
+          {!isStreaming && isAnalysisPending && (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               <span>Analysing… this may take a few minutes</span>
             </div>
           )}
-          {activity.analysis && (
+          {!isStreaming && activity.analysis && (
             <p className="text-sm whitespace-pre-wrap leading-relaxed">{activity.analysis}</p>
           )}
-          {activity.analysis_status === 'error' && !activity.analysis && (
+          {!isStreaming && activity.analysis_status === 'error' && !activity.analysis && (
             <p className="text-sm text-destructive">Analysis failed. Please try again.</p>
           )}
-          {!activity.analysis_status && (
+          {!isStreaming && !activity.analysis_status && (
             <p className="text-sm text-muted-foreground">
               No analysis yet. Click &ldquo;Analyse workout&rdquo; to generate AI coaching feedback.
             </p>

@@ -21,6 +21,7 @@ from backend.app.schemas.activities import (
     ActivityListResponse,
     ActivityResponse,
     ActivityUpdate,
+    FrontendAnalysisBody,
     ManualActivityCreate,
 )
 from backend.app.core.limiter import limiter
@@ -442,3 +443,32 @@ async def trigger_analysis(
 
     background_tasks.add_task(analyze_activity_bg, activity_id, athlete.id)
     return {"status": "pending"}
+
+
+@router.patch("/{activity_id}/analysis", response_model=ActivityDetailResponse)
+async def save_frontend_analysis(
+    activity_id: str,
+    body: FrontendAnalysisBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Save a frontend-generated LLM analysis result for an activity."""
+    athlete = await _get_athlete(user, session)
+    result = await session.execute(
+        select(Activity).where(
+            Activity.id == activity_id, Activity.athlete_id == athlete.id
+        )
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity.analysis = body.analysis
+    activity.analysis_status = "done"
+    await session.commit()
+
+    streams_result = await session.execute(
+        select(ActivityStream).where(ActivityStream.activity_id == activity_id)
+    )
+    streams = {s.stream_type: s.data for s in streams_result.scalars()}
+    return ActivityDetailResponse.from_orm_and_streams(activity, streams)

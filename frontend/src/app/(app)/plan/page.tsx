@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { fetcher, apiFetch } from '@/lib/api'
-import type { TrainingPlan } from '@/lib/types'
+import type { AthleteProfile, TrainingPlan } from '@/lib/types'
+import { getLlmConfig, generatePlanWeeks } from '@/lib/llm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,7 +62,14 @@ const DEFAULT_DAY_TYPES: Record<number, string> = {
   7: 'easy',
 }
 
-function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
+function GeneratePlanDialog({
+  onGenerated,
+  athlete,
+}: {
+  onGenerated: () => void
+  athlete: AthleteProfile | undefined
+}) {
+  const llmConfig = getLlmConfig(athlete?.app_settings)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<1 | 2>(1)
 
@@ -127,17 +135,43 @@ function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
         long_description: useLlm && longDescription ? longDescription : undefined,
       }
 
-      await apiFetch('/api/plans/', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          start_date: startDate,
-          weeks: parseInt(weeks),
-          goal: goal || null,
+      const numWeeks = parseInt(weeks)
+
+      if (useLlm && llmConfig && athlete) {
+        // Frontend LLM path: call LLM in the browser, then submit the pre-built weeks
+        const llmWeeks = await generatePlanWeeks(
           config,
-          use_llm: useLlm,
-        }),
-      })
+          numWeeks,
+          goal || null,
+          athlete,
+          llmConfig,
+        )
+        await apiFetch('/api/plans/', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            start_date: startDate,
+            weeks: numWeeks,
+            goal: goal || null,
+            config,
+            llm_weeks: llmWeeks,
+          }),
+        })
+      } else {
+        // Server-side LLM or rule-based
+        await apiFetch('/api/plans/', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            start_date: startDate,
+            weeks: numWeeks,
+            goal: goal || null,
+            config,
+            use_llm: useLlm,
+          }),
+        })
+      }
+
       toast({ title: 'Training plan generated!' })
       setOpen(false)
       resetDialog()
@@ -242,7 +276,9 @@ function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
                   }`}
                 >
                   <div className="font-medium">AI-generated</div>
-                  <div className="text-xs mt-0.5 opacity-70">Uses configured LLM</div>
+                  <div className="text-xs mt-0.5 opacity-70">
+                    {llmConfig ? 'Runs in your browser' : 'Uses server LLM'}
+                  </div>
                 </button>
               </div>
             </div>
@@ -382,6 +418,7 @@ function GeneratePlanDialog({ onGenerated }: { onGenerated: () => void }) {
 
 export default function PlanPage() {
   const { data: plans, mutate } = useSWR<TrainingPlan[]>('/api/plans/', fetcher)
+  const { data: athlete } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const activePlan = plans?.find((p) => p.status === 'active')
@@ -433,7 +470,7 @@ export default function PlanPage() {
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Training plan</h1>
-        <GeneratePlanDialog onGenerated={() => mutate()} />
+        <GeneratePlanDialog onGenerated={() => mutate()} athlete={athlete} />
       </div>
 
       {!activePlan && plans?.length === 0 && (

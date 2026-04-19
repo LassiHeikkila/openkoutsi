@@ -31,6 +31,15 @@ class PlanConfig(BaseModel):
     long_description: Optional[str] = None  # free-text for LLM
 
 
+class WorkoutCreate(BaseModel):
+    """A single workout day as returned by the frontend LLM."""
+    day_of_week: int
+    workout_type: str
+    description: Optional[str] = None
+    duration_min: Optional[int] = None
+    target_tss: Optional[int] = None
+
+
 class TrainingPlanCreate(BaseModel):
     name: str
     start_date: date
@@ -38,6 +47,8 @@ class TrainingPlanCreate(BaseModel):
     goal: Optional[str] = None
     config: Optional[PlanConfig] = None
     use_llm: bool = False
+    # Pre-built weeks from a frontend LLM call — when present, skips server-side LLM.
+    llm_weeks: Optional[list[list[WorkoutCreate]]] = None
 
 
 class TrainingPlanUpdate(BaseModel):

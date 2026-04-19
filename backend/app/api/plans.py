@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -44,7 +46,7 @@ async def create_plan(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    if body.use_llm and not settings.llm_base_url:
+    if body.use_llm and not body.llm_weeks and not settings.llm_base_url:
         raise HTTPException(400, "LLM generation is not configured (LLM_BASE_URL is not set)")
 
     athlete = await _get_athlete(user, session)
@@ -58,7 +60,37 @@ async def create_plan(
         old.status = "archived"
     await session.flush()
 
-    if body.use_llm:
+    if body.llm_weeks:
+        # Frontend already called the LLM — persist the pre-built weeks directly.
+        end_date = body.start_date + timedelta(weeks=body.weeks) - timedelta(days=1)
+        plan = TrainingPlan(
+            athlete_id=athlete.id,
+            name=body.name,
+            start_date=body.start_date,
+            end_date=end_date,
+            goal=body.goal,
+            weeks=body.weeks,
+            status="active",
+            config=body.config.model_dump() if body.config else None,
+            generation_method="llm",
+        )
+        session.add(plan)
+        await session.flush()
+
+        for week_num, week_days in enumerate(body.llm_weeks, start=1):
+            for day in week_days:
+                session.add(PlannedWorkout(
+                    plan_id=plan.id,
+                    week_number=week_num,
+                    day_of_week=day.day_of_week,
+                    workout_type=day.workout_type,
+                    description=day.description,
+                    duration_min=day.duration_min,
+                    target_tss=day.target_tss,
+                ))
+        await session.commit()
+        await session.refresh(plan)
+    elif body.use_llm:
         if not body.config:
             raise HTTPException(400, "A plan config (training days and types) is required for LLM generation")
         try:

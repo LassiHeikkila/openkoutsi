@@ -8,6 +8,10 @@ class ActivityUpdate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
 
 
+class FrontendAnalysisBody(BaseModel):
+    analysis: str = Field(..., min_length=1)
+
+
 class ManualActivityCreate(BaseModel):
     sport_type: str
     start_time: datetime

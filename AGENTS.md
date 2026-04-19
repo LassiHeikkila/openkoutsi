@@ -4,6 +4,8 @@
 
 When adding features, add a one-liner to the readme.
 
+Make sure the deployment guide (DEPLOY.md) is kept up to date.
+
 ## Testing
 
 Always test the results.

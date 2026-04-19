@@ -204,7 +204,7 @@ export default function ActivityDetailPage({ params }: Props) {
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={commitTitle}
                 onKeyDown={handleTitleKeyDown}
-                className="h-8 text-xl font-bold px-1 w-72"
+                className="h-8 text-xl font-bold px-1 w-48 sm:w-72"
                 autoFocus
               />
             ) : (
@@ -317,7 +317,7 @@ export default function ActivityDetailPage({ params }: Props) {
             <CardTitle className="text-base">Power Bests</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {Object.entries(activity.power_bests)
                 .map(([d, w]) => [Number(d), w] as [number, number])
                 .sort((a, b) => a[0] - b[0])
@@ -346,7 +346,7 @@ export default function ActivityDetailPage({ params }: Props) {
             <CardTitle className="text-base">Distance Bests</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {Object.entries(activity.distance_bests)
                 .map(([d, t]) => [Number(d), t] as [number, number])
                 .sort((a, b) => a[0] - b[0])

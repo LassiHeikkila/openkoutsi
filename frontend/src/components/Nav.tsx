@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
-import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer } from 'lucide-react'
+import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -19,7 +19,11 @@ const navItems = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
-export function Nav() {
+interface NavInnerProps {
+  onClose?: () => void
+}
+
+function NavInner({ onClose }: NavInnerProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { athlete, logout } = useAuth()
@@ -31,36 +35,49 @@ export function Nav() {
 
   return (
     <nav className="flex flex-col h-full w-56 border-r bg-card px-3 py-4 gap-1">
-      <div className="px-3 pb-4 mb-2 border-b">
-        <p className="font-semibold text-lg leading-none">openkoutsi</p>
-        {athlete && (
-          <div className="flex items-center gap-2 mt-2">
-            <div className="relative h-7 w-7 shrink-0 rounded-full overflow-hidden bg-muted border">
-              {athlete.avatar_url ? (
-                <Image
-                  src={athlete.avatar_url}
-                  alt="Avatar"
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-xs font-semibold text-muted-foreground select-none">
-                  {athlete.name ? athlete.name.charAt(0).toUpperCase() : '?'}
-                </span>
+      <div className="px-3 pb-4 mb-2 border-b flex items-start justify-between">
+        <div>
+          <p className="font-semibold text-lg leading-none">openkoutsi</p>
+          {athlete && (
+            <div className="flex items-center gap-2 mt-2">
+              <div className="relative h-7 w-7 shrink-0 rounded-full overflow-hidden bg-muted border">
+                {athlete.avatar_url ? (
+                  <Image
+                    src={athlete.avatar_url}
+                    alt="Avatar"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-xs font-semibold text-muted-foreground select-none">
+                    {athlete.name ? athlete.name.charAt(0).toUpperCase() : '?'}
+                  </span>
+                )}
+              </div>
+              {athlete.name && (
+                <p className="text-xs text-muted-foreground truncate">{athlete.name}</p>
               )}
             </div>
-            {athlete.name && (
-              <p className="text-xs text-muted-foreground truncate">{athlete.name}</p>
-            )}
-          </div>
+          )}
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1 -mt-0.5 -mr-1 rounded text-muted-foreground hover:text-foreground"
+            aria-label="Close navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
         )}
       </div>
+
       <div className="flex-1 flex flex-col gap-1">
         {navItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
+            onClick={onClose}
             className={cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
               pathname.startsWith(href)
@@ -73,6 +90,7 @@ export function Nav() {
           </Link>
         ))}
       </div>
+
       <Button
         variant="ghost"
         size="sm"
@@ -83,5 +101,37 @@ export function Nav() {
         Sign out
       </Button>
     </nav>
+  )
+}
+
+interface NavProps {
+  open?: boolean
+  onClose?: () => void
+}
+
+export function Nav({ open = false, onClose }: NavProps) {
+  return (
+    <>
+      {/* Desktop: always-visible sidebar */}
+      <aside className="hidden md:flex h-full shrink-0">
+        <NavInner />
+      </aside>
+
+      {/* Mobile: overlay drawer */}
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            onClick={onClose}
+            aria-hidden="true"
+          />
+          {/* Drawer */}
+          <aside className="fixed inset-y-0 left-0 z-50 flex md:hidden">
+            <NavInner onClose={onClose} />
+          </aside>
+        </>
+      )}
+    </>
   )
 }

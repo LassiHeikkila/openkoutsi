@@ -23,12 +23,13 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function PowerMedalCell({ entry }: { entry: PowerBestEntry | undefined }) {
+function PowerMedalCell({ entry, rank }: { entry: PowerBestEntry | undefined; rank: number }) {
+  const hiddenClass = rank > 1 ? 'hidden sm:table-cell' : ''
   if (!entry) {
-    return <td className="px-3 py-2 text-center text-muted-foreground text-sm">—</td>
+    return <td className={`px-3 py-2 text-center text-muted-foreground text-sm ${hiddenClass}`}>—</td>
   }
   return (
-    <td className="px-3 py-2 text-center text-sm">
+    <td className={`px-3 py-2 text-center text-sm ${hiddenClass}`}>
       <Link
         href={`/activities/${entry.activity_id}`}
         className="hover:underline font-medium tabular-nums"
@@ -46,8 +47,8 @@ function PowerMedalCell({ entry }: { entry: PowerBestEntry | undefined }) {
 
 const MEDAL_HEADERS = [
   <th key="1" className="px-3 py-2 text-center font-medium text-yellow-500 w-32">#1</th>,
-  <th key="2" className="px-3 py-2 text-center font-medium text-slate-400 w-32">#2</th>,
-  <th key="3" className="px-3 py-2 text-center font-medium text-amber-700 w-32">#3</th>,
+  <th key="2" className="hidden sm:table-cell px-3 py-2 text-center font-medium text-slate-400 w-32">#2</th>,
+  <th key="3" className="hidden sm:table-cell px-3 py-2 text-center font-medium text-amber-700 w-32">#3</th>,
 ]
 
 export default function PowerPage() {
@@ -108,9 +109,9 @@ export default function PowerPage() {
                     return (
                       <tr key={d} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="px-3 py-2 font-mono text-sm text-muted-foreground">{formatDuration(d)}</td>
-                        <PowerMedalCell entry={row.get(1)} />
-                        <PowerMedalCell entry={row.get(2)} />
-                        <PowerMedalCell entry={row.get(3)} />
+                        <PowerMedalCell entry={row.get(1)} rank={1} />
+                        <PowerMedalCell entry={row.get(2)} rank={2} />
+                        <PowerMedalCell entry={row.get(3)} rank={3} />
                       </tr>
                     )
                   })}

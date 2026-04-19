@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const res = await apiFetch<TokenPair>('/api/auth/refresh', {
             method: 'POST',
-          })
+          }, false)
           setAccessToken(res.access_token)
           setSessionCookie()
         } catch {

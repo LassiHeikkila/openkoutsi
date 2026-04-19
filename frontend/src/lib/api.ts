@@ -80,7 +80,11 @@ export async function apiFetch<T>(
     }
     clearTokens()
     if (typeof window !== 'undefined') {
-      window.location.href = '/login'
+      const AUTH_PATHS = ['/login', '/register', '/reset-password']
+      const onAuthPage = AUTH_PATHS.some((p) => window.location.pathname.startsWith(p))
+      if (!onAuthPage) {
+        window.location.href = '/login'
+      }
     }
     throw new Error('Unauthorized')
   }
@@ -89,7 +93,16 @@ export async function apiFetch<T>(
     let message = `HTTP ${res.status}`
     try {
       const err = await res.json()
-      message = err.detail ?? err.message ?? message
+      if (typeof err.detail === 'string') {
+        message = err.detail
+      } else if (Array.isArray(err.detail) && err.detail.length > 0) {
+        // FastAPI/Pydantic validation error format: detail is an array of {msg, loc, type}
+        message = err.detail
+          .map((e: { msg: string }) => e.msg.replace(/^Value error,\s*/i, ''))
+          .join('. ')
+      } else if (typeof err.message === 'string') {
+        message = err.message
+      }
     } catch {
       // ignore parse errors
     }

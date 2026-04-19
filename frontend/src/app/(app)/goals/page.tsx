@@ -162,7 +162,7 @@ export default function GoalsPage() {
     }
   }
 
-  async function handleAchieve(id: number) {
+  async function handleAchieve(id: string) {
     try {
       await apiFetch(`/api/goals/${id}`, {
         method: 'PUT',
@@ -179,7 +179,7 @@ export default function GoalsPage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: string) {
     try {
       await apiFetch(`/api/goals/${id}`, { method: 'DELETE' })
       await mutate()

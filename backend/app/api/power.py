@@ -1,4 +1,6 @@
+from datetime import date
 from itertools import groupby
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -6,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import get_current_user
 from backend.app.db.base import get_session
-from backend.app.models.orm import Activity, ActivityPowerBest, Athlete, User
+from backend.app.models.orm import Activity, ActivityPowerBest, Athlete, User, WeightLog
 from backend.app.schemas.power import AllTimePowerBestsResponse, PowerBestEntry
 from backend.app.services.training_math import POWER_BEST_DURATIONS
 
@@ -34,6 +36,28 @@ async def get_power_bests(
     """
     athlete = await _get_athlete(user, session)
 
+    # Load weight log (sorted ascending by date for the lookup below)
+    wl_rows = await session.execute(
+        select(WeightLog)
+        .where(WeightLog.athlete_id == athlete.id)
+        .order_by(WeightLog.effective_date)
+    )
+    weight_log: list[tuple[date, float]] = [
+        (w.effective_date, w.weight_kg) for w in wl_rows.scalars().all()
+    ]
+
+    def _effective_weight(activity_date: Optional[date]) -> Optional[float]:
+        """Return the most recent weight whose effective_date <= activity_date."""
+        if not activity_date or not weight_log:
+            return None
+        result: Optional[float] = None
+        for eff_date, w_kg in weight_log:
+            if eff_date <= activity_date:
+                result = w_kg
+            else:
+                break
+        return result
+
     rows = await session.execute(
         select(ActivityPowerBest, Activity.name)
         .join(Activity, Activity.id == ActivityPowerBest.activity_id)
@@ -48,6 +72,7 @@ async def get_power_bests(
         for rank, (best, activity_name) in enumerate(group, start=1):
             if rank > TOP_N:
                 break
+            act_date = best.activity_start_time.date() if best.activity_start_time else None
             entries.append(
                 PowerBestEntry(
                     duration_s=best.duration_s,
@@ -56,6 +81,7 @@ async def get_power_bests(
                     activity_id=best.activity_id,
                     activity_name=activity_name,
                     activity_start_time=best.activity_start_time,
+                    weight_kg=_effective_weight(act_date),
                 )
             )
 

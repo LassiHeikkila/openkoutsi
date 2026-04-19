@@ -13,7 +13,7 @@ from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
 from backend.app.core.file_encryption import decrypt_file
 from backend.app.db.base import get_session
-from backend.app.models.orm import Activity, Athlete, ProviderConnection, User
+from backend.app.models.orm import Activity, Athlete, ProviderConnection, User, WeightLog
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -86,6 +86,23 @@ async def update_athlete(
         athlete.date_of_birth = body.date_of_birth
     if body.weight_kg is not None:
         athlete.weight_kg = body.weight_kg
+        # Upsert today's weight log entry
+        today = datetime.now(timezone.utc).date()
+        wl_result = await session.execute(
+            select(WeightLog).where(
+                WeightLog.athlete_id == athlete.id,
+                WeightLog.effective_date == today,
+            )
+        )
+        wl_entry = wl_result.scalar_one_or_none()
+        if wl_entry:
+            wl_entry.weight_kg = body.weight_kg
+        else:
+            session.add(WeightLog(
+                athlete_id=athlete.id,
+                effective_date=today,
+                weight_kg=body.weight_kg,
+            ))
     if body.ftp is not None:
         athlete.ftp = body.ftp
         # Record FTP test
@@ -173,6 +190,21 @@ async def get_avatar(
     if not path.exists():
         raise HTTPException(status_code=404, detail="Avatar file not found")
     return FileResponse(path)
+
+
+@router.get("/weight-log")
+async def get_weight_log(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    athlete = await _get_athlete(user, session)
+    result = await session.execute(
+        select(WeightLog)
+        .where(WeightLog.athlete_id == athlete.id)
+        .order_by(WeightLog.effective_date.desc())
+    )
+    entries = result.scalars().all()
+    return [{"date": e.effective_date.isoformat(), "weight_kg": e.weight_kg} for e in entries]
 
 
 @router.get("/export")

@@ -105,6 +105,24 @@ class Athlete(Base):
     provider_connections: Mapped[list["ProviderConnection"]] = relationship(
         "ProviderConnection", back_populates="athlete", cascade="all, delete-orphan"
     )
+    weight_log: Mapped[list["WeightLog"]] = relationship(
+        "WeightLog", back_populates="athlete", cascade="all, delete-orphan"
+    )
+
+
+class WeightLog(Base):
+    __tablename__ = "weight_log"
+    __table_args__ = (UniqueConstraint("athlete_id", "effective_date"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    athlete_id: Mapped[str] = mapped_column(
+        String, ForeignKey("athletes.id", ondelete="CASCADE")
+    )
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    athlete: Mapped["Athlete"] = relationship("Athlete", back_populates="weight_log")
 
 
 class ProviderConnection(Base):

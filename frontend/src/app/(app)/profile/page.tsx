@@ -6,7 +6,7 @@ import useSWR from 'swr'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { apiFetch, apiDownload, fetcher } from '@/lib/api'
-import type { AthleteProfile, Zone } from '@/lib/types'
+import type { AthleteProfile, WeightLogEntry, Zone } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +69,7 @@ function ProviderNotice() {
 export default function ProfilePage() {
   const { athlete, refreshAthlete } = useAuth()
   const { data: profile } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+  const { data: weightLog } = useSWR<WeightLogEntry[]>('/api/athlete/weight-log', fetcher)
   const { data: availableProviders } = useSWR<{ available: string[] }>('/api/integrations/available', fetcher)
 
   const [name, setName] = useState(athlete?.name ?? '')
@@ -450,6 +451,33 @@ export default function ProfilePage() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Weight history */}
+      {weightLog && weightLog.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Weight history</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-muted-foreground text-left">
+                  <th className="pb-2 font-medium">Date</th>
+                  <th className="pb-2 font-medium">Weight</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weightLog.map((e) => (
+                  <tr key={e.date} className="border-t">
+                    <td className="py-1.5">{e.date}</td>
+                    <td className="py-1.5">{e.weight_kg} kg</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* FTP history */}
       {profile?.ftp_tests && profile.ftp_tests.length > 0 && (

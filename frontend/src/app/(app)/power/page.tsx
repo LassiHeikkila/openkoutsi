@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { fetcher } from '@/lib/api'
@@ -23,19 +24,25 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function PowerMedalCell({ entry, rank }: { entry: PowerBestEntry | undefined; rank: number }) {
+function PowerMedalCell({ entry, rank, unit }: { entry: PowerBestEntry | undefined; rank: number; unit: 'w' | 'wkg' }) {
   const hiddenClass = rank > 1 ? 'hidden sm:table-cell' : ''
   if (!entry) {
     return <td className={`px-3 py-2 text-center text-muted-foreground text-sm ${hiddenClass}`}>—</td>
   }
+  const wkg = unit === 'wkg' && entry.weight_kg ? entry.power_w / entry.weight_kg : null
   return (
     <td className={`px-3 py-2 text-center text-sm ${hiddenClass}`}>
       <Link
         href={`/activities/${entry.activity_id}`}
         className="hover:underline font-medium tabular-nums"
       >
-        {Math.round(entry.power_w)} W
+        {unit === 'wkg' && wkg != null
+          ? `${wkg.toFixed(2)} W/kg`
+          : `${Math.round(entry.power_w)} W`}
       </Link>
+      {unit === 'wkg' && wkg == null && (
+        <div className="text-xs text-muted-foreground">no weight</div>
+      )}
       {entry.activity_start_time && (
         <div className="text-xs text-muted-foreground">
           {formatDate(entry.activity_start_time)}
@@ -52,6 +59,7 @@ const MEDAL_HEADERS = [
 ]
 
 export default function PowerPage() {
+  const [unit, setUnit] = useState<'w' | 'wkg'>('w')
   const { data: powerData, isLoading: powerLoading } = useSWR<AllTimePowerBests>('/api/power/bests', fetcher)
 
   // Power lookup: duration_s → { rank → entry }
@@ -63,7 +71,23 @@ export default function PowerPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Power</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Power</h1>
+        <div className="flex items-center rounded-md border overflow-hidden text-sm">
+          <button
+            className={`px-3 py-1.5 transition-colors ${unit === 'w' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+            onClick={() => setUnit('w')}
+          >
+            W
+          </button>
+          <button
+            className={`px-3 py-1.5 transition-colors ${unit === 'wkg' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+            onClick={() => setUnit('wkg')}
+          >
+            W/kg
+          </button>
+        </div>
+      </div>
 
       {/* Power curve */}
       <Card>
@@ -76,7 +100,7 @@ export default function PowerPage() {
               Loading…
             </div>
           ) : (
-            <PowerCurveChart bests={powerData?.bests ?? []} />
+            <PowerCurveChart bests={powerData?.bests ?? []} unit={unit} />
           )}
         </CardContent>
       </Card>
@@ -109,9 +133,9 @@ export default function PowerPage() {
                     return (
                       <tr key={d} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="px-3 py-2 font-mono text-sm text-muted-foreground">{formatDuration(d)}</td>
-                        <PowerMedalCell entry={row.get(1)} rank={1} />
-                        <PowerMedalCell entry={row.get(2)} rank={2} />
-                        <PowerMedalCell entry={row.get(3)} rank={3} />
+                        <PowerMedalCell entry={row.get(1)} rank={1} unit={unit} />
+                        <PowerMedalCell entry={row.get(2)} rank={2} unit={unit} />
+                        <PowerMedalCell entry={row.get(3)} rank={3} unit={unit} />
                       </tr>
                     )
                   })}

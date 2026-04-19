@@ -103,6 +103,26 @@ async def _apply_column_migrations(conn) -> None:
             "ON activity_distance_bests (athlete_id)"
         ))
 
+    # New table: weight_log
+    result = await conn.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='weight_log'")
+    )
+    if result.fetchone() is None:
+        log.info("Schema migration: creating table weight_log")
+        await conn.execute(text(
+            "CREATE TABLE weight_log ("
+            "  id VARCHAR NOT NULL PRIMARY KEY,"
+            "  athlete_id VARCHAR NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,"
+            "  effective_date DATE NOT NULL,"
+            "  weight_kg REAL NOT NULL,"
+            "  created_at DATETIME NOT NULL,"
+            "  UNIQUE (athlete_id, effective_date)"
+            ")"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX ix_weight_log_athlete_id ON weight_log (athlete_id)"
+        ))
+
     # New table: password_reset_tokens
     result = await conn.execute(
         text("SELECT name FROM sqlite_master WHERE type='table' AND name='password_reset_tokens'")

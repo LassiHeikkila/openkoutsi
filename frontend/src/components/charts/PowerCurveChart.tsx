@@ -49,17 +49,19 @@ const TICK_LABELS = new Map(
 
 interface Props {
   bests: PowerBestEntry[]
+  unit?: 'w' | 'wkg'
 }
 
 interface ChartPoint {
   x: number        // scaledX(duration_s) — what Recharts plots
   duration_s: number
   power_w: number
+  weight_kg: number | null
   activity_id: string
   activity_name: string | null
 }
 
-export function PowerCurveChart({ bests }: Props) {
+export function PowerCurveChart({ bests, unit = 'w' }: Props) {
   // Only rank-1 bests, one per duration
   const rank1 = new Map<number, PowerBestEntry>()
   for (const b of bests) {
@@ -74,22 +76,36 @@ export function PowerCurveChart({ bests }: Props) {
         x: scaledX(d),
         duration_s: d,
         power_w: b.power_w,
+        weight_kg: b.weight_kg,
         activity_id: b.activity_id,
         activity_name: b.activity_name,
       }
     })
 
-  if (data.length === 0) {
+  // For W/kg mode, filter out points that have no weight data
+  const chartData = unit === 'wkg'
+    ? data.filter((p) => p.weight_kg != null && p.weight_kg > 0)
+    : data
+
+  if (chartData.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        No power data yet. Upload a workout with power to see your curve.
+        {data.length === 0
+          ? 'No power data yet. Upload a workout with power to see your curve.'
+          : 'No weight data for this period. Set your weight in Profile to see W/kg.'}
       </div>
     )
   }
 
+  const yDataKey = unit === 'wkg'
+    ? (p: ChartPoint) => p.weight_kg ? +(p.power_w / p.weight_kg).toFixed(2) : null
+    : (p: ChartPoint) => p.power_w
+
+  const yLabel = unit === 'wkg' ? 'W/kg' : 'Watts'
+
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <LineChart data={data} margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
+      <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 24, left: 8 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis
           dataKey="x"
@@ -106,16 +122,19 @@ export function PowerCurveChart({ bests }: Props) {
           tick={{ fontSize: 11 }}
           tickLine={false}
           width={48}
-          label={{ value: 'Watts', angle: -90, position: 'insideLeft', offset: 12, fontSize: 12 }}
+          label={{ value: yLabel, angle: -90, position: 'insideLeft', offset: 12, fontSize: 12 }}
         />
         <Tooltip
           content={({ active, payload }) => {
             if (!active || !payload?.length) return null
             const p = payload[0].payload as ChartPoint
+            const displayVal = unit === 'wkg' && p.weight_kg
+              ? `${(p.power_w / p.weight_kg).toFixed(2)} W/kg`
+              : `${Math.round(p.power_w)} W`
             return (
               <div className="rounded-md border bg-card px-3 py-2 text-sm shadow">
                 <p className="font-semibold">{formatDuration(p.duration_s)}</p>
-                <p>{Math.round(p.power_w)} W</p>
+                <p>{displayVal}</p>
                 {p.activity_name && (
                   <p className="text-muted-foreground text-xs truncate max-w-48">
                     {p.activity_name}
@@ -127,12 +146,13 @@ export function PowerCurveChart({ bests }: Props) {
         />
         <Line
           type="monotone"
-          dataKey="power_w"
+          dataKey={yDataKey}
           stroke="hsl(var(--primary))"
           strokeWidth={2}
           dot={{ r: 3, fill: 'hsl(var(--primary))' }}
           activeDot={{ r: 5 }}
           isAnimationActive={false}
+          connectNulls={false}
         />
       </LineChart>
     </ResponsiveContainer>

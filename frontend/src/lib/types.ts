@@ -164,6 +164,12 @@ export interface PowerBestEntry {
   activity_id: string
   activity_name: string | null
   activity_start_time: string | null
+  weight_kg: number | null
+}
+
+export interface WeightLogEntry {
+  date: string
+  weight_kg: number
 }
 
 export interface AllTimePowerBests {

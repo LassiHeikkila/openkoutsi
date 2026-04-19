@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/register', '/reset-password']
+const PUBLIC_PATHS = ['/', '/login', '/register', '/reset-password']
 
 // Note: the httpOnly refresh_token cookie is set by the backend (different origin/port)
 // so the edge runtime cannot read it directly. We use a lightweight non-sensitive

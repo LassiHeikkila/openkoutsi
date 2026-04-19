@@ -20,6 +20,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
+const PERIOD_OPTIONS = [
+  { label: '1W',  days: 7 },
+  { label: '1M',  days: 30 },
+  { label: '3M',  days: 90 },
+  { label: '6M',  days: 180 },
+  { label: '1Y',  days: 365 },
+  { label: '2Y',  days: 730 },
+  { label: '5Y',  days: 1825 },
+] as const
+
 const GLOSSARY = [
   {
     term: 'CTL — Chronic Training Load',
@@ -102,9 +112,10 @@ function FormBadge({ form }: { form: FitnessCurrent['form'] }) {
 export default function DashboardPage() {
   const { athlete } = useAuth()
   const [recalculating, setRecalculating] = useState(false)
+  const [days, setDays] = useState(90)
   const { data: current, mutate: mutateCurrent } = useSWR<FitnessCurrent>('/api/metrics/fitness/current', fetcher)
   const { data: history, mutate: mutateHistory } = useSWR<FitnessPoint[]>(
-    '/api/metrics/fitness?days=90',
+    `/api/metrics/fitness?days=${days}`,
     fetcher,
   )
 
@@ -181,8 +192,19 @@ export default function DashboardPage() {
 
       {/* Fitness history chart */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Fitness (90 days)</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Fitness history</CardTitle>
+          <div className="flex items-center rounded-md border overflow-hidden text-xs">
+            {PERIOD_OPTIONS.map(({ label, days: d }) => (
+              <button
+                key={label}
+                className={`px-2.5 py-1.5 transition-colors ${days === d ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                onClick={() => setDays(d)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
           {history && history.length > 0 ? (
@@ -199,10 +221,10 @@ export default function DashboardPage() {
       {history && history.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Weekly TSS (12 weeks)</CardTitle>
+            <CardTitle className="text-base">Weekly TSS</CardTitle>
           </CardHeader>
           <CardContent>
-            <WeeklyTssBar data={history} />
+            <WeeklyTssBar data={history} weeks={Math.min(Math.ceil(days / 7), 52)} />
           </CardContent>
         </Card>
       )}

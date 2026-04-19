@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Wahoo (register at developers.wahooligan.com)
     wahoo_client_id: str = ""
     wahoo_client_secret: str = ""
+    wahoo_webhook_token: str = ""  # token you define in the Wahoo developer portal
 
     # LLM plan generation (OpenAI-compatible API)
     llm_base_url: str = ""   # e.g. "http://localhost:11434/v1" or "https://api.openai.com/v1"

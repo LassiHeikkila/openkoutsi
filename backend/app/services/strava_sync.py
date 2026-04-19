@@ -114,7 +114,21 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
             await session.commit()
             return
 
-        activity = await _import_strava_activity(raw, athlete, conn, session)
+        # Cross-provider duplicate: same workout may have arrived from Wahoo already.
+        # Import Strava's copy (keeping its own metadata) but suppress TSS.
+        cross_prov = await session.execute(
+            select(Activity).where(
+                Activity.athlete_id == athlete.id,
+                Activity.source != "strava",
+                Activity.duplicate_of_id.is_(None),
+                Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
+                Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
+            )
+        )
+        existing_prov = cross_prov.scalar_one_or_none()
+        duplicate_of_id = existing_prov.id if existing_prov is not None else None
+
+        activity = await _import_strava_activity(raw, athlete, conn, session, duplicate_of_id=duplicate_of_id)
 
         if activity.start_time:
             from backend.app.services.metrics_engine import recalculate_from
@@ -189,6 +203,7 @@ async def _import_strava_activity(
     athlete: Athlete,
     conn: ProviderConnection,
     session: AsyncSession,
+    duplicate_of_id: str | None = None,
 ) -> Activity:
     strava_id = str(raw["id"])
     start_time = datetime.fromisoformat(raw["start_date"].replace("Z", "+00:00"))
@@ -231,8 +246,9 @@ async def _import_strava_activity(
         avg_hr=avg_hr,
         avg_speed_ms=raw.get("average_speed"),
         avg_cadence=raw.get("average_cadence"),
-        tss=tss,
-        intensity_factor=intensity_factor,
+        tss=None if duplicate_of_id else tss,
+        intensity_factor=None if duplicate_of_id else intensity_factor,
+        duplicate_of_id=duplicate_of_id,
         status="processed",
     )
     session.add(activity)

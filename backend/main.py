@@ -128,6 +128,7 @@ async def _apply_column_migrations(conn) -> None:
         await conn.execute(text("ALTER TABLE users RENAME COLUMN email TO username"))
 
     migrations = [
+        ("activities", "duplicate_of_id", "ALTER TABLE activities ADD COLUMN duplicate_of_id VARCHAR REFERENCES activities(id) ON DELETE SET NULL"),
         ("training_plans", "config", "ALTER TABLE training_plans ADD COLUMN config JSON"),
         ("training_plans", "generation_method", "ALTER TABLE training_plans ADD COLUMN generation_method VARCHAR"),
         ("activities", "analysis_status", "ALTER TABLE activities ADD COLUMN analysis_status VARCHAR"),
@@ -184,6 +185,7 @@ def create_app() -> FastAPI:
     from backend.app.api.distance import router as distance_router
     from backend.app.api.power import router as power_router
     from backend.app.api.strava import router as strava_router
+    from backend.app.api.wahoo import router as wahoo_router
     from backend.app.api.plans import router as plans_router
 
     app = FastAPI(title="openkoutsi API", version="1.0.0", lifespan=lifespan)
@@ -208,6 +210,7 @@ def create_app() -> FastAPI:
     app.include_router(distance_router, prefix="/api")
     app.include_router(power_router, prefix="/api")
     app.include_router(strava_router, prefix="/api")
+    app.include_router(wahoo_router, prefix="/api")
     app.include_router(plans_router, prefix="/api")
 
     return app

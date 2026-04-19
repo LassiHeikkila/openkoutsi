@@ -118,7 +118,22 @@ async def sync_provider_activities(
                 await session.commit()
                 continue
 
-            activity = await _import_activity(norm, athlete, client, access_token, session)
+            # Cross-provider duplicate: same workout already imported from another provider.
+            # Import the activity (keeping its streams) but suppress TSS so fitness
+            # metrics aren't double-counted.
+            cross_prov = await session.execute(
+                select(Activity).where(
+                    Activity.athlete_id == athlete.id,
+                    Activity.source != provider_name,
+                    Activity.duplicate_of_id.is_(None),
+                    Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
+                    Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+                )
+            )
+            existing_prov = cross_prov.scalar_one_or_none()
+            duplicate_of_id = existing_prov.id if existing_prov is not None else None
+
+            activity = await _import_activity(norm, athlete, client, access_token, session, duplicate_of_id=duplicate_of_id)
             count += 1
 
             if activity.start_time:
@@ -155,6 +170,7 @@ async def _import_activity(
     client,
     access_token: str,
     session: AsyncSession,
+    duplicate_of_id: str | None = None,
 ) -> Activity:
     # Fetch time-series streams (best-effort)
     try:
@@ -194,8 +210,10 @@ async def _import_activity(
         avg_hr=avg_hr,
         avg_speed_ms=norm.avg_speed_ms,
         avg_cadence=norm.avg_cadence,
-        tss=tss,
-        intensity_factor=intensity_factor,
+        # Suppress TSS on cross-provider duplicates so fitness metrics aren't double-counted.
+        tss=None if duplicate_of_id else tss,
+        intensity_factor=None if duplicate_of_id else intensity_factor,
+        duplicate_of_id=duplicate_of_id,
         status="processed",
     )
     session.add(activity)

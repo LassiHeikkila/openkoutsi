@@ -142,6 +142,11 @@ class Activity(Base):
     # Generic deduplication key for non-Strava providers (source + external_id pair is unique per athlete)
     external_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     source: Mapped[str] = mapped_column(String, default="upload")
+    # Cross-provider duplicate: points to the primary activity record.
+    # When set, this activity's TSS is suppressed so fitness metrics aren't double-counted.
+    duplicate_of_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("activities.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     sport_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     start_time: Mapped[Optional[datetime]] = mapped_column(

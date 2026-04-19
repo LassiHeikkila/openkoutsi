@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/', '/login', '/register', '/reset-password']
+const PUBLIC_PATHS = ['/login', '/register', '/reset-password']
 
 // Note: the httpOnly refresh_token cookie is set by the backend (different origin/port)
 // so the edge runtime cannot read it directly. We use a lightweight non-sensitive
@@ -12,6 +12,7 @@ export function middleware(request: NextRequest) {
 
   // Allow public routes and Next.js internals
   if (
+    pathname === '/' ||
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api')

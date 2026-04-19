@@ -207,7 +207,13 @@ async def reset_password(
     token_row = result.scalar_one_or_none()
 
     now = datetime.now(timezone.utc)
-    if token_row is None or token_row.used_at is not None or token_row.expires_at <= now:
+    if token_row is None or token_row.used_at is not None:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    # SQLite returns naive datetimes; treat them as UTC for the comparison
+    expires_at = token_row.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= now:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     user_result = await session.execute(

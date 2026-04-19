@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      INIT_DB: "true"
+      DATABASE_PATH: /data/openkoutsi.db
+      FILE_STORAGE_PATH: /data/uploads
+    volumes:
+      - backend_data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  bridge:
+    build:
+      context: strava_bridge
+      dockerfile: Dockerfile
+    env_file: strava_bridge/.env
+    environment:
+      DATABASE_PATH: /data/bridge.db
+    volumes:
+      - bridge_data:/data
+    ports:
+      - "8084:8084"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        # Must be the URL a browser can reach the backend on.
+        # Change to your server's public IP or domain, e.g.:
+        #   NEXT_PUBLIC_API_URL: https://api.example.com
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  bridge_data:

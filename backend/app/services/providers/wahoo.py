@@ -183,20 +183,24 @@ def _normalize_workout(raw: dict) -> NormalizedActivity:
     else:
         start_time = datetime.now(timezone.utc)
 
+    # Prefer active (moving) time; fall back to total duration.
+    duration_s = _int_or_none(summary.get("duration_seconds_active")) or \
+                 _int_or_none(summary.get("duration_seconds_total"))
+
     return NormalizedActivity(
         external_id=str(raw["id"]),
         source="wahoo",
-        name=raw.get("name"),
+        name=raw.get("name") or f"{sport_type} {start_time.strftime('%Y-%m-%d')}",
         sport_type=sport_type,
         start_time=start_time,
-        duration_s=_int_or_none(summary.get("duration_seconds")),
-        distance_m=_float_or_none(summary.get("distance_meters")),
-        elevation_m=_float_or_none(summary.get("total_ascent")),
-        avg_power=_float_or_none(summary.get("avg_power")),
-        avg_hr=_float_or_none(summary.get("avg_heart_rate")),
-        max_hr=_float_or_none(summary.get("max_heart_rate")),
-        avg_speed_ms=_float_or_none(summary.get("avg_speed")),
-        avg_cadence=_float_or_none(summary.get("avg_cadence")),
+        duration_s=duration_s,
+        distance_m=_float_or_none(summary.get("distance_accum")),
+        elevation_m=_float_or_none(summary.get("ascent_accum")),
+        avg_power=_float_or_none(summary.get("power_avg")),
+        avg_hr=_float_or_none(summary.get("heart_rate_avg")),
+        max_hr=_float_or_none(summary.get("heart_rate_max")),
+        avg_speed_ms=_float_or_none(summary.get("speed_avg")),
+        avg_cadence=_float_or_none(summary.get("cadence_avg")),
     )
 
 

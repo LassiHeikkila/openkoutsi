@@ -7,11 +7,14 @@ FIT file for each workout and parsing it with fitdecode.
 """
 
 import io
+import logging
 import urllib.parse
 from datetime import datetime, timezone
 
 import fitdecode
 import httpx
+
+log = logging.getLogger(__name__)
 
 from backend.app.core.config import settings
 from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity
@@ -174,6 +177,8 @@ class WahooClient(BaseProviderClient):
 
 def _normalize_workout(raw: dict) -> NormalizedActivity:
     summary: dict = raw.get("workout_summary") or {}
+    log.info("wahoo raw workout keys: %s", list(raw.keys()))
+    log.info("wahoo workout_summary: %s", summary)
     sport_id: int = raw.get("workout_type_id", 0)
     sport_type = _SPORT_TYPES.get(sport_id, f"Workout_{sport_id}")
 

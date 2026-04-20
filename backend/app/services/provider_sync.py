@@ -12,14 +12,17 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import fitdecode
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
 from backend.app.core.file_encryption import encrypt_file
 from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete, ProviderConnection
+from backend.app.services.fit_processor import _resolve_sport_type
 from backend.app.services.providers.registry import PROVIDERS
 from backend.app.services.training_math import calculate_tss, compute_distance_bests, compute_power_bests, normalized_power
+from openkoutsi.fit import summarizeWorkout
 
 log = logging.getLogger(__name__)
 
@@ -175,8 +178,6 @@ async def _import_activity(
     session: AsyncSession,
     duplicate_of_id: str | None = None,
 ) -> Activity:
-    from backend.app.services.fit_processor import process_fit_file
-
     # ── FIT-first path (Wahoo and any future FIT-capable provider) ────────
     fit_bytes: bytes | None = None
     try:
@@ -185,47 +186,127 @@ async def _import_activity(
         fit_bytes = None
 
     if fit_bytes is not None:
-        activity = Activity(
-            id=str(uuid.uuid4()),
-            athlete_id=athlete.id,
-            external_id=norm.external_id,
-            source=norm.source,
-            # name and sport_type are kept as-is so process_fit_file's "or" logic
-            # preserves the provider-supplied values over the sparse FIT header.
-            name=norm.name,
-            sport_type=norm.sport_type,
-            start_time=norm.start_time,
-            duplicate_of_id=duplicate_of_id,
-            status="pending",
-        )
-        session.add(activity)
-
+        activity_id = str(uuid.uuid4())
         storage_dir = Path(settings.file_storage_path) / athlete.id
         storage_dir.mkdir(parents=True, exist_ok=True)
-        fit_path = storage_dir / f"{activity.id}.fit"
+        fit_path = storage_dir / f"{activity_id}.fit"
         fit_path.write_bytes(fit_bytes)
-        activity.fit_file_path = str(fit_path)
-        await session.flush()
 
+        # Parse FIT synchronously (fitdecode is blocking)
         try:
-            activity = await process_fit_file(str(fit_path), athlete, activity, session)
+            with fitdecode.FitReader(str(fit_path)) as fr:
+                profile = summarizeWorkout(fr)
         except Exception:
-            log.exception("FIT processing failed for %s/%s", norm.source, norm.external_id)
-            activity.status = "processed"
-            await session.commit()
-            await session.refresh(activity)
-            return activity
+            log.exception("FIT parsing failed for %s/%s", norm.source, norm.external_id)
+            profile = None
 
+        # Encrypt FIT file before writing anything to the DB
+        encrypted = False
         try:
             encrypt_file(fit_path, athlete.user_id)
-            activity.fit_file_encrypted = True
+            encrypted = True
         except Exception:
-            log.warning("FIT encryption failed for activity %s", activity.id)
+            log.warning("FIT encryption failed for activity %s", activity_id)
 
-        # Suppress TSS on cross-provider duplicates.
-        if duplicate_of_id:
-            activity.tss = None
-            activity.intensity_factor = None
+        # Derive stream arrays and aggregate metrics from the FIT profile
+        if profile is not None:
+            power_data   = [float(v) for v in profile.power]
+            hr_data      = [float(v) for v in profile.heartRate]
+            cadence_data = [float(v) for v in profile.cadence]
+            speed_ms     = [v / 3.6 for v in profile.speed]   # km/h → m/s
+            alt_data     = [float(v) for v in profile.altitude]
+
+            np_val    = normalized_power(power_data) if power_data else None
+            avg_hr_v  = profile.avgHeartRate if hr_data else norm.avg_hr
+            dur_v     = profile.duration or norm.duration_s or 0
+            tss, intensity_factor = calculate_tss(dur_v, np_val, avg_hr_v, athlete.ftp, athlete.max_hr)
+
+            activity = Activity(
+                id=activity_id,
+                athlete_id=athlete.id,
+                external_id=norm.external_id,
+                source=norm.source,
+                name=norm.name or "Uploaded Activity",
+                sport_type=norm.sport_type or _resolve_sport_type(profile.sport_type),
+                start_time=profile.start_time or norm.start_time,
+                duration_s=profile.duration,
+                distance_m=float(profile.distance) if profile.distance else None,
+                elevation_m=float(profile.elevationGain) if profile.elevationGain else None,
+                avg_power=profile.avgPower if power_data else norm.avg_power,
+                normalized_power=np_val,
+                avg_hr=avg_hr_v,
+                max_hr=profile.peakHR if hr_data else norm.max_hr,
+                avg_speed_ms=(profile.avgSpeed / 3.6) if profile.speed else norm.avg_speed_ms,
+                avg_cadence=float(profile.avgCadence) if profile.cadence else norm.avg_cadence,
+                tss=None if duplicate_of_id else tss,
+                intensity_factor=None if duplicate_of_id else intensity_factor,
+                fit_file_path=str(fit_path),
+                fit_file_encrypted=encrypted,
+                duplicate_of_id=duplicate_of_id,
+                status="processed",
+            )
+        else:
+            # FIT parsing failed — fall back to summary data only
+            power_data = hr_data = cadence_data = speed_ms = alt_data = []
+            activity = Activity(
+                id=activity_id,
+                athlete_id=athlete.id,
+                external_id=norm.external_id,
+                source=norm.source,
+                name=norm.name,
+                sport_type=norm.sport_type,
+                start_time=norm.start_time,
+                duration_s=norm.duration_s,
+                distance_m=norm.distance_m,
+                elevation_m=norm.elevation_m,
+                avg_power=norm.avg_power,
+                avg_hr=norm.avg_hr,
+                max_hr=norm.max_hr,
+                avg_speed_ms=norm.avg_speed_ms,
+                avg_cadence=norm.avg_cadence,
+                fit_file_path=str(fit_path),
+                fit_file_encrypted=encrypted,
+                duplicate_of_id=duplicate_of_id,
+                status="processed",
+            )
+
+        session.add(activity)
+        await session.flush()
+
+        for stream_type, data in [
+            ("power",     power_data),
+            ("heartrate", hr_data),
+            ("cadence",   cadence_data),
+            ("speed",     speed_ms),
+            ("altitude",  alt_data),
+        ]:
+            if data:
+                session.add(ActivityStream(
+                    id=str(uuid.uuid4()),
+                    activity_id=activity.id,
+                    stream_type=stream_type,
+                    data=data,
+                ))
+
+        if power_data:
+            for dur_s, pwr_w in compute_power_bests(power_data).items():
+                session.add(ActivityPowerBest(
+                    activity_id=activity.id,
+                    athlete_id=athlete.id,
+                    duration_s=dur_s,
+                    power_w=pwr_w,
+                    activity_start_time=activity.start_time,
+                ))
+
+        if speed_ms:
+            for dist_m, time_s in compute_distance_bests(speed_ms).items():
+                session.add(ActivityDistanceBest(
+                    activity_id=activity.id,
+                    athlete_id=athlete.id,
+                    distance_m=dist_m,
+                    time_s=time_s,
+                    activity_start_time=activity.start_time,
+                ))
 
         await session.commit()
         await session.refresh(activity)

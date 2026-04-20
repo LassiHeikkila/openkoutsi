@@ -83,3 +83,13 @@ class BaseProviderClient(ABC):
         Values: parallel float arrays (one sample per second or per record).
         Missing streams are simply absent from the dict.
         """
+
+    async def download_fit_file(
+        self, access_token: str, external_id: str
+    ) -> bytes | None:
+        """Download the raw FIT file for a single activity.
+
+        Return None if the provider does not support FIT downloads.
+        Providers that do support it should override this method.
+        """
+        return None

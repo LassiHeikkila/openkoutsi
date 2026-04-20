@@ -197,19 +197,28 @@ class WahooClient(BaseProviderClient):
         workouts: list[dict] = data.get("workouts", [])
         return [_normalize_workout(w) for w in workouts]
 
-    async def get_activity_streams(
+    async def download_fit_file(
         self, access_token: str, external_id: str
-    ) -> dict[str, list[float]]:
-        """Download the FIT file for this workout and extract streams."""
+    ) -> bytes | None:
+        """Download the raw FIT file for a Wahoo workout."""
         headers = {"Authorization": f"Bearer {access_token}"}
         async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
             r = await client.get(
                 f"{_API_BASE}/workouts/{external_id}/fit_file",
                 headers=headers,
             )
+            if r.status_code == 404:
+                return None
             r.raise_for_status()
-            fit_bytes = r.content
+            return r.content
 
+    async def get_activity_streams(
+        self, access_token: str, external_id: str
+    ) -> dict[str, list[float]]:
+        """Download the FIT file for this workout and extract streams."""
+        fit_bytes = await self.download_fit_file(access_token, external_id)
+        if fit_bytes is None:
+            return {}
         return _parse_fit_streams(fit_bytes)
 
 

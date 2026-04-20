@@ -10,10 +10,13 @@ import asyncio
 import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.core.config import settings
+from backend.app.core.file_encryption import encrypt_file
 from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete, ProviderConnection
 from backend.app.services.providers.registry import PROVIDERS
 from backend.app.services.training_math import calculate_tss, compute_distance_bests, compute_power_bests, normalized_power
@@ -172,7 +175,63 @@ async def _import_activity(
     session: AsyncSession,
     duplicate_of_id: str | None = None,
 ) -> Activity:
-    # Fetch time-series streams (best-effort)
+    from backend.app.services.fit_processor import process_fit_file
+
+    # ── FIT-first path (Wahoo and any future FIT-capable provider) ────────
+    fit_bytes: bytes | None = None
+    try:
+        fit_bytes = await client.download_fit_file(access_token, norm.external_id)
+    except Exception:
+        fit_bytes = None
+
+    if fit_bytes is not None:
+        activity = Activity(
+            id=str(uuid.uuid4()),
+            athlete_id=athlete.id,
+            external_id=norm.external_id,
+            source=norm.source,
+            # name and sport_type are kept as-is so process_fit_file's "or" logic
+            # preserves the provider-supplied values over the sparse FIT header.
+            name=norm.name,
+            sport_type=norm.sport_type,
+            start_time=norm.start_time,
+            duplicate_of_id=duplicate_of_id,
+            status="pending",
+        )
+        session.add(activity)
+
+        storage_dir = Path(settings.file_storage_path) / athlete.id
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        fit_path = storage_dir / f"{activity.id}.fit"
+        fit_path.write_bytes(fit_bytes)
+        activity.fit_file_path = str(fit_path)
+        await session.flush()
+
+        try:
+            activity = await process_fit_file(str(fit_path), athlete, activity, session)
+        except Exception:
+            log.exception("FIT processing failed for %s/%s", norm.source, norm.external_id)
+            activity.status = "processed"
+            await session.commit()
+            await session.refresh(activity)
+            return activity
+
+        try:
+            encrypt_file(fit_path, athlete.user_id)
+            activity.fit_file_encrypted = True
+        except Exception:
+            log.warning("FIT encryption failed for activity %s", activity.id)
+
+        # Suppress TSS on cross-provider duplicates.
+        if duplicate_of_id:
+            activity.tss = None
+            activity.intensity_factor = None
+
+        await session.commit()
+        await session.refresh(activity)
+        return activity
+
+    # ── Stream-based fallback (Strava and providers without FIT download) ──
     try:
         streams_raw = await client.get_activity_streams(access_token, norm.external_id)
     except Exception:

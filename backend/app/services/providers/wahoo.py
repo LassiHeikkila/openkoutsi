@@ -28,29 +28,69 @@ _SCOPES = "user_read workouts_read offline_data"
 _PAGE_SIZE = 30
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
-# Wahoo workout_type_id → sport_type string (subset; extend as needed)
+# Wahoo workout_type_id → sport_type string
 _SPORT_TYPES: dict[int, str] = {
-    0: "Cycling",
-    1: "Running",
-    2: "Strength",
-    3: "Yoga",
-    4: "Other",
-    5: "Rowing",
-    6: "Skiing",
-    7: "Hiking",
-    8: "Swimming",
-    9: "Walking",
-    10: "MTBRide",
-    11: "VirtualRide",
-    12: "EBikeRide",
-    13: "NordicSki",
-    14: "Kayaking",
-    15: "Surfing",
-    16: "Crossfit",
-    17: "WeightTraining",
-    18: "Elliptical",
-    19: "StairStepper",
-    20: "Skating",
+    0:   "Ride",
+    1:   "Run",
+    2:   "Workout",
+    3:   "TrackRun",
+    4:   "TrailRun",
+    5:   "Treadmill",
+    6:   "Walk",
+    7:   "Walk",
+    8:   "NordicWalk",
+    9:   "Hike",
+    10:  "Mountaineering",
+    11:  "CycloCross",
+    12:  "VirtualRide",
+    13:  "MountainBikeRide",
+    14:  "RecumbentRide",
+    15:  "Ride",
+    16:  "TrackCycling",
+    17:  "MotoSport",
+    18:  "Workout",
+    19:  "Treadmill",
+    20:  "Elliptical",
+    21:  "VirtualRide",
+    22:  "Rowing",
+    23:  "StairStepper",
+    25:  "Swim",
+    26:  "OpenWaterSwim",
+    27:  "Snowboard",
+    28:  "Ski",
+    29:  "AlpineSki",
+    30:  "NordicSki",
+    31:  "Skating",
+    32:  "IceSkate",
+    33:  "InlineSkate",
+    34:  "Skateboard",
+    35:  "Sailing",
+    36:  "Windsurf",
+    37:  "Canoeing",
+    38:  "Kayaking",
+    39:  "Rowing",
+    40:  "Kitesurf",
+    41:  "StandUpPaddling",
+    42:  "Workout",
+    43:  "CardioClass",
+    44:  "StairStepper",
+    45:  "Wheelchair",
+    46:  "Golf",
+    47:  "Other",
+    49:  "VirtualRide",
+    56:  "Walk",
+    61:  "VirtualRide",
+    62:  "Multisport",
+    63:  "Transition",
+    64:  "EBikeRide",
+    65:  "Other",
+    66:  "Yoga",
+    67:  "Run",
+    68:  "VirtualRide",
+    69:  "MentalStrength",
+    70:  "Handcycle",
+    71:  "VirtualRun",
+    255: "Other",
 }
 
 
@@ -177,8 +217,7 @@ class WahooClient(BaseProviderClient):
 
 def _normalize_workout(raw: dict) -> NormalizedActivity:
     summary: dict = raw.get("workout_summary") or {}
-    log.info("wahoo raw workout keys: %s", list(raw.keys()))
-    log.info("wahoo workout_summary: %s", summary)
+
     sport_id: int = raw.get("workout_type_id", 0)
     sport_type = _SPORT_TYPES.get(sport_id, f"Workout_{sport_id}")
 
@@ -189,8 +228,8 @@ def _normalize_workout(raw: dict) -> NormalizedActivity:
         start_time = datetime.now(timezone.utc)
 
     # Prefer active (moving) time; fall back to total duration.
-    duration_s = _int_or_none(summary.get("duration_seconds_active")) or \
-                 _int_or_none(summary.get("duration_seconds_total"))
+    duration_s = _int_or_none(summary.get("duration_active_accum")) or \
+                 _int_or_none(summary.get("duration_total_accum"))
 
     return NormalizedActivity(
         external_id=str(raw["id"]),

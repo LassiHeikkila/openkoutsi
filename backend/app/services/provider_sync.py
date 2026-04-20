@@ -208,6 +208,7 @@ async def _import_activity(
         avg_power=norm.avg_power or (sum(power_data) / len(power_data) if power_data else None),
         normalized_power=np,
         avg_hr=avg_hr,
+        max_hr=norm.max_hr,
         avg_speed_ms=norm.avg_speed_ms,
         avg_cadence=norm.avg_cadence,
         # Suppress TSS on cross-provider duplicates so fitness metrics aren't double-counted.

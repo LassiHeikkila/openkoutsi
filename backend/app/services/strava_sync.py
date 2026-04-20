@@ -224,7 +224,7 @@ async def _import_strava_activity(
 
     np = normalized_power(power_data) if power_data else None
     avg_hr = (sum(hr_data) / len(hr_data)) if hr_data else raw.get("average_heartrate")
-    duration_s = raw.get("elapsed_time", 0)
+    duration_s = raw.get("moving_time") or raw.get("elapsed_time") or 0
 
     tss, intensity_factor = calculate_tss(
         duration_s, np, avg_hr, athlete.ftp, athlete.max_hr
@@ -244,6 +244,7 @@ async def _import_strava_activity(
         avg_power=raw.get("average_watts"),
         normalized_power=np,
         avg_hr=avg_hr,
+        max_hr=raw.get("max_heartrate"),
         avg_speed_ms=raw.get("average_speed"),
         avg_cadence=raw.get("average_cadence"),
         tss=None if duplicate_of_id else tss,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -34,6 +35,8 @@ export function ProviderCard({
   onDisconnect,
   syncing = false,
 }: ProviderCardProps) {
+  const t = useTranslations('app')
+  const tCommon = useTranslations('common')
   const [dialogOpen, setDialogOpen] = useState(false)
 
   function handleDisconnectClick() {
@@ -53,8 +56,8 @@ export function ProviderCard({
   function handleConnectClick() {
     if (configured === false) {
       toast({
-        title: `${name} is not configured`,
-        description: `The server does not have ${name} credentials set up. Ask your server administrator to configure the ${name} integration.`,
+        title: t('profile.provider.notConfiguredTitle', { name }),
+        description: t('profile.provider.notConfiguredDesc', { name }),
         variant: 'destructive',
       })
       return
@@ -70,10 +73,10 @@ export function ProviderCard({
         {connected ? (
           <>
             <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-sm">Connected</span>
+            <span className="text-sm">{t('profile.provider.connected')}</span>
             <div className="ml-auto flex gap-2">
               <Button variant="outline" size="sm" onClick={onSync} disabled={syncing}>
-                {syncing ? 'Syncing…' : 'Sync now'}
+                {syncing ? t('profile.provider.syncing') : t('profile.provider.syncNow')}
               </Button>
               <Button
                 variant="outline"
@@ -81,14 +84,14 @@ export function ProviderCard({
                 className="text-destructive border-destructive/30"
                 onClick={handleDisconnectClick}
               >
-                Disconnect
+                {t('profile.provider.disconnect')}
               </Button>
             </div>
           </>
         ) : (
           <>
             <span className="inline-block h-2 w-2 rounded-full bg-gray-300" />
-            <span className="text-sm text-muted-foreground">Not connected</span>
+            <span className="text-sm text-muted-foreground">{t('profile.provider.notConnected')}</span>
             <Button
               size="sm"
               className="ml-auto"
@@ -97,7 +100,7 @@ export function ProviderCard({
               aria-disabled={notConfigured}
               onClick={handleConnectClick}
             >
-              Connect {name}
+              {t('profile.provider.connectBtn', { name })}
             </Button>
           </>
         )}
@@ -105,27 +108,25 @@ export function ProviderCard({
 
       {notConfigured && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          {name} credentials are not configured on this server.
+          {t('profile.provider.notConfigured', { name })}
         </p>
       )}
 
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect {name}?</AlertDialogTitle>
+            <AlertDialogTitle>{t('profile.provider.disconnectTitle', { name })}</AlertDialogTitle>
             <AlertDialogDescription>
-              Do you also want to delete all activities imported from {name}?
-              This cannot be undone — deleted activities and their data will be
-              permanently removed.
+              {t('profile.provider.disconnectDesc', { name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{tCommon('cancel')}</AlertDialogCancel>
             <Button variant="outline" onClick={handleDisconnectOnly}>
-              Disconnect only
+              {t('profile.provider.disconnectOnly')}
             </Button>
             <Button variant="destructive" onClick={handleDisconnectAndDelete}>
-              Disconnect and delete data
+              {t('profile.provider.disconnectAndDelete')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

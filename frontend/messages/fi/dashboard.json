@@ -1,0 +1,56 @@
+{
+  "title": "Kojelauta",
+  "welcomeBack": "Tervetuloa takaisin, {name}",
+  "recalculate": "Laske kunto uudelleen",
+  "recalculating": "Lasketaan uudelleen\u2026",
+  "recalcStarted": "Uudelleenlaskenta k\u00e4ynnistetty",
+  "recalcStartedDesc": "Kuntomittarit p\u00e4ivittyv\u00e4t hetken kuluttua",
+  "recalcFailed": "Uudelleenlaskenta ep\u00e4onnistui",
+  "currentFitness": "Nykyinen kunto",
+  "metrics": {
+    "ctl": "CTL (Kunto)",
+    "atl": "ATL (V\u00e4sym\u00e4)",
+    "tsb": "TSB (Muoto)",
+    "ftp": "FTP"
+  },
+  "ftpValue": "{value} W",
+  "fitnessHistory": "Kuntohistoria",
+  "weeklyTss": "Viikottainen TSS",
+  "noHistory": "Ei dataa viel\u00e4 \u2014 lataa harjoituksia aloittaaksesi seurannan",
+  "recentActivities": "Viimeisimm\u00e4t harjoitukset",
+  "noActivities": "Ei harjoituksia viel\u00e4",
+  "explainMetrics": "Selitä kuntomittarit",
+  "glossaryTitle": "Kuntomittarit selitettyn\u00e4",
+  "form": {
+    "peak": "huippu",
+    "fresh": "virkeä",
+    "neutral": "neutraali",
+    "tired": "väsynyt",
+    "overreached": "ylikuormittunut"
+  },
+  "glossary": {
+    "ctl": {
+      "term": "CTL \u2014 Chronic Training Load",
+      "aka": "Kunto",
+      "description": "42 p\u00e4iv\u00e4n eksponentiaalisesti painotettu keskiarvo p\u00e4ivitt\u00e4isist\u00e4 harjoituskuormituspisteist\u00e4 (TSS). Se kuvaa pitkän aikavälin kuntotasoasi \u2014 mitä suurempi luku, sitä enemmän kehosi on sopeutunut harjoitteluun."
+    },
+    "atl": {
+      "term": "ATL \u2014 Acute Training Load",
+      "aka": "V\u00e4sym\u00e4",
+      "description": "7 p\u00e4iv\u00e4n eksponentiaalisesti painotettu keskiarvo TSS:st\u00e4. Se kuvaa viimeaikaista harjoittelumäärääsi. Korkea ATL tarkoittaa, että olet v\u00e4synyt viimeaikaisesta kovasta harjoittelusta."
+    },
+    "tsb": {
+      "term": "TSB \u2014 Training Stress Balance",
+      "aka": "Muoto",
+      "description": "Lasketaan CTL \u2212 ATL. Positiivinen TSB tarkoittaa, että olet levänyt suhteessa kuntotasoosi (virkeä/huipussa). Negatiivinen TSS tarkoittaa, että väsymä ylittää kunnon (väsynyt/ylikuormittunut). Pyri hieman positiiviseen TSB:hen ennen tärkeää kilpailua."
+    },
+    "ftp": {
+      "term": "FTP \u2014 Functional Threshold Power",
+      "description": "Korkein keskim\u00e4\u00e4r\u00e4inen teho (watteina), jonka voit ylläpitää noin tunnin ajan. FTP:t\u00e4 käytetään harjoitusvyöhykkeiden m\u00e4\u00e4ritt\u00e4miseen ja TSS:n laskemiseen tehoperusteisissa harjoituksissa."
+    },
+    "tss": {
+      "term": "TSS \u2014 Training Stress Score",
+      "description": "Yksitt\u00e4inen luku, joka kuvaa yhden harjoituksen kuormitusta ottaen huomioon sekä keston että intensiteetin. Yksi tunti täsmälleen FTP:ll\u00e4 = 100 TSS. Helpot ajot pisteytyv\u00e4t matalammin; kovat intervalliharjoitukset korkeammin."
+    }
+  }
+}

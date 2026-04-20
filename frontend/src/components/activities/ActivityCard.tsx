@@ -1,4 +1,7 @@
-import Link from 'next/link'
+'use client'
+
+import { useTranslations } from 'next-intl'
+import { Link } from '@/navigation'
 import type { Activity } from '@/lib/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +20,7 @@ const SPORT_ICONS: Record<string, React.ElementType> = {
 }
 
 export function ActivityCard({ activity }: Props) {
+  const t = useTranslations('activities')
   const Icon = SPORT_ICONS[activity.sport_type?.toLowerCase()] ?? SPORT_ICONS.default
 
   return (
@@ -31,7 +35,7 @@ export function ActivityCard({ activity }: Props) {
             <div className="flex items-center gap-1 shrink-0">
               <SourceBadge source={activity.source} />
               {activity.status === 'pending' && (
-                <Badge variant="outline" className="text-xs">Processing…</Badge>
+                <Badge variant="outline" className="text-xs">{t('processing')}</Badge>
               )}
             </div>
           </div>

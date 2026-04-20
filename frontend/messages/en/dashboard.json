@@ -1,0 +1,56 @@
+{
+  "title": "Dashboard",
+  "welcomeBack": "Welcome back, {name}",
+  "recalculate": "Recalculate fitness",
+  "recalculating": "Recalculating\u2026",
+  "recalcStarted": "Recalculation started",
+  "recalcStartedDesc": "Fitness metrics will update in a moment",
+  "recalcFailed": "Recalculation failed",
+  "currentFitness": "Current fitness",
+  "metrics": {
+    "ctl": "CTL (Fitness)",
+    "atl": "ATL (Fatigue)",
+    "tsb": "TSB (Form)",
+    "ftp": "FTP"
+  },
+  "ftpValue": "{value} W",
+  "fitnessHistory": "Fitness history",
+  "weeklyTss": "Weekly TSS",
+  "noHistory": "No data yet \u2014 upload activities to start tracking",
+  "recentActivities": "Recent activities",
+  "noActivities": "No activities yet",
+  "explainMetrics": "Explain fitness metrics",
+  "glossaryTitle": "Fitness metrics explained",
+  "form": {
+    "peak": "peak",
+    "fresh": "fresh",
+    "neutral": "neutral",
+    "tired": "tired",
+    "overreached": "overreached"
+  },
+  "glossary": {
+    "ctl": {
+      "term": "CTL \u2014 Chronic Training Load",
+      "aka": "Fitness",
+      "description": "A 42-day exponentially weighted average of daily Training Stress Scores (TSS). It represents your long-term fitness level \u2014 the higher the number, the more training your body has adapted to."
+    },
+    "atl": {
+      "term": "ATL \u2014 Acute Training Load",
+      "aka": "Fatigue",
+      "description": "A 7-day exponentially weighted average of TSS. It reflects how much you have trained recently. A high ATL means you are currently fatigued from recent hard training."
+    },
+    "tsb": {
+      "term": "TSB \u2014 Training Stress Balance",
+      "aka": "Form",
+      "description": "Calculated as CTL \u2212 ATL. A positive TSB means you are rested relative to your fitness (fresh/peak). A negative TSB means fatigue outweighs fitness (tired/overreached). Aim for a slightly positive TSB before a key event."
+    },
+    "ftp": {
+      "term": "FTP \u2014 Functional Threshold Power",
+      "description": "The highest average power (in watts) you can sustain for approximately one hour. FTP is used to define training zones and to calculate TSS for power-based workouts."
+    },
+    "tss": {
+      "term": "TSS \u2014 Training Stress Score",
+      "description": "A single number that quantifies the training load of one workout, taking into account both duration and intensity. A one-hour ride at exactly FTP = 100 TSS. Easy rides score lower; hard interval sessions score higher."
+    }
+  }
+}

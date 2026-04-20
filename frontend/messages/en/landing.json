@@ -1,0 +1,62 @@
+{
+  "nav": {
+    "features": "Features",
+    "selfhost": "Self-host",
+    "github": "GitHub \u2197",
+    "login": "Log in",
+    "signup": "Sign up"
+  },
+  "hero": {
+    "eyebrow": "open source \u00b7 AGPL-3.0",
+    "h1line1": "Every watt.",
+    "h1line2": "Every kilometre.",
+    "h1line3": "Yours.",
+    "sub": "An open-source training log for cyclists. Self-host it in five minutes, track progression for a lifetime, and never see a paywall.",
+    "cta": "Get started \u2192",
+    "github": "GitHub"
+  },
+  "heroViz": {
+    "label": "week 14 \u00b7 TSS",
+    "caption1": "+8.4% on 4-wk avg",
+    "caption2": "FTP 284W"
+  },
+  "features": {
+    "01": {
+      "num": "01 / POWER",
+      "title": "Power curves, normalized.",
+      "body": "Mean-maximal power across any date range, season overlays included."
+    },
+    "02": {
+      "num": "02 / FORM",
+      "title": "Fitness, fatigue, form.",
+      "body": "The Banister model on your real training history \u2014 not an estimate."
+    },
+    "03": {
+      "num": "03 / IMPORT",
+      "title": "Bring your history.",
+      "body": "FIT file upload, Strava and Wahoo integrations \u2014 all supported."
+    },
+    "04": {
+      "num": "04 / PRIVACY",
+      "title": "Zero telemetry.",
+      "body": "No analytics, no third-party SDKs. Your rides stay on your server."
+    },
+    "05": {
+      "num": "05 / EXPORT",
+      "title": "Portable by design.",
+      "body": "SQLite under the hood. Export your raw FIT files and profile data as JSON \u2014 anytime."
+    }
+  },
+  "selfhost": {
+    "title1": "Your server.",
+    "title2": "Your rules.",
+    "body": "Run openkoutsi anywhere \u2014 a Pi in your closet, a \u20ac4 VPS, or your home NAS. Docker compose for one-command setup, or build from source. No sign-ups, no pro tier.",
+    "copy": "COPY",
+    "copied": "COPIED"
+  },
+  "footer": {
+    "license": "AGPL-3.0",
+    "copyright": "\u00a9 2026 contributors",
+    "github": "GitHub"
+  }
+}

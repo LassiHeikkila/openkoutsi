@@ -1,32 +1,34 @@
 'use client'
 
-import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
+import { Link, usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
 import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: BarChart2 },
-  { href: '/activities', label: 'Activities', icon: Activity },
-  { href: '/power', label: 'Power', icon: Zap },
-  { href: '/records', label: 'Records', icon: Timer },
-  { href: '/goals', label: 'Goals', icon: Target },
-  { href: '/plan', label: 'Plan', icon: Calendar },
-  { href: '/profile', label: 'Profile', icon: User },
-  { href: '/settings', label: 'Settings', icon: Settings },
-]
+import { LocaleSwitcher } from './LocaleSwitcher'
 
 interface NavInnerProps {
   onClose?: () => void
 }
 
 function NavInner({ onClose }: NavInnerProps) {
+  const t = useTranslations('common')
   const pathname = usePathname()
   const router = useRouter()
   const { athlete, logout } = useAuth()
+
+  const navItems = [
+    { href: '/dashboard' as const, labelKey: 'nav.dashboard' as const, icon: BarChart2 },
+    { href: '/activities' as const, labelKey: 'nav.activities' as const, icon: Activity },
+    { href: '/power' as const, labelKey: 'nav.power' as const, icon: Zap },
+    { href: '/records' as const, labelKey: 'nav.records' as const, icon: Timer },
+    { href: '/goals' as const, labelKey: 'nav.goals' as const, icon: Target },
+    { href: '/plan' as const, labelKey: 'nav.plan' as const, icon: Calendar },
+    { href: '/profile' as const, labelKey: 'nav.profile' as const, icon: User },
+    { href: '/settings' as const, labelKey: 'nav.settings' as const, icon: Settings },
+  ]
 
   function handleLogout() {
     logout()
@@ -65,7 +67,7 @@ function NavInner({ onClose }: NavInnerProps) {
           <button
             onClick={onClose}
             className="p-1 -mt-0.5 -mr-1 rounded text-muted-foreground hover:text-foreground"
-            aria-label="Close navigation"
+            aria-label={t('nav.closeNavigation')}
           >
             <X className="h-5 w-5" />
           </button>
@@ -73,7 +75,7 @@ function NavInner({ onClose }: NavInnerProps) {
       </div>
 
       <div className="flex-1 flex flex-col gap-1">
-        {navItems.map(({ href, label, icon: Icon }) => (
+        {navItems.map(({ href, labelKey, icon: Icon }) => (
           <Link
             key={href}
             href={href}
@@ -86,20 +88,23 @@ function NavInner({ onClose }: NavInnerProps) {
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            {t(labelKey)}
           </Link>
         ))}
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="justify-start gap-3 text-muted-foreground"
-        onClick={handleLogout}
-      >
-        <LogOut className="h-4 w-4" />
-        Sign out
-      </Button>
+      <div className="flex items-center justify-between px-1 pt-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-start gap-3 text-muted-foreground"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-4 w-4" />
+          {t('nav.signOut')}
+        </Button>
+        <LocaleSwitcher />
+      </div>
     </nav>
   )
 }

@@ -1,0 +1,65 @@
+{
+  "title": "Activities",
+  "noActivities": "No activities yet. Upload a .fit file above.",
+  "loading": "Loading\u2026",
+  "upload": {
+    "drop": "Drop .fit files here, or click to browse",
+    "uploading": "Uploading\u2026",
+    "invalidFile": "Invalid file",
+    "invalidFileDesc": "Only .fit files are supported",
+    "someSkipped": "Some files skipped",
+    "someSkippedDesc": "Only .fit files are supported",
+    "uploaded": "Uploaded",
+    "uploadedMultiple": "Uploaded {count} files",
+    "processing": "{name} is being processed",
+    "processingMultiple": "Files are being processed",
+    "uploadFailed": "Failed to upload {name}"
+  },
+  "processing": "Processing\u2026",
+  "detail": {
+    "loading": "Loading\u2026",
+    "notFound": "Activity not found",
+    "clickToRename": "Click to rename",
+    "downloadFit": "Download FIT file",
+    "renameFailed": "Rename failed",
+    "downloadFailed": "Download failed",
+    "deleteFailed": "Delete failed",
+    "deleted": "Activity deleted",
+    "deleteTitle": "Delete activity?",
+    "deleteDesc": "This will permanently delete the activity and recalculate your fitness metrics.",
+    "stats": {
+      "date": "Date",
+      "duration": "Duration",
+      "distance": "Distance",
+      "avgPower": "Avg power",
+      "np": "NP",
+      "if": "IF",
+      "tss": "TSS",
+      "avgHr": "Avg HR",
+      "maxHr": "Max HR",
+      "elevation": "Elevation"
+    },
+    "zones": {
+      "title": "Zone Distribution",
+      "heartRate": "Heart Rate",
+      "power": "Power"
+    },
+    "powerHr": "Power & Heart Rate",
+    "speedElevation": "Speed & Elevation",
+    "powerBests": "Power Bests",
+    "distanceBests": "Distance Bests",
+    "analysis": {
+      "title": "AI Analysis",
+      "analyse": "Analyse workout",
+      "retry": "Retry",
+      "reanalyse": "Re-analyse",
+      "stop": "Stop",
+      "analysing": "Analysing\u2026",
+      "analysingWait": "Analysing\u2026 this may take a few minutes",
+      "failed": "Analysis failed. Please try again.",
+      "noAnalysis": "No analysis yet. Click \u201cAnalyse workout\u201d to generate AI coaching feedback.",
+      "analysisFailed": "Analysis failed",
+      "analysisFailedToStart": "Analysis failed to start"
+    }
+  }
+}

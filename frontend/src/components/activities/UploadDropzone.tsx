@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { apiFetch } from '@/lib/api'
 import { toast } from '@/components/ui/use-toast'
 import { Upload } from 'lucide-react'
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function UploadDropzone({ onUploaded }: Props) {
+  const t = useTranslations('activities')
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -22,11 +24,11 @@ export function UploadDropzone({ onUploaded }: Props) {
         (f) => f.name.endsWith('.fit') || f.name.endsWith('.FIT'),
       )
       if (fitFiles.length === 0) {
-        toast({ title: 'Invalid file', description: 'Only .fit files are supported', variant: 'destructive' })
+        toast({ title: t('upload.invalidFile'), description: t('upload.invalidFileDesc'), variant: 'destructive' })
         return
       }
       if (fitFiles.length < Array.from(files).length) {
-        toast({ title: 'Some files skipped', description: 'Only .fit files are supported', variant: 'destructive' })
+        toast({ title: t('upload.someSkipped'), description: t('upload.someSkippedDesc'), variant: 'destructive' })
       }
       setUploading(true)
       let succeeded = 0
@@ -38,7 +40,7 @@ export function UploadDropzone({ onUploaded }: Props) {
           succeeded++
         } catch (err) {
           toast({
-            title: `Failed to upload ${file.name}`,
+            title: t('upload.uploadFailed', { name: file.name }),
             description: err instanceof Error ? err.message : 'Unknown error',
             variant: 'destructive',
           })
@@ -47,15 +49,15 @@ export function UploadDropzone({ onUploaded }: Props) {
       setUploading(false)
       if (succeeded > 0) {
         toast({
-          title: succeeded === 1 ? 'Uploaded' : `Uploaded ${succeeded} files`,
+          title: succeeded === 1 ? t('upload.uploaded') : t('upload.uploadedMultiple', { count: succeeded }),
           description: succeeded === 1
-            ? `${fitFiles[0].name} is being processed`
-            : 'Files are being processed',
+            ? t('upload.processing', { name: fitFiles[0].name })
+            : t('upload.processingMultiple'),
         })
         onUploaded?.()
       }
     },
-    [onUploaded],
+    [onUploaded, t],
   )
 
   useEffect(() => {
@@ -119,7 +121,7 @@ export function UploadDropzone({ onUploaded }: Props) {
     >
       <Upload className="h-6 w-6 text-muted-foreground" />
       <span className="text-sm text-muted-foreground text-center">
-        {uploading ? 'Uploading…' : 'Drop .fit files here, or click to browse'}
+        {uploading ? t('upload.uploading') : t('upload.drop')}
       </span>
       <input
         ref={inputRef}

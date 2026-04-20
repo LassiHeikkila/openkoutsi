@@ -1,0 +1,23 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "activities": "Activities",
+    "power": "Power",
+    "records": "Records",
+    "goals": "Goals",
+    "plan": "Plan",
+    "profile": "Profile",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "closeNavigation": "Close navigation",
+    "openNavigation": "Open navigation"
+  },
+  "loading": "Loading\u2026",
+  "saving": "Saving\u2026",
+  "saved": "Saved",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "error": "Error",
+  "unknownError": "Unknown error"
+}

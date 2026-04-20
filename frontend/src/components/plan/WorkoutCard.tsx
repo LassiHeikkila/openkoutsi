@@ -1,8 +1,9 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
 import type { PlannedWorkout } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 const TYPE_COLORS: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-600',
@@ -18,18 +19,29 @@ const TYPE_COLORS: Record<string, string> = {
   'cross-training': 'bg-indigo-50 text-indigo-700',
 }
 
+const WORKOUT_TYPE_KEYS = [
+  'easy', 'tempo', 'threshold', 'vo2max', 'endurance',
+  'long', 'strength', 'yoga', 'cross-training',
+] as const
+
 interface Props {
   workout: PlannedWorkout
   compact?: boolean
 }
 
 export function WorkoutCard({ workout, compact = false }: Props) {
+  const t = useTranslations('app')
   const colorClass = TYPE_COLORS[workout.workout_type] ?? 'bg-muted text-muted-foreground'
+
+  const typeKey = WORKOUT_TYPE_KEYS.find((k) => k === workout.workout_type)
+  const typeLabel = typeKey
+    ? t(`plan.generate.workoutTypes.${typeKey}` as never)
+    : workout.workout_type
 
   if (compact) {
     return (
       <div className={cn('rounded px-2 py-1 text-xs font-medium truncate', colorClass)}>
-        {workout.workout_type}
+        {typeLabel}
         {workout.target_tss != null && ` · ${workout.target_tss} TSS`}
       </div>
     )
@@ -38,7 +50,7 @@ export function WorkoutCard({ workout, compact = false }: Props) {
   return (
     <div className={cn('rounded-lg px-3 py-2 text-sm', colorClass)}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium capitalize">{workout.workout_type}</span>
+        <span className="font-medium">{typeLabel}</span>
         <div className="flex items-center gap-1">
           {workout.duration_min != null && (
             <span className="text-xs opacity-75">{workout.duration_min} min</span>
@@ -49,7 +61,7 @@ export function WorkoutCard({ workout, compact = false }: Props) {
             </Badge>
           )}
           {workout.completed_activity_id != null && (
-            <Badge variant="secondary" className="text-xs h-5">Done</Badge>
+            <Badge variant="secondary" className="text-xs h-5">{t('plan.done')}</Badge>
           )}
         </div>
       </div>

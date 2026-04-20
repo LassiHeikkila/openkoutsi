@@ -1,8 +1,9 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
 import type { TrainingPlan } from '@/lib/types'
 import { WorkoutCard } from './WorkoutCard'
-import { addDays, startOfWeek, format } from 'date-fns'
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+import { addDays, format } from 'date-fns'
 
 interface Props {
   plan: TrainingPlan
@@ -10,6 +11,9 @@ interface Props {
 }
 
 export function PlanCalendar({ plan, currentWeek = 1 }: Props) {
+  const t = useTranslations('app')
+  const dayLabels = t.raw('plan.generate.dayNames') as string[]
+
   // Group workouts by week
   const weeks = new Map<number, typeof plan.workouts>()
   for (const w of plan.workouts) {
@@ -25,20 +29,19 @@ export function PlanCalendar({ plan, currentWeek = 1 }: Props) {
         const workouts = weeks.get(wn)!
         const byDay = new Map(workouts.map((w) => [w.day_of_week, w]))
 
-        // Compute the actual calendar date for this week's Monday
         const planStart = new Date(plan.start_date)
         const weekStart = addDays(planStart, (wn - 1) * 7)
 
         return (
           <div key={wn}>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Week {wn} — {format(weekStart, 'MMM d')}
+              {t('plan.weekLabel', { week: wn, date: format(weekStart, 'MMM d') })}
               {wn === currentWeek && (
-                <span className="ml-2 text-primary">(current)</span>
+                <span className="ml-2 text-primary">{t('plan.current')}</span>
               )}
             </p>
             <div className="grid grid-cols-7 gap-1">
-              {DAY_LABELS.map((label, idx) => {
+              {dayLabels.map((label, idx) => {
                 const dayNum = idx + 1 // 1=Mon
                 const workout = byDay.get(dayNum)
                 const date = addDays(weekStart, idx)
@@ -52,7 +55,7 @@ export function PlanCalendar({ plan, currentWeek = 1 }: Props) {
                       <WorkoutCard workout={workout} compact />
                     ) : (
                       <div className="rounded px-2 py-1 text-xs text-muted-foreground/40 bg-muted/30">
-                        Rest
+                        {t('plan.rest')}
                       </div>
                     )}
                   </div>

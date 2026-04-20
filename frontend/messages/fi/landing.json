@@ -1,0 +1,62 @@
+{
+  "nav": {
+    "features": "Ominaisuudet",
+    "selfhost": "Oma palvelin",
+    "github": "GitHub \u2197",
+    "login": "Kirjaudu",
+    "signup": "Rekister\u00f6idy"
+  },
+  "hero": {
+    "eyebrow": "avoimen l\u00e4hdekoodin \u00b7 AGPL-3.0",
+    "h1line1": "Jokainen watti.",
+    "h1line2": "Jokainen kilometri.",
+    "h1line3": "Sinun.",
+    "sub": "Avoimen l\u00e4hdekoodin harjoituspaikka py\u00f6r\u00e4ilijöille. Asenna omalle palvelimelle viidess\u00e4 minuutissa, seuraa kehittymist\u00e4si loppuiäksi \u2014 eik\u00e4 maksumuureja koskaan.",
+    "cta": "Aloita \u2192",
+    "github": "GitHub"
+  },
+  "heroViz": {
+    "label": "viikko 14 \u00b7 TSS",
+    "caption1": "+8,4\u00a0% 4\u00a0vk:n ka:sta",
+    "caption2": "FTP 284\u00a0W"
+  },
+  "features": {
+    "01": {
+      "num": "01 / TEHO",
+      "title": "Tehok\u00e4yr\u00e4t, normalisoituina.",
+      "body": "Maksimaalinen keskiteho mill\u00e4 tahansa ajanjaksolla, kausivertailut mukaan lukien."
+    },
+    "02": {
+      "num": "02 / MUOTO",
+      "title": "Kunto, v\u00e4sym\u00e4 ja muoto.",
+      "body": "Banister-malli oikealla harjoitushistoriallasi \u2014 ei arvauksena."
+    },
+    "03": {
+      "num": "03 / TUONTI",
+      "title": "Tuo historiasi mukaan.",
+      "body": "FIT-tiedostot, Strava ja Wahoo \u2014 kaikki tuettu."
+    },
+    "04": {
+      "num": "04 / YKSITYISYYS",
+      "title": "Nolla telemetriaa.",
+      "body": "Ei analytiikkaa, ei kolmannen osapuolen SDK:ita. Ajelusi pysyv\u00e4t omalla palvelimellasi."
+    },
+    "05": {
+      "num": "05 / VIENTI",
+      "title": "Siirrett\u00e4v\u00e4 l\u00e4ht\u00f6kohtaisesti.",
+      "body": "SQLite konepellin alla. Vie FIT-tiedostosi ja profiilitietosi JSON-muodossa \u2014 milloin tahansa."
+    }
+  },
+  "selfhost": {
+    "title1": "Sinun palvelimesi.",
+    "title2": "Sinun s\u00e4\u00e4nn\u00f6t.",
+    "body": "Aja openkoutsit miss\u00e4 tahansa \u2014 Pi kaapissasi, 4\u00a0\u20ac:n VPS tai kotisi NAS. Docker compose yhdell\u00e4 komennolla tai k\u00e4\u00e4nn\u00e4 itse. Ei rekister\u00f6itymisi\u00e4, ei Pro-tasoa.",
+    "copy": "KOPIOI",
+    "copied": "KOPIOITU"
+  },
+  "footer": {
+    "license": "AGPL-3.0",
+    "copyright": "\u00a9 2026 osallistujat",
+    "github": "GitHub"
+  }
+}

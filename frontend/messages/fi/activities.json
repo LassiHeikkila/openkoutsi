@@ -1,0 +1,65 @@
+{
+  "title": "Harjoitukset",
+  "noActivities": "Ei harjoituksia viel\u00e4. Lataa .fit-tiedosto yll\u00e4.",
+  "loading": "Ladataan\u2026",
+  "upload": {
+    "drop": "Pudota .fit-tiedostot t\u00e4h\u00e4n tai napsauta selataksesi",
+    "uploading": "Ladataan\u2026",
+    "invalidFile": "Virheellinen tiedosto",
+    "invalidFileDesc": "Vain .fit-tiedostot ovat tuettuja",
+    "someSkipped": "Joitain tiedostoja ohitettu",
+    "someSkippedDesc": "Vain .fit-tiedostot ovat tuettuja",
+    "uploaded": "Ladattu",
+    "uploadedMultiple": "Ladattu {count} tiedostoa",
+    "processing": "{name} k\u00e4sitell\u00e4\u00e4n",
+    "processingMultiple": "Tiedostoja k\u00e4sitell\u00e4\u00e4n",
+    "uploadFailed": "{name} lataus ep\u00e4onnistui"
+  },
+  "processing": "K\u00e4sitell\u00e4\u00e4n\u2026",
+  "detail": {
+    "loading": "Ladataan\u2026",
+    "notFound": "Harjoitusta ei löydy",
+    "clickToRename": "Napsauta nimetäksesi uudelleen",
+    "downloadFit": "Lataa FIT-tiedosto",
+    "renameFailed": "Uudelleennimeäminen epäonnistui",
+    "downloadFailed": "Lataus ep\u00e4onnistui",
+    "deleteFailed": "Poisto ep\u00e4onnistui",
+    "deleted": "Harjoitus poistettu",
+    "deleteTitle": "Poistetaanko harjoitus?",
+    "deleteDesc": "T\u00e4m\u00e4 poistaa harjoituksen pysyv\u00e4sti ja laskee kuntomittarisi uudelleen.",
+    "stats": {
+      "date": "P\u00e4iv\u00e4m\u00e4\u00e4r\u00e4",
+      "duration": "Kesto",
+      "distance": "Matka",
+      "avgPower": "Keskim. teho",
+      "np": "NP",
+      "if": "IF",
+      "tss": "TSS",
+      "avgHr": "Keskim. sy",
+      "maxHr": "Maks. sy",
+      "elevation": "Nousu"
+    },
+    "zones": {
+      "title": "Vyöhykejakauma",
+      "heartRate": "Sykevyöhykkeet",
+      "power": "Tehovyöhykkeet"
+    },
+    "powerHr": "Teho ja syke",
+    "speedElevation": "Nopeus ja korkeus",
+    "powerBests": "Tehoparhaat",
+    "distanceBests": "Matkaparhaat",
+    "analysis": {
+      "title": "Tekoälyanalyysi",
+      "analyse": "Analysoi harjoitus",
+      "retry": "Yrit\u00e4 uudelleen",
+      "reanalyse": "Analysoi uudelleen",
+      "stop": "Pysäytä",
+      "analysing": "Analysoidaan\u2026",
+      "analysingWait": "Analysoidaan\u2026 t\u00e4m\u00e4 saattaa kest\u00e4\u00e4 muutaman minuutin",
+      "failed": "Analyysi ep\u00e4onnistui. Yrit\u00e4 uudelleen.",
+      "noAnalysis": "Ei analyysi\u00e4 viel\u00e4. Napsauta \u201cAnalysoi harjoitus\u201d saadaksesi tekoälyvalmennuspalautetta.",
+      "analysisFailed": "Analyysi ep\u00e4onnistui",
+      "analysisFailedToStart": "Analyysin k\u00e4ynnistys ep\u00e4onnistui"
+    }
+  }
+}

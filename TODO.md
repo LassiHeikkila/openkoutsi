@@ -1,14 +1,19 @@
 Features to implement:
 
-- add external links to the dashboard metrics glossary (CTL, ATL, TSB, FTP, TSS)
-  - previous attempt used TrainingPeaks URLs that turned out to be broken
-  - find working URLs and add them to the GLOSSARY array in `frontend/src/app/(app)/dashboard/page.tsx`
 - team support
 - setting to sync FTP from wahoo/strava/...
 - setting to sync power zones from wahoo/strava/...
 - generating workouts
   - for zwift
   - for wahoo
+- finnish translations (active)
+- weekly TSS vs planned
+
+Testing:
+
+- test Ollama connection (local)
+- test strava connection
+- test wahoo connection
 
 # Before Strava Integration Goes Live
 

@@ -1,0 +1,23 @@
+{
+  "nav": {
+    "dashboard": "Kojelauta",
+    "activities": "Harjoitukset",
+    "power": "Teho",
+    "records": "Enn\u00e4tykset",
+    "goals": "Tavoitteet",
+    "plan": "Ohjelma",
+    "profile": "Profiili",
+    "settings": "Asetukset",
+    "signOut": "Kirjaudu ulos",
+    "closeNavigation": "Sulje navigaatio",
+    "openNavigation": "Avaa navigaatio"
+  },
+  "loading": "Ladataan\u2026",
+  "saving": "Tallennetaan\u2026",
+  "saved": "Tallennettu",
+  "save": "Tallenna",
+  "cancel": "Peruuta",
+  "delete": "Poista",
+  "error": "Virhe",
+  "unknownError": "Tuntematon virhe"
+}

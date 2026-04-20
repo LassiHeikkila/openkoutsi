@@ -6,7 +6,6 @@ Features to implement:
 - generating workouts
   - for zwift
   - for wahoo
-- finnish translations (active)
 - weekly TSS vs planned
 
 Testing:

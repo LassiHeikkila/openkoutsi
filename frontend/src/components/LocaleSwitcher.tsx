@@ -10,15 +10,15 @@ export function LocaleSwitcher() {
   const router = useRouter()
 
   return (
-    <div className="flex gap-1 text-xs">
+    <div className="flex gap-1 text-xs font-medium">
       {routing.locales.map((l) => (
         <button
           key={l}
           onClick={() => router.replace(pathname, { locale: l })}
-          className={`px-1.5 py-0.5 rounded transition-colors ${
+          className={`px-2 py-0.5 rounded border border-current transition-opacity ${
             l === locale
-              ? 'font-semibold text-foreground'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'opacity-100 font-semibold'
+              : 'opacity-40 hover:opacity-75'
           }`}
         >
           {l.toUpperCase()}

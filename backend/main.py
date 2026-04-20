@@ -233,6 +233,15 @@ def create_app() -> FastAPI:
     app.include_router(wahoo_router, prefix="/api")
     app.include_router(plans_router, prefix="/api")
 
+    @app.get("/api/version")
+    async def get_version():
+        try:
+            from importlib.metadata import version
+            v = version("openkoutsi")
+        except Exception:
+            v = "dev"
+        return {"version": v}
+
     return app
 
 

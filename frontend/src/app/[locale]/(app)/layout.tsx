@@ -17,7 +17,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading && !athlete) {
-      router.replace('/login')
+      router.replace('/')
     }
   }, [athlete, loading, router])
 

@@ -32,7 +32,7 @@ function NavInner({ onClose }: NavInnerProps) {
 
   function handleLogout() {
     logout()
-    router.replace('/login')
+    router.replace('/')
   }
 
   return (

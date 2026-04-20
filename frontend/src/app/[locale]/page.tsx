@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import useSWR from 'swr'
 import { Link, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
+import { fetcher } from '@/lib/api'
+import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import './landing.css'
 
 export default function RootPage() {
@@ -11,6 +14,7 @@ export default function RootPage() {
   const { athlete, loading } = useAuth()
   const router = useRouter()
   const [copied, setCopied] = useState(false)
+  const { data: versionData } = useSWR<{ version: string }>('/api/version', fetcher)
 
   useEffect(() => {
     if (!loading && athlete) {
@@ -43,6 +47,7 @@ export default function RootPage() {
             <a href="#features">{t('nav.features')}</a>
             <a href="#selfhost">{t('nav.selfhost')}</a>
             <a href="https://github.com/lassiheikkila/openkoutsi" target="_blank" rel="noopener noreferrer">{t('nav.github')}</a>
+            <LocaleSwitcher />
             <Link href="/login" className="btn">{t('nav.login')}</Link>
             <Link href="/register" className="btn btn-primary">{t('nav.signup')}</Link>
           </div>
@@ -55,6 +60,16 @@ export default function RootPage() {
             <div className="hero-eyebrow">
               <span className="dot" />
               <span>{t('hero.eyebrow')}</span>
+              {versionData?.version && (
+                <a
+                  href="https://github.com/lassiheikkila/openkoutsi/releases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="version-badge"
+                >
+                  v{versionData.version}
+                </a>
+              )}
             </div>
             <h1>
               {t('hero.h1line1')}<br />

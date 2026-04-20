@@ -152,7 +152,7 @@ def _normalize_activity(raw: dict) -> NormalizedActivity:
         name=raw.get("name"),
         sport_type=raw.get("sport_type") or raw.get("type"),
         start_time=start_time,
-        duration_s=raw.get("elapsed_time"),
+        duration_s=raw.get("moving_time") or raw.get("elapsed_time"),
         distance_m=raw.get("distance"),
         elevation_m=raw.get("total_elevation_gain"),
         avg_power=raw.get("average_watts"),

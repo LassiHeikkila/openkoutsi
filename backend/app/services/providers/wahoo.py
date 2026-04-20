@@ -23,6 +23,7 @@ _API_BASE = f"{_BASE}/v1"
 
 _SCOPES = "user_read workouts_read offline_data"
 _PAGE_SIZE = 30
+_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
 # Wahoo workout_type_id → sport_type string (subset; extend as needed)
 _SPORT_TYPES: dict[int, str] = {
@@ -67,7 +68,7 @@ class WahooClient(BaseProviderClient):
 
     @staticmethod
     async def exchange_code(code: str, redirect_uri: str) -> dict:  # type: ignore[override]
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.post(
                 _TOKEN_URL,
                 data={
@@ -82,7 +83,7 @@ class WahooClient(BaseProviderClient):
             data = r.json()
 
         # Fetch user profile to get the Wahoo user ID
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             u = await client.get(
                 f"{_API_BASE}/user",
                 headers={"Authorization": f"Bearer {data['access_token']}"},
@@ -102,7 +103,7 @@ class WahooClient(BaseProviderClient):
 
     @staticmethod
     async def refresh_access_token(refresh_token: str) -> dict:  # type: ignore[override]
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.post(
                 _TOKEN_URL,
                 data={
@@ -136,7 +137,7 @@ class WahooClient(BaseProviderClient):
         self, access_token: str, page: int
     ) -> list[NormalizedActivity]:
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.get(
                 f"{_API_BASE}/workouts",
                 headers=headers,
@@ -158,7 +159,7 @@ class WahooClient(BaseProviderClient):
     ) -> dict[str, list[float]]:
         """Download the FIT file for this workout and extract streams."""
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
             r = await client.get(
                 f"{_API_BASE}/workouts/{external_id}/fit_file",
                 headers=headers,

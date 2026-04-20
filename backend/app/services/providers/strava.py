@@ -25,6 +25,7 @@ _STRAVA_SCOPE = "read,activity:read_all"
 # Sport type passthrough — Strava already returns human-readable strings.
 
 _PAGE_SIZE = 200
+_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
 
 class StravaProviderClient(BaseProviderClient):
@@ -45,7 +46,7 @@ class StravaProviderClient(BaseProviderClient):
 
     @staticmethod
     async def exchange_code(code: str, redirect_uri: str) -> dict:  # type: ignore[override]
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.post(
                 f"{_AUTH_BASE}/oauth/token",
                 json={
@@ -68,7 +69,7 @@ class StravaProviderClient(BaseProviderClient):
 
     @staticmethod
     async def refresh_access_token(refresh_token: str) -> dict:  # type: ignore[override]
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.post(
                 f"{_AUTH_BASE}/oauth/token",
                 json={
@@ -90,7 +91,7 @@ class StravaProviderClient(BaseProviderClient):
 
     @staticmethod
     async def revoke_token(access_token: str) -> None:  # type: ignore[override]
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             await client.post(
                 f"{_AUTH_BASE}/oauth/deauthorize",
                 data={"access_token": access_token},
@@ -102,7 +103,7 @@ class StravaProviderClient(BaseProviderClient):
         self, access_token: str, page: int
     ) -> list[NormalizedActivity]:
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.get(
                 f"{_API_BASE}/athlete/activities",
                 headers=headers,
@@ -117,7 +118,7 @@ class StravaProviderClient(BaseProviderClient):
         self, access_token: str, external_id: str
     ) -> dict[str, list[float]]:
         headers = {"Authorization": f"Bearer {access_token}"}
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             r = await client.get(
                 f"{_API_BASE}/activities/{external_id}/streams",
                 headers=headers,

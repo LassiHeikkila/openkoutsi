@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import get_current_user
@@ -243,6 +243,7 @@ async def list_activities(
     start: Optional[date] = Query(None),
     end: Optional[date] = Query(None),
     sport_type: Optional[str] = Query(None),
+    wahoo_device_only: bool = Query(False, alias="wahoo_device_only"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -257,6 +258,12 @@ async def list_activities(
         base_query = base_query.where(Activity.start_time <= datetime.combine(end, time.max))
     if sport_type:
         base_query = base_query.where(Activity.sport_type == sport_type)
+    if wahoo_device_only:
+        # Hide Wahoo activities that have no device data (synced from a third-party app
+        # via Wahoo — no workout_summary, so duration_s is never populated).
+        base_query = base_query.where(
+            or_(Activity.source != "wahoo", Activity.duration_s.isnot(None))
+        )
 
     count_result = await session.execute(
         select(func.count()).select_from(base_query.subquery())

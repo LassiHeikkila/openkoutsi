@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
 import { ZoneEditor } from '@/components/profile/ZoneEditor'
 import { ProviderCard } from '@/components/profile/ProviderCard'
+import { Switch } from '@/components/ui/switch'
 import { Suspense } from 'react'
 
 // ── Default zone templates ────────────────────────────────────────────────
@@ -86,6 +87,13 @@ export default function ProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [removingAvatar, setRemovingAvatar] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  const [wahooDeviceOnly, setWahooDeviceOnly] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('wahoo_device_only') === '1'
+    }
+    return false
+  })
 
   const [hrZones, setHrZones] = useState<Zone[]>([])
   const [powerZones, setPowerZones] = useState<Zone[]>([])
@@ -450,6 +458,21 @@ export default function ProfilePage() {
                 onDisconnect={(deleteData) => handleProviderDisconnect(provider, deleteData)}
                 syncing={syncingProvider === provider}
               />
+              {provider === 'wahoo' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Switch
+                    id="wahoo-device-only"
+                    checked={wahooDeviceOnly}
+                    onCheckedChange={(checked) => {
+                      setWahooDeviceOnly(checked)
+                      localStorage.setItem('wahoo_device_only', checked ? '1' : '0')
+                    }}
+                  />
+                  <Label htmlFor="wahoo-device-only" className="text-sm cursor-pointer">
+                    Hide activities not from a Wahoo device
+                  </Label>
+                </div>
+              )}
             </div>
           ))}
         </CardContent>

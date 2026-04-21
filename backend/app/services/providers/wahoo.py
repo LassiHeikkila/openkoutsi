@@ -108,6 +108,10 @@ _SPORT_TYPES: dict[int, str] = {
 class WahooClient(BaseProviderClient):
     PROVIDER_NAME = "wahoo"
 
+    def __init__(self) -> None:
+        # Populated during list_activities; used as fallback in download_fit_file.
+        self._fit_urls: dict[str, str] = {}
+
     # ── OAuth ──────────────────────────────────────────────────────────────
 
     def get_oauth_url(self, state: str, redirect_uri: str) -> str:
@@ -211,6 +215,13 @@ class WahooClient(BaseProviderClient):
             json.dumps(data, indent=2, default=str),
         )
         workouts: list[dict] = data.get("workouts", [])
+        # Cache CDN FIT URLs so download_fit_file can fall back when the API endpoint returns 404.
+        for w in workouts:
+            summary = w.get("workout_summary") or {}
+            file_info = summary.get("file") or {}
+            url = file_info.get("url")
+            if url:
+                self._fit_urls[str(w["id"])] = url
         return [_normalize_workout(w) for w in workouts]
 
     async def download_fit_file(
@@ -224,13 +235,39 @@ class WahooClient(BaseProviderClient):
                 headers=headers,
             )
             if r.status_code == 404:
-                _dbg.debug("download_fit_file workout_id=%s → 404 (no FIT file)", external_id)
-                return None
-            r.raise_for_status()
-            _dbg.debug(
-                "download_fit_file workout_id=%s → %d bytes", external_id, len(r.content)
-            )
-            return r.content
+                _dbg.debug("download_fit_file workout_id=%s → 404 from API endpoint", external_id)
+            elif not r.is_success:
+                _dbg.debug(
+                    "download_fit_file workout_id=%s → HTTP %d from API endpoint: %s",
+                    external_id, r.status_code, r.text[:300],
+                )
+            else:
+                _dbg.debug(
+                    "download_fit_file workout_id=%s → %d bytes via API endpoint",
+                    external_id, len(r.content),
+                )
+                return r.content
+
+        # API endpoint failed; try the direct CDN URL cached from the workout summary.
+        cdn_url = self._fit_urls.get(external_id)
+        if cdn_url:
+            _dbg.debug("download_fit_file workout_id=%s → trying CDN URL %s", external_id, cdn_url)
+            async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as cdn_client:
+                cdn_r = await cdn_client.get(cdn_url)
+                if cdn_r.is_success:
+                    _dbg.debug(
+                        "download_fit_file workout_id=%s → %d bytes via CDN URL",
+                        external_id, len(cdn_r.content),
+                    )
+                    return cdn_r.content
+                _dbg.debug(
+                    "download_fit_file workout_id=%s → CDN URL returned HTTP %d",
+                    external_id, cdn_r.status_code,
+                )
+        else:
+            _dbg.debug("download_fit_file workout_id=%s → no CDN URL cached", external_id)
+
+        return None
 
     async def get_activity_streams(
         self, access_token: str, external_id: str

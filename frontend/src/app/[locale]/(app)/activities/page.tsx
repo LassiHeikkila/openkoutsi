@@ -15,10 +15,14 @@ const PAGE_SIZE = 20
 export default function ActivitiesPage() {
   const t = useTranslations('activities')
   const [page, setPage] = useState(1)
-  const { data, mutate, isLoading } = useSWR<PaginatedActivities>(
-    `/api/activities/?page=${page}&page_size=${PAGE_SIZE}`,
-    fetcher,
-  )
+  const [wahooDeviceOnly] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('wahoo_device_only') === '1'
+    }
+    return false
+  })
+  const apiUrl = `/api/activities/?page=${page}&page_size=${PAGE_SIZE}${wahooDeviceOnly ? '&wahoo_device_only=1' : ''}`
+  const { data, mutate, isLoading } = useSWR<PaginatedActivities>(apiUrl, fetcher)
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1
 

@@ -36,6 +36,7 @@ interface Props {
 
 export default function ActivityDetailPage({ params }: Props) {
   const t = useTranslations('activities')
+  const tCommon = useTranslations('common')
   const { id } = use(params)
   const router = useRouter()
   const [editingTitle, setEditingTitle] = useState(false)
@@ -80,7 +81,7 @@ export default function ActivityDetailPage({ params }: Props) {
     } catch (err) {
       toast({
         title: t('detail.renameFailed'),
-        description: err instanceof Error ? err.message : 'Unknown error',
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
         variant: 'destructive',
       })
     } finally {
@@ -100,7 +101,7 @@ export default function ActivityDetailPage({ params }: Props) {
     } catch (err) {
       toast({
         title: t('detail.downloadFailed'),
-        description: err instanceof Error ? err.message : 'Unknown error',
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
         variant: 'destructive',
       })
     }
@@ -114,7 +115,7 @@ export default function ActivityDetailPage({ params }: Props) {
     } catch (err) {
       toast({
         title: t('detail.deleteFailed'),
-        description: err instanceof Error ? err.message : 'Unknown error',
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
         variant: 'destructive',
       })
     }
@@ -148,7 +149,7 @@ export default function ActivityDetailPage({ params }: Props) {
         setStreamingText(null)
         toast({
           title: t('detail.analysis.analysisFailed'),
-          description: err instanceof Error ? err.message : 'Unknown error',
+          description: err instanceof Error ? err.message : tCommon('unknownError'),
           variant: 'destructive',
         })
       }
@@ -160,7 +161,7 @@ export default function ActivityDetailPage({ params }: Props) {
       } catch (err) {
         toast({
           title: t('detail.analysis.analysisFailedToStart'),
-          description: err instanceof Error ? err.message : 'Unknown error',
+          description: err instanceof Error ? err.message : tCommon('unknownError'),
           variant: 'destructive',
         })
       }
@@ -244,12 +245,12 @@ export default function ActivityDetailPage({ params }: Props) {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{tCommon('cancel')}</AlertDialogCancel>
               <AlertDialogAction
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={handleDelete}
               >
-                Delete
+                {tCommon('delete')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -469,7 +469,7 @@ export default function ProfilePage() {
                     }}
                   />
                   <Label htmlFor="wahoo-device-only" className="text-sm cursor-pointer">
-                    Hide activities not from a Wahoo device
+                    {t('profile.provider.wahooDeviceOnly')}
                   </Label>
                 </div>
               )}

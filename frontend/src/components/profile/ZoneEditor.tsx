@@ -1,4 +1,5 @@
 import { Trash2, Plus } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Zone } from '@/lib/types'
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function ZoneEditor({ zones, unit, onChange }: Props) {
+  const t = useTranslations('app')
+
   function update(index: number, field: keyof Zone, raw: string) {
     const next = zones.map((z, i) => {
       if (i !== index) return z
@@ -36,9 +39,9 @@ export function ZoneEditor({ zones, unit, onChange }: Props) {
     <div className="space-y-2">
       {zones.length > 0 && (
         <div className="grid grid-cols-[1fr_80px_80px_32px] gap-2 text-xs text-muted-foreground px-1">
-          <span>Name</span>
-          <span>Low ({unit})</span>
-          <span>High ({unit})</span>
+          <span>{t('profile.zoneEditor.name')}</span>
+          <span>{t('profile.zoneEditor.low', { unit })}</span>
+          <span>{t('profile.zoneEditor.high', { unit })}</span>
           <span />
         </div>
       )}
@@ -77,7 +80,7 @@ export function ZoneEditor({ zones, unit, onChange }: Props) {
 
       <Button type="button" variant="outline" size="sm" className="mt-1" onClick={add}>
         <Plus className="h-3.5 w-3.5 mr-1" />
-        Add zone
+        {t('profile.zoneEditor.addZone')}
       </Button>
     </div>
   )

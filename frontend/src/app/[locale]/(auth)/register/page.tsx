@@ -31,7 +31,7 @@ export default function RegisterPage() {
       await register(username, password)
       router.replace('/dashboard')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed')
+      setError(err instanceof Error ? err.message : t('register.failed'))
     } finally {
       setLoading(false)
     }

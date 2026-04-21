@@ -173,7 +173,14 @@
       "disconnectedWithDelete": "Kaikki tuodut harjoitukset on poistettu.",
       "notConfigured": "{name}-tunnuksia ei ole m\u00e4\u00e4ritetty t\u00e4ll\u00e4 palvelimella.",
       "notConfiguredTitle": "{name}:a ei ole m\u00e4\u00e4ritetty",
-      "notConfiguredDesc": "Palvelimella ei ole {name}-tunnuksia m\u00e4\u00e4ritetty. Pyyd\u00e4 palvelimen yll\u00e4pit\u00e4j\u00e4\u00e4 m\u00e4\u00e4ritt\u00e4m\u00e4\u00e4n {name}-integraatio."
+      "notConfiguredDesc": "Palvelimella ei ole {name}-tunnuksia m\u00e4\u00e4ritetty. Pyyd\u00e4 palvelimen yll\u00e4pit\u00e4j\u00e4\u00e4 m\u00e4\u00e4ritt\u00e4m\u00e4\u00e4n {name}-integraatio.",
+      "wahooDeviceOnly": "Piilota harjoitukset, jotka eiv\u00e4t ole Wahoo-laitteelta"
+    },
+    "zoneEditor": {
+      "name": "Nimi",
+      "low": "Alaraja ({unit})",
+      "high": "Yl\u00e4raja ({unit})",
+      "addZone": "Lis\u00e4\u00e4 vy\u00f6hyke"
     }
   },
   "settings": {

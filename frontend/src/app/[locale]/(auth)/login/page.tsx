@@ -34,7 +34,7 @@ export default function LoginPage() {
         router.replace('/dashboard')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('login.failed'))
     } finally {
       setLoading(false)
     }

@@ -59,7 +59,7 @@ export function ResetPasswordForm() {
       }, false)
       router.replace('/login')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reset failed')
+      setError(err instanceof Error ? err.message : t('resetPassword.failed'))
     } finally {
       setLoading(false)
     }

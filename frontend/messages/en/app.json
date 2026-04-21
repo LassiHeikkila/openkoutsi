@@ -173,7 +173,14 @@
       "disconnectedWithDelete": "All imported activities have been deleted.",
       "notConfigured": "{name} credentials are not configured on this server.",
       "notConfiguredTitle": "{name} is not configured",
-      "notConfiguredDesc": "The server does not have {name} credentials set up. Ask your server administrator to configure the {name} integration."
+      "notConfiguredDesc": "The server does not have {name} credentials set up. Ask your server administrator to configure the {name} integration.",
+      "wahooDeviceOnly": "Hide activities not from a Wahoo device"
+    },
+    "zoneEditor": {
+      "name": "Name",
+      "low": "Low ({unit})",
+      "high": "High ({unit})",
+      "addZone": "Add zone"
     }
   },
   "settings": {

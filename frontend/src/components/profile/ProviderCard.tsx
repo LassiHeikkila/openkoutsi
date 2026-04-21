@@ -120,8 +120,8 @@ export function ProviderCard({
               {t('profile.provider.disconnectDesc', { name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
-            <AlertDialogCancel>{tCommon('cancel')}</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col gap-2">
+            <AlertDialogCancel className="mt-0">{tCommon('cancel')}</AlertDialogCancel>
             <Button variant="outline" onClick={handleDisconnectOnly}>
               {t('profile.provider.disconnectOnly')}
             </Button>

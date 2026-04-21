@@ -7,6 +7,8 @@ Features to implement:
   - for zwift
   - for wahoo
 - weekly TSS vs planned
+- make sure all texts are being translated
+  - [ ] "Hide activities not from a Wahoo device"
 
 Testing:
 

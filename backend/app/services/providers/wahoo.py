@@ -17,15 +17,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-# Dedicated file logger — writes raw Wahoo API data regardless of root log level.
-_debug_log_path = "/tmp/wahoo_debug.log"
-_fh = logging.FileHandler(_debug_log_path, encoding="utf-8")
-_fh.setLevel(logging.DEBUG)
-_fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
 _dbg = logging.getLogger("wahoo.raw_debug")
-_dbg.setLevel(logging.DEBUG)
-_dbg.addHandler(_fh)
-_dbg.propagate = False  # bypass root logger so level filters don't silence us
 
 from backend.app.core.config import settings
 from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity

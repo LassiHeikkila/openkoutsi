@@ -95,7 +95,7 @@ async def sync_provider_activities(
         for norm in activities:
             ext_id = norm.external_id
 
-            # Already imported from this provider — skip.
+            # Already imported from this provider — check if duration needs correcting.
             dupe = await session.execute(
                 select(Activity).where(
                     Activity.athlete_id == athlete.id,
@@ -103,7 +103,44 @@ async def sync_provider_activities(
                     Activity.external_id == ext_id,
                 )
             )
-            if dupe.scalar_one_or_none() is not None:
+            existing_dupe = dupe.scalar_one_or_none()
+            if existing_dupe is not None:
+                # Fix activities imported before moving_time was preferred over
+                # elapsed_time: if the stored duration is longer than what the
+                # provider now reports as moving_time, update it and recompute TSS.
+                if (
+                    norm.duration_s
+                    and existing_dupe.duration_s
+                    and norm.duration_s < existing_dupe.duration_s
+                    and existing_dupe.duplicate_of_id is None
+                ):
+                    old_duration = existing_dupe.duration_s
+                    existing_dupe.duration_s = norm.duration_s
+                    if existing_dupe.normalized_power and athlete.ftp:
+                        new_tss, new_if = calculate_tss(
+                            norm.duration_s,
+                            existing_dupe.normalized_power,
+                            existing_dupe.avg_hr,
+                            athlete.ftp,
+                            athlete.max_hr,
+                        )
+                        existing_dupe.tss = new_tss
+                        existing_dupe.intensity_factor = new_if
+                    elif existing_dupe.avg_hr and athlete.max_hr:
+                        new_tss, _ = calculate_tss(
+                            norm.duration_s,
+                            None,
+                            existing_dupe.avg_hr,
+                            athlete.ftp,
+                            athlete.max_hr,
+                        )
+                        existing_dupe.tss = new_tss
+                    await session.commit()
+                    log.info(
+                        "Corrected duration for %s/%s: %ds → %ds",
+                        provider_name, ext_id,
+                        old_duration, norm.duration_s,
+                    )
                 continue
 
             # Cross-source duplicate: same workout uploaded via FIT file.

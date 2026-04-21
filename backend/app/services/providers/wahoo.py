@@ -7,6 +7,7 @@ FIT file for each workout and parsing it with fitdecode.
 """
 
 import io
+import json
 import logging
 import urllib.parse
 from datetime import datetime, timezone
@@ -15,6 +16,16 @@ import fitdecode
 import httpx
 
 log = logging.getLogger(__name__)
+
+# Dedicated file logger — writes raw Wahoo API data regardless of root log level.
+_debug_log_path = "/tmp/wahoo_debug.log"
+_fh = logging.FileHandler(_debug_log_path, encoding="utf-8")
+_fh.setLevel(logging.DEBUG)
+_fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+_dbg = logging.getLogger("wahoo.raw_debug")
+_dbg.setLevel(logging.DEBUG)
+_dbg.addHandler(_fh)
+_dbg.propagate = False  # bypass root logger so level filters don't silence us
 
 from backend.app.core.config import settings
 from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity
@@ -194,6 +205,11 @@ class WahooClient(BaseProviderClient):
             r.raise_for_status()
             data = r.json()
 
+        _dbg.debug(
+            "list_activities page=%s raw response:\n%s",
+            page,
+            json.dumps(data, indent=2, default=str),
+        )
         workouts: list[dict] = data.get("workouts", [])
         return [_normalize_workout(w) for w in workouts]
 
@@ -208,8 +224,12 @@ class WahooClient(BaseProviderClient):
                 headers=headers,
             )
             if r.status_code == 404:
+                _dbg.debug("download_fit_file workout_id=%s → 404 (no FIT file)", external_id)
                 return None
             r.raise_for_status()
+            _dbg.debug(
+                "download_fit_file workout_id=%s → %d bytes", external_id, len(r.content)
+            )
             return r.content
 
     async def get_activity_streams(
@@ -219,12 +239,24 @@ class WahooClient(BaseProviderClient):
         fit_bytes = await self.download_fit_file(access_token, external_id)
         if fit_bytes is None:
             return {}
-        return _parse_fit_streams(fit_bytes)
+        streams = _parse_fit_streams(fit_bytes)
+        _dbg.debug(
+            "get_activity_streams workout_id=%s parsed keys=%s lengths=%s",
+            external_id,
+            list(streams.keys()),
+            {k: len(v) for k, v in streams.items()},
+        )
+        return streams
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _normalize_workout(raw: dict) -> NormalizedActivity:
+    _dbg.debug(
+        "normalize_workout raw id=%s:\n%s",
+        raw.get("id"),
+        json.dumps(raw, indent=2, default=str),
+    )
     summary: dict = raw.get("workout_summary") or {}
 
     sport_id: int = raw.get("workout_type_id", 0)

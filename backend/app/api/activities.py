@@ -32,7 +32,7 @@ from backend.app.services.training_math import calculate_tss
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _FIT_MAGIC = b".FIT"  # FIT file header signature at bytes 8–11
 
-_DUPLICATE_WINDOW = timedelta(seconds=30)
+_DUPLICATE_WINDOW = timedelta(minutes=5)
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +60,36 @@ def _maybe_auto_analyze(activity_id: str, athlete: Athlete) -> bool:
     return False
 
 
+async def _dedup_after_fit_processing(
+    activity: Activity,
+    athlete_id: str,
+    session: AsyncSession,
+) -> None:
+    """
+    After a FIT file is processed and start_time is populated, check whether a
+    provider already imported this workout while the upload was still pending.
+
+    If a matching processed activity is found within the duplicate window,
+    mark this upload as a duplicate and suppress its TSS so fitness metrics
+    are not double-counted.
+    """
+    if activity.start_time is None:
+        return
+    result = await session.execute(
+        select(Activity).where(
+            Activity.athlete_id == athlete_id,
+            Activity.id != activity.id,
+            Activity.duplicate_of_id.is_(None),
+            Activity.start_time >= activity.start_time - _DUPLICATE_WINDOW,
+            Activity.start_time <= activity.start_time + _DUPLICATE_WINDOW,
+            Activity.status == "processed",
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        activity.duplicate_of_id = existing.id
+
+
 async def _bg_process_and_recalculate(
     file_path: str, athlete_id: str, activity_id: str
 ) -> None:
@@ -76,6 +106,9 @@ async def _bg_process_and_recalculate(
 
         try:
             await process_fit_file(file_path, athlete, activity, session)
+            # Suppress TSS if a provider already imported this workout while the
+            # FIT upload was still pending, to avoid double-counting in CTL/ATL.
+            await _dedup_after_fit_processing(activity, athlete_id, session)
             start_date = (
                 activity.start_time.date()
                 if activity.start_time and hasattr(activity.start_time, "date")

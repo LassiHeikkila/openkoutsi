@@ -26,7 +26,7 @@ from openkoutsi.fit import summarizeWorkout
 
 log = logging.getLogger(__name__)
 
-_DUPLICATE_WINDOW = timedelta(seconds=30)
+_DUPLICATE_WINDOW = timedelta(minutes=5)
 
 
 # ── Token management ──────────────────────────────────────────────────────
@@ -275,8 +275,8 @@ async def _import_activity(
                 max_hr=profile.peakHR if hr_data else norm.max_hr,
                 avg_speed_ms=(profile.avgSpeed / 3.6) if profile.speed else norm.avg_speed_ms,
                 avg_cadence=float(profile.avgCadence) if profile.cadence else norm.avg_cadence,
-                tss=None if duplicate_of_id else tss,
-                intensity_factor=None if duplicate_of_id else intensity_factor,
+                tss=tss,
+                intensity_factor=intensity_factor,
                 fit_file_path=str(fit_path),
                 fit_file_encrypted=encrypted,
                 duplicate_of_id=duplicate_of_id,
@@ -388,9 +388,8 @@ async def _import_activity(
         max_hr=norm.max_hr,
         avg_speed_ms=norm.avg_speed_ms,
         avg_cadence=norm.avg_cadence,
-        # Suppress TSS on cross-provider duplicates so fitness metrics aren't double-counted.
-        tss=None if duplicate_of_id else tss,
-        intensity_factor=None if duplicate_of_id else intensity_factor,
+        tss=tss,
+        intensity_factor=intensity_factor,
         duplicate_of_id=duplicate_of_id,
         status="processed",
     )

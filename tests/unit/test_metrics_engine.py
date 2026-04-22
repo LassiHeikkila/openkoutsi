@@ -124,6 +124,38 @@ class TestRecalculateFrom:
         # TSB on day 2 = day 1's CTL - day 1's ATL
         assert m2.tsb == pytest.approx(m1.ctl - m1.atl, rel=1e-6)
 
+    async def test_duplicate_activity_excluded_from_metrics(self, session):
+        """An activity with duplicate_of_id set must not contribute TSS even if
+        it carries a non-None tss value (so it can still be displayed per activity)."""
+        athlete = await _make_athlete(session)
+        canonical = await _make_activity(session, athlete.id, tss=80.0, day=TODAY)
+        # Same workout imported from a second provider — has TSS for display but
+        # should be excluded from CTL/ATL via duplicate_of_id.
+        duplicate = Activity(
+            id=str(uuid.uuid4()),
+            athlete_id=athlete.id,
+            source="strava",
+            tss=82.0,
+            status="processed",
+            start_time=datetime.combine(TODAY, datetime.min.time()).replace(tzinfo=timezone.utc),
+            duplicate_of_id=canonical.id,
+        )
+        session.add(duplicate)
+        await session.flush()
+
+        await recalculate_from(athlete.id, TODAY, session)
+
+        result = await session.execute(
+            select(DailyMetric).where(
+                DailyMetric.athlete_id == athlete.id,
+                DailyMetric.date == TODAY,
+            )
+        )
+        metric = result.scalar_one()
+        # Only canonical's TSS (80) counts; duplicate's TSS (82) is excluded
+        assert metric.tss_day == pytest.approx(80.0, rel=1e-6)
+        assert metric.ctl == pytest.approx(80 * K42, rel=1e-6)
+
     async def test_empty_athlete_produces_no_metrics(self, session):
         athlete = await _make_athlete(session)
         # No activities — recalculate from today still runs (creates metrics with 0 tss)

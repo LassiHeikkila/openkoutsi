@@ -16,3 +16,8 @@ For bug fixes, you should ensure existing tests pass.
 It might be a good idea to add a test to cover the bug as well, to catch regressions in the future.
 
 When new mandatory environment variables are added, ensure that CI runs apply a suitable placeholder value so that the tests running in CI will work.
+
+## Internationalization
+
+When adding new pieces of text to the frontend, make sure they are translated into the currently available languages.
+Internationalization is implemented with next-i18n.

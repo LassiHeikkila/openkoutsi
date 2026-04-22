@@ -162,8 +162,8 @@ async def sync_provider_activities(
                 continue
 
             # Cross-provider duplicate: same workout already imported from another provider.
-            # Import the activity (keeping its streams) but suppress TSS so fitness
-            # metrics aren't double-counted.
+            # The activity with TSS data is kept as canonical; the other is marked as
+            # duplicate so metrics_engine can exclude it via duplicate_of_id.
             cross_prov = await session.execute(
                 select(Activity).where(
                     Activity.athlete_id == athlete.id,
@@ -174,9 +174,17 @@ async def sync_provider_activities(
                 )
             )
             existing_prov = cross_prov.scalar_one_or_none()
-            duplicate_of_id = existing_prov.id if existing_prov is not None else None
 
-            activity = await _import_activity(norm, athlete, client, access_token, session, duplicate_of_id=duplicate_of_id)
+            if existing_prov is not None and existing_prov.tss is None:
+                # Existing activity is blank (no TSS — e.g. a Wahoo activity synced
+                # from a third-party app with no FIT file). Import the incoming
+                # activity as the canonical record and demote the existing one.
+                activity = await _import_activity(norm, athlete, client, access_token, session, duplicate_of_id=None)
+                existing_prov.duplicate_of_id = activity.id
+                await session.commit()
+            else:
+                duplicate_of_id = existing_prov.id if existing_prov is not None else None
+                activity = await _import_activity(norm, athlete, client, access_token, session, duplicate_of_id=duplicate_of_id)
             count += 1
 
             if activity.start_time:

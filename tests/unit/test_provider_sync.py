@@ -315,22 +315,27 @@ class TestSyncProviderActivities:
 
     async def test_cross_provider_dedup_marks_second_as_duplicate(self, session):
         """
-        When the same workout is synced from two different providers (e.g. Wahoo
-        then Strava), the second import is stored with duplicate_of_id pointing
-        to the first and its TSS suppressed to prevent double-counting in CTL/ATL.
+        When the same workout is synced from two different providers and the
+        first-synced activity already has TSS data, the second import is stored
+        with duplicate_of_id pointing to the first.
         """
         athlete = await _make_athlete(session, user_id="user-8")
+        athlete.ftp = 250
+        await session.commit()
+
         wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
         strava_conn = await _make_connection(session, athlete, provider="strava")
 
         base_time = datetime(2024, 7, 1, 8, 0, tzinfo=timezone.utc)
 
-        # Sync Wahoo first
+        # Sync Wahoo first — with power streams so it gets a real TSS
         wahoo_mock = MagicMock()
         wahoo_mock.list_activities = AsyncMock(
             side_effect=[[_norm("wahoo-1", "wahoo", base_time)], []]
         )
-        wahoo_mock.get_activity_streams = AsyncMock(return_value={})
+        wahoo_mock.get_activity_streams = AsyncMock(
+            return_value={"power": [200] * 120}
+        )
         wahoo_cls = MagicMock(return_value=wahoo_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
@@ -363,7 +368,70 @@ class TestSyncProviderActivities:
 
         canonical = next(a for a in activities if a.duplicate_of_id is None)
         assert canonical.source == "wahoo"
+        assert canonical.tss is not None, "canonical (Wahoo) should carry TSS"
         assert dup.duplicate_of_id == canonical.id
+
+    async def test_blank_first_provider_demoted_when_second_has_data(self, session):
+        """
+        If the first-synced provider activity has no TSS (e.g. a Wahoo activity
+        that came through a third-party app with no FIT file), and the second
+        provider (Strava) has power data that yields a real TSS, the Strava
+        activity should become the canonical record counted toward metrics and
+        the blank Wahoo activity should be marked as its duplicate.
+        """
+        athlete = await _make_athlete(session, user_id="user-12")
+        athlete.ftp = 250
+        await session.commit()
+
+        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
+        strava_conn = await _make_connection(session, athlete, provider="strava")
+
+        base_time = datetime(2024, 7, 5, 8, 0, tzinfo=timezone.utc)
+
+        # Wahoo syncs first — no streams, no FTP match → tss=None ("blank")
+        wahoo_mock = MagicMock()
+        wahoo_mock.list_activities = AsyncMock(
+            side_effect=[[_norm("wahoo-blank", "wahoo", base_time)], []]
+        )
+        wahoo_mock.get_activity_streams = AsyncMock(return_value={})
+        wahoo_cls = MagicMock(return_value=wahoo_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
+            await sync_provider_activities(athlete, wahoo_conn, session)
+
+        # Strava syncs with 120 s of power data → normalized_power → TSS
+        strava_mock = MagicMock()
+        strava_mock.list_activities = AsyncMock(
+            side_effect=[[_norm("strava-real", "strava", base_time)], []]
+        )
+        strava_mock.get_activity_streams = AsyncMock(
+            return_value={"power": [200] * 120}
+        )
+        strava_cls = MagicMock(return_value=strava_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
+            await sync_provider_activities(athlete, strava_conn, session)
+
+        all_result = await session.execute(
+            select(Activity).where(Activity.athlete_id == athlete.id)
+        )
+        activities = all_result.scalars().all()
+        assert len(activities) == 2
+
+        wahoo_act = next(a for a in activities if a.source == "wahoo")
+        strava_act = next(a for a in activities if a.source == "strava")
+
+        # Strava is canonical; Wahoo is demoted to duplicate
+        assert strava_act.duplicate_of_id is None, "Strava should be the canonical record"
+        assert wahoo_act.duplicate_of_id == strava_act.id, "blank Wahoo should be duplicate of Strava"
+
+        # Only Strava (with TSS) contributes to metrics
+        assert strava_act.tss is not None
+        metrics_contributors = [
+            a for a in activities if a.tss is not None and a.duplicate_of_id is None
+        ]
+        assert len(metrics_contributors) == 1
+        assert metrics_contributors[0].source == "strava"
 
 
 class TestDedupAfterFitProcessing:

@@ -123,11 +123,16 @@ def calculate_tss(
         return tss, intensity_factor
 
     if avg_hr is not None and max_hr:
+        # HR-based TSS: TSS = (duration_h) × IF² × 100
+        # where IF = avg_hr / LTHR and LTHR ≈ 90 % of max HR.
+        # The old formula multiplied linearly by the TRIMP coefficient 1.92
+        # (which belongs inside an exponent), producing wildly inflated values
+        # for low-intensity activities.
         lthr = 0.9 * max_hr
         if lthr == 0:
             return None, None
-        trimp_weight = 1.92
-        tss = (duration_s * avg_hr * trimp_weight) / (lthr * 3600) * 100
+        intensity_factor = avg_hr / lthr
+        tss = (duration_s / 3600) * intensity_factor ** 2 * 100
         return tss, None
 
     return None, None

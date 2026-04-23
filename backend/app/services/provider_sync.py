@@ -202,7 +202,20 @@ async def sync_provider_activities(
                 existing_act = None
 
             if existing_act is not None:
-                # Same real-world workout — attach a new source.
+                # Guard: if the existing activity already has a source from
+                # this same provider (but a different external_id), these are
+                # two distinct workouts that both fall inside the dedup window
+                # (e.g. a warm-up and a main ride starting 3 min apart, both
+                # on Strava). The (activity_id, provider) unique constraint
+                # would fire if we tried to attach a second source from the
+                # same provider to the same activity. Treat the incoming
+                # activity as a separate workout by clearing existing_act and
+                # falling through to the "new workout" path below.
+                if any(s.provider == provider_name for s in existing_act.sources):
+                    existing_act = None
+
+            if existing_act is not None:
+                # Same real-world workout from a different provider — attach a new source.
                 new_src = ActivitySource(
                     activity_id=existing_act.id,
                     provider=provider_name,

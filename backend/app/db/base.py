@@ -13,6 +13,11 @@ class Base(DeclarativeBase):
 def _set_wal_mode(dbapi_conn, _connection_record):
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
+    # Wait up to 5 s for a write lock before raising "database is locked".
+    # The default is 0 ms, which causes spurious errors when background sync
+    # tasks are writing at the same time as a foreground request (e.g. the
+    # OAuth callback that writes a ProviderConnection row).
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 

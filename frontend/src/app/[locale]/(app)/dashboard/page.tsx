@@ -102,12 +102,26 @@ export default function DashboardPage() {
     try {
       await apiFetch('/api/metrics/recalculate', { method: 'POST' })
       toast({ title: t('recalcStarted'), description: t('recalcStartedDesc') })
-      // Poll for updated data after a short delay
-      setTimeout(() => {
-        mutateCurrent()
-        mutateHistory()
-        setRecalculating(false)
-      }, 3000)
+
+      // The backend processes in the background (202), so we poll until the
+      // returned data differs from the pre-recalculate snapshot, then stop.
+      // Give up after 30 s regardless so the spinner doesn't spin forever.
+      const baseline = JSON.stringify({ current, history })
+      const deadline = Date.now() + 30_000
+
+      const poll = async () => {
+        const [newCurrent, newHistory] = await Promise.all([
+          mutateCurrent(),
+          mutateHistory(),
+        ])
+        const changed = JSON.stringify({ current: newCurrent, history: newHistory }) !== baseline
+        if (changed || Date.now() >= deadline) {
+          setRecalculating(false)
+        } else {
+          setTimeout(poll, 2000)
+        }
+      }
+      setTimeout(poll, 2000)
     } catch (err) {
       toast({
         title: t('recalcFailed'),

@@ -6,7 +6,8 @@
     "duration": "Duration",
     "loading": "Loading\u2026",
     "noData": "No power data yet. Upload a workout with a power meter to see your bests.",
-    "noWeight": "no weight"
+    "noWeight": "no weight",
+    "rangeAll": "All"
   },
   "records": {
     "title": "Distance Records",

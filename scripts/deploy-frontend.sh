@@ -11,6 +11,7 @@ if [ -z "$1" ]; then
 fi
 
 TARGET=$1
+TARGET_SERVER=$2
 
 pushd frontend || exit 2
 
@@ -26,5 +27,8 @@ fi
 echo "copying to server..."
 
 rsync -a --delete .next/standalone/ "${TARGET}/.next/standalone/"
+
+ssh "${TARGET_SERVER}" "sudo -S systemctl daemon-reload"
+ssh "${TARGET_SERVER}" "sudo -S systemctl start openkoutsi-frontend@${USER}.service"
 
 echo "done..."

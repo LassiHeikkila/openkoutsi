@@ -1,8 +1,8 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from itertools import groupby
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,12 +27,14 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 
 @router.get("/bests", response_model=AllTimePowerBestsResponse)
 async def get_power_bests(
+    days: Optional[int] = Query(None, ge=1, description="Restrict to bests from the past N days. Omit for all-time."),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Return the top-3 all-time best average power for each standard duration,
+    Return the top-3 best average power for each standard duration,
     ordered by (duration_s asc, rank asc).  Durations with no data are omitted.
+    Pass ?days=90/180/365 to restrict to a rolling window; omit for all-time.
     """
     athlete = await _get_athlete(user, session)
 
@@ -58,10 +60,20 @@ async def get_power_bests(
                 break
         return result
 
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+        if days is not None
+        else None
+    )
+
+    where_clauses = [ActivityPowerBest.athlete_id == athlete.id]
+    if cutoff is not None:
+        where_clauses.append(ActivityPowerBest.activity_start_time >= cutoff)
+
     rows = await session.execute(
         select(ActivityPowerBest, Activity.name)
         .join(Activity, Activity.id == ActivityPowerBest.activity_id)
-        .where(ActivityPowerBest.athlete_id == athlete.id)
+        .where(*where_clauses)
         .order_by(ActivityPowerBest.duration_s, ActivityPowerBest.power_w.desc())
     )
     records = rows.all()

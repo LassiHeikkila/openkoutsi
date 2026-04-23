@@ -60,10 +60,20 @@ const MEDAL_HEADERS = [
   <th key="3" className="hidden sm:table-cell px-3 py-2 text-center font-medium text-amber-700 w-32">#3</th>,
 ]
 
+const RANGE_OPTIONS = [
+  { label: 'app.power.rangeAll', days: null },
+  { label: '12M', days: 365 },
+  { label: '6M',  days: 180 },
+  { label: '3M',  days: 90  },
+] as const
+
 export default function PowerPage() {
   const t = useTranslations('app')
   const [unit, setUnit] = useState<'w' | 'wkg'>('w')
-  const { data: powerData, isLoading: powerLoading } = useSWR<AllTimePowerBests>('/api/power/bests', fetcher)
+  const [rangeDays, setRangeDays] = useState<number | null>(null)
+
+  const swrKey = rangeDays != null ? `/api/power/bests?days=${rangeDays}` : '/api/power/bests'
+  const { data: powerData, isLoading: powerLoading } = useSWR<AllTimePowerBests>(swrKey, fetcher)
 
   // Power lookup: duration_s → { rank → entry }
   const byDuration = new Map<number, Map<number, PowerBestEntry>>()
@@ -76,19 +86,34 @@ export default function PowerPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{t('power.title')}</h1>
-        <div className="flex items-center rounded-md border overflow-hidden text-sm">
-          <button
-            className={`px-3 py-1.5 transition-colors ${unit === 'w' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-            onClick={() => setUnit('w')}
-          >
-            W
-          </button>
-          <button
-            className={`px-3 py-1.5 transition-colors ${unit === 'wkg' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-            onClick={() => setUnit('wkg')}
-          >
-            W/kg
-          </button>
+        <div className="flex items-center gap-2">
+          {/* Time range */}
+          <div className="flex items-center rounded-md border overflow-hidden text-sm">
+            {RANGE_OPTIONS.map(({ label, days }) => (
+              <button
+                key={label}
+                className={`px-3 py-1.5 transition-colors ${rangeDays === days ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                onClick={() => setRangeDays(days)}
+              >
+                {label.startsWith('app.') ? t(label.slice(4) as never) : label}
+              </button>
+            ))}
+          </div>
+          {/* Unit */}
+          <div className="flex items-center rounded-md border overflow-hidden text-sm">
+            <button
+              className={`px-3 py-1.5 transition-colors ${unit === 'w' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+              onClick={() => setUnit('w')}
+            >
+              W
+            </button>
+            <button
+              className={`px-3 py-1.5 transition-colors ${unit === 'wkg' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+              onClick={() => setUnit('wkg')}
+            >
+              W/kg
+            </button>
+          </div>
         </div>
       </div>
 

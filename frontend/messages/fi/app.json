@@ -6,7 +6,8 @@
     "duration": "Kesto",
     "loading": "Ladataan\u2026",
     "noData": "Ei tehodataa viel\u00e4. Lataa harjoitus tehomittarilla n\u00e4hd\u00e4ksesi parhaat tuloksesi.",
-    "noWeight": "ei painoa"
+    "noWeight": "ei painoa",
+    "rangeAll": "Kaikki"
   },
   "records": {
     "title": "Matkaenn\u00e4tykset",

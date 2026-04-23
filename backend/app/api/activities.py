@@ -8,14 +8,22 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
 from backend.app.core.file_encryption import decrypt_file, encrypt_file
 from backend.app.db.base import get_session, AsyncSessionLocal
-from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete, User
+from backend.app.models.orm import (
+    Activity,
+    ActivityDistanceBest,
+    ActivityPowerBest,
+    ActivitySource,
+    ActivityStream,
+    Athlete,
+    User,
+)
 from backend.app.schemas.activities import (
     ActivityDetailResponse,
     ActivityListResponse,
@@ -27,6 +35,7 @@ from backend.app.schemas.activities import (
 from backend.app.core.limiter import limiter
 from backend.app.services.fit_processor import process_fit_file, read_fit_start_time
 from backend.app.services.metrics_engine import recalculate_from
+from backend.app.services.provider_sync import _source_priority
 from backend.app.services.training_math import calculate_tss
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -60,36 +69,6 @@ def _maybe_auto_analyze(activity_id: str, athlete: Athlete) -> bool:
     return False
 
 
-async def _dedup_after_fit_processing(
-    activity: Activity,
-    athlete_id: str,
-    session: AsyncSession,
-) -> None:
-    """
-    After a FIT file is processed and start_time is populated, check whether a
-    provider already imported this workout while the upload was still pending.
-
-    If a matching processed activity is found within the duplicate window,
-    mark this upload as a duplicate and suppress its TSS so fitness metrics
-    are not double-counted.
-    """
-    if activity.start_time is None:
-        return
-    result = await session.execute(
-        select(Activity).where(
-            Activity.athlete_id == athlete_id,
-            Activity.id != activity.id,
-            Activity.duplicate_of_id.is_(None),
-            Activity.start_time >= activity.start_time - _DUPLICATE_WINDOW,
-            Activity.start_time <= activity.start_time + _DUPLICATE_WINDOW,
-            Activity.status == "processed",
-        )
-    )
-    existing = result.scalar_one_or_none()
-    if existing is not None:
-        activity.duplicate_of_id = existing.id
-
-
 async def _bg_process_and_recalculate(
     file_path: str, athlete_id: str, activity_id: str
 ) -> None:
@@ -104,22 +83,95 @@ async def _bg_process_and_recalculate(
         )
         activity = activity_result.scalar_one()
 
+        # Load the upload ActivitySource for this activity
+        src_result = await session.execute(
+            select(ActivitySource).where(
+                ActivitySource.activity_id == activity_id,
+                ActivitySource.provider == "upload",
+            )
+        )
+        upload_src = src_result.scalar_one()
+
         try:
             await process_fit_file(file_path, athlete, activity, session)
-            # Suppress TSS if a provider already imported this workout while the
-            # FIT upload was still pending, to avoid double-counting in CTL/ATL.
-            await _dedup_after_fit_processing(activity, athlete_id, session)
+
+            # After FIT processing sets start_time, check whether a provider already
+            # imported this workout while the upload was still pending (race condition).
+            # Upload always wins (priority=1), so we merge into the existing activity.
+            target_act = activity
+            if activity.start_time is not None:
+                existing_result = await session.execute(
+                    select(Activity).where(
+                        Activity.athlete_id == athlete_id,
+                        Activity.id != activity_id,
+                        Activity.start_time >= activity.start_time - _DUPLICATE_WINDOW,
+                        Activity.start_time <= activity.start_time + _DUPLICATE_WINDOW,
+                    )
+                )
+                existing_act = existing_result.scalar_one_or_none()
+
+                if existing_act is not None:
+                    # Upload wins (priority=1). Copy all metrics to the existing Activity.
+                    for attr in (
+                        "name", "sport_type", "start_time", "duration_s", "distance_m",
+                        "elevation_m", "avg_power", "normalized_power", "avg_hr", "max_hr",
+                        "avg_speed_ms", "avg_cadence", "tss", "intensity_factor", "status",
+                    ):
+                        setattr(existing_act, attr, getattr(activity, attr))
+
+                    # Delete existing streams/bests on the provider activity.
+                    await session.execute(
+                        delete(ActivityStream).where(ActivityStream.activity_id == existing_act.id)
+                    )
+                    await session.execute(
+                        delete(ActivityPowerBest).where(ActivityPowerBest.activity_id == existing_act.id)
+                    )
+                    await session.execute(
+                        delete(ActivityDistanceBest).where(ActivityDistanceBest.activity_id == existing_act.id)
+                    )
+                    await session.flush()
+
+                    # Re-key the freshly created streams/bests from the upload activity
+                    # to the existing activity.
+                    await session.execute(
+                        update(ActivityStream)
+                        .where(ActivityStream.activity_id == activity_id)
+                        .values(activity_id=existing_act.id)
+                    )
+                    await session.execute(
+                        update(ActivityPowerBest)
+                        .where(ActivityPowerBest.activity_id == activity_id)
+                        .values(activity_id=existing_act.id)
+                    )
+                    await session.execute(
+                        update(ActivityDistanceBest)
+                        .where(ActivityDistanceBest.activity_id == activity_id)
+                        .values(activity_id=existing_act.id)
+                    )
+                    await session.flush()
+
+                    # Move the upload source to the existing activity.
+                    upload_src.activity_id = existing_act.id
+                    await session.flush()
+
+                    # Delete the now-empty upload Activity.
+                    await session.execute(
+                        delete(Activity).where(Activity.id == activity_id)
+                    )
+                    await session.flush()
+
+                    target_act = existing_act
+
             start_date = (
-                activity.start_time.date()
-                if activity.start_time and hasattr(activity.start_time, "date")
+                target_act.start_time.date()
+                if target_act.start_time and hasattr(target_act.start_time, "date")
                 else date.today()
             )
-            await recalculate_from(athlete_id, start_date, session)
 
-            # Encrypt the FIT file now that analysis is complete.
+            # Encrypt the FIT file now that processing is complete.
             try:
                 encrypt_file(Path(file_path), athlete.user_id)
-                activity.fit_file_encrypted = True
+                upload_src.fit_file_encrypted = True
             except Exception:
                 log.warning(
                     "Failed to encrypt FIT file %s for user %s — file left in plaintext",
@@ -128,15 +180,24 @@ async def _bg_process_and_recalculate(
                     exc_info=True,
                 )
 
-            # asyncio.create_task schedules the coroutine but won't run it until
-            # the next await, so setting analysis_status and committing first
-            # ensures the task sees the correct state in the DB.
-            if _maybe_auto_analyze(activity_id, athlete):
-                activity.analysis_status = "pending"
+            if _maybe_auto_analyze(target_act.id, athlete):
+                target_act.analysis_status = "pending"
+
             await session.commit()
+            await recalculate_from(athlete_id, start_date, session)
+
         except Exception:
-            activity.status = "error"
-            await session.commit()
+            # Best-effort: mark the original upload as failed if it still exists.
+            try:
+                err_result = await session.execute(
+                    select(Activity).where(Activity.id == activity_id)
+                )
+                err_act = err_result.scalar_one_or_none()
+                if err_act is not None:
+                    err_act.status = "error"
+                    await session.commit()
+            except Exception:
+                pass
             raise
 
 
@@ -184,9 +245,7 @@ async def upload_activity(
         raise HTTPException(status_code=400, detail="File is not a valid FIT file")
 
     # Duplicate detection: extract the activity's start timestamp and check
-    # whether the athlete already has an activity within a 30-second window.
-    # This catches both re-uploads of the same FIT file and FIT files that
-    # correspond to an activity already imported from Strava.
+    # whether the athlete already has an activity within the duplicate window.
     fit_start = read_fit_start_time(str(file_path))
     if fit_start is not None:
         dupe_result = await session.execute(
@@ -207,11 +266,17 @@ async def upload_activity(
     activity = Activity(
         id=str(uuid.uuid4()),
         athlete_id=athlete.id,
-        source="upload",
-        fit_file_path=str(file_path),
         status="pending",
     )
     session.add(activity)
+    await session.flush()
+
+    upload_src = ActivitySource(
+        activity_id=activity.id,
+        provider="upload",
+        fit_file_path=str(file_path),
+    )
+    session.add(upload_src)
     await session.commit()
     await session.refresh(activity)
 
@@ -245,7 +310,6 @@ async def create_manual_activity(
     activity = Activity(
         id=str(uuid.uuid4()),
         athlete_id=athlete.id,
-        source="manual",
         name=payload.name or f"{payload.sport_type} Activity",
         sport_type=payload.sport_type,
         start_time=payload.start_time,
@@ -257,6 +321,13 @@ async def create_manual_activity(
         status="processed",
     )
     session.add(activity)
+    await session.flush()
+
+    manual_src = ActivitySource(
+        activity_id=activity.id,
+        provider="manual",
+    )
+    session.add(manual_src)
     await session.commit()
     await session.refresh(activity)
 
@@ -292,10 +363,19 @@ async def list_activities(
     if sport_type:
         base_query = base_query.where(Activity.sport_type == sport_type)
     if wahoo_device_only:
-        # Hide Wahoo activities that have no device data (synced from a third-party app
-        # via Wahoo — no workout_summary, so duration_s is never populated).
+        # Hide blank Wahoo activities (no real workout data). In the new model,
+        # these have duration_s=None. Show if the activity has a duration OR
+        # if it has at least one non-Wahoo source.
+        non_wahoo_exists = (
+            select(ActivitySource.id)
+            .where(
+                ActivitySource.activity_id == Activity.id,
+                ActivitySource.provider != "wahoo",
+            )
+            .exists()
+        )
         base_query = base_query.where(
-            or_(Activity.source != "wahoo", Activity.duration_s.isnot(None))
+            or_(Activity.duration_s.isnot(None), non_wahoo_exists)
         )
 
     count_result = await session.execute(
@@ -365,10 +445,13 @@ async def download_fit_file(
     if activity is None:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    if not activity.fit_file_path:
+    # Find the best source that has a FIT file (lowest priority number = best)
+    fit_sources = [s for s in activity.sources if s.fit_file_path]
+    if not fit_sources:
         raise HTTPException(status_code=404, detail="No FIT file for this activity")
 
-    fit_path = Path(activity.fit_file_path).resolve()
+    best = min(fit_sources, key=lambda s: _source_priority(s.provider, True))
+    fit_path = Path(best.fit_file_path).resolve()
     expected_dir = Path(settings.file_storage_path).resolve()
     if not fit_path.is_relative_to(expected_dir):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -381,7 +464,7 @@ async def download_fit_file(
     ).strip()
     filename = f"{safe_name}.fit"
 
-    if activity.fit_file_encrypted:
+    if best.fit_file_encrypted:
         content = decrypt_file(fit_path, athlete.user_id)
         return Response(
             content=content,
@@ -437,10 +520,12 @@ async def delete_activity(
     if activity is None:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    if activity.fit_file_path:
-        p = Path(activity.fit_file_path)
-        if p.exists():
-            p.unlink()
+    # Delete FIT files from all sources
+    for src in activity.sources:
+        if src.fit_file_path:
+            p = Path(src.fit_file_path)
+            if p.exists():
+                p.unlink()
 
     start_date = (
         activity.start_time.date()

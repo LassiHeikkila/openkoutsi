@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -156,15 +157,6 @@ class Activity(Base):
     athlete_id: Mapped[str] = mapped_column(
         String, ForeignKey("athletes.id", ondelete="CASCADE")
     )
-    strava_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True)
-    # Generic deduplication key for non-Strava providers (source + external_id pair is unique per athlete)
-    external_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    source: Mapped[str] = mapped_column(String, default="upload")
-    # Cross-provider duplicate: points to the primary activity record.
-    # When set, this activity's TSS is suppressed so fitness metrics aren't double-counted.
-    duplicate_of_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("activities.id", ondelete="SET NULL"), nullable=True
-    )
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     sport_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     start_time: Mapped[Optional[datetime]] = mapped_column(
@@ -181,14 +173,16 @@ class Activity(Base):
     avg_cadence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     tss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     intensity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    fit_file_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    fit_file_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String, default="pending")
     analysis_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     athlete: Mapped["Athlete"] = relationship("Athlete", back_populates="activities")
+    sources: Mapped[list["ActivitySource"]] = relationship(
+        "ActivitySource", back_populates="activity",
+        cascade="all, delete-orphan", lazy="selectin",
+    )
     streams: Mapped[list["ActivityStream"]] = relationship(
         "ActivityStream", back_populates="activity", cascade="all, delete-orphan"
     )
@@ -201,7 +195,38 @@ class Activity(Base):
 
     @property
     def has_fit_file(self) -> bool:
-        return bool(self.fit_file_path)
+        return any(s.fit_file_path for s in self.sources)
+
+
+class ActivitySource(Base):
+    """Tracks which providers have contributed data to a single Activity.
+
+    One Activity row represents one real-world workout. Each provider that
+    imported or received data for that workout gets one ActivitySource row.
+    The Activity's computed fields (TSS, streams, bests) always reflect the
+    highest-priority source that has data.
+    """
+
+    __tablename__ = "activity_sources"
+    __table_args__ = (
+        UniqueConstraint("activity_id", "provider", name="uq_activity_sources_activity_provider"),
+        Index("ix_activity_sources_provider_external_id", "provider", "external_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    activity_id: Mapped[str] = mapped_column(
+        String, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False
+    )
+    # "upload", "wahoo", "strava", "manual"
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    # Provider's own activity ID; null for upload/manual entries
+    external_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # FIT file contributed by this source (if any)
+    fit_file_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    fit_file_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    activity: Mapped["Activity"] = relationship("Activity", back_populates="sources")
 
 
 class ActivityStream(Base):

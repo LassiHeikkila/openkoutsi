@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ActivityUpdate(BaseModel):
@@ -28,8 +28,9 @@ class ManualActivityCreate(BaseModel):
 class ActivityResponse(BaseModel):
     id: str
     athlete_id: str
-    strava_id: Optional[str] = None
-    source: str
+    # List of provider names that contributed data to this activity,
+    # e.g. ["wahoo", "strava"] or ["upload"].
+    sources: list[str] = []
     name: Optional[str] = None
     sport_type: Optional[str] = None
     start_time: Optional[datetime] = None
@@ -47,6 +48,33 @@ class ActivityResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _extract_sources(cls, data: Any) -> Any:
+        """Populate `sources` from the ORM relationship when validating from an ORM object."""
+        if hasattr(data, "sources"):
+            return {
+                "id": data.id,
+                "athlete_id": data.athlete_id,
+                "sources": [s.provider for s in (data.sources or [])],
+                "name": data.name,
+                "sport_type": data.sport_type,
+                "start_time": data.start_time,
+                "duration_s": data.duration_s,
+                "distance_m": data.distance_m,
+                "elevation_m": data.elevation_m,
+                "avg_power": data.avg_power,
+                "normalized_power": data.normalized_power,
+                "avg_hr": data.avg_hr,
+                "max_hr": data.max_hr,
+                "tss": data.tss,
+                "intensity_factor": data.intensity_factor,
+                "has_fit_file": data.has_fit_file,
+                "status": data.status,
+                "created_at": data.created_at,
+            }
+        return data
 
 
 class ActivityListResponse(BaseModel):
@@ -74,8 +102,7 @@ class ActivityDetailResponse(ActivityResponse):
         return cls(
             id=activity.id,
             athlete_id=activity.athlete_id,
-            strava_id=activity.strava_id,
-            source=activity.source,
+            sources=[s.provider for s in (activity.sources or [])],
             name=activity.name,
             sport_type=activity.sport_type,
             start_time=activity.start_time,
@@ -88,7 +115,7 @@ class ActivityDetailResponse(ActivityResponse):
             max_hr=activity.max_hr,
             tss=activity.tss,
             intensity_factor=activity.intensity_factor,
-            has_fit_file=bool(activity.fit_file_path),
+            has_fit_file=activity.has_fit_file,
             status=activity.status,
             created_at=activity.created_at,
             streams=streams,

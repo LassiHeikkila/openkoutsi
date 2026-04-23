@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, ActivityPowerBest, ActivityStream, Athlete
+from backend.app.models.orm import Activity, ActivityPowerBest, ActivitySource, ActivityStream, Athlete
 
 TESTDATA = Path(__file__).parent.parent.parent / "testdata"
 SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"
@@ -216,6 +216,13 @@ class TestPowerBestsFromFitFile:
             select(Activity).where(Activity.id == activity_id)
         )
         activity = act_result.scalar_one()
+        src_result = await session.execute(
+            select(ActivitySource).where(
+                ActivitySource.activity_id == activity_id,
+                ActivitySource.provider == "upload",
+            )
+        )
+        upload_src = src_result.scalar_one()
         ath_result = await session.execute(
             select(Athlete).where(Athlete.id == activity.athlete_id)
         )
@@ -223,7 +230,7 @@ class TestPowerBestsFromFitFile:
 
         from backend.app.services.fit_processor import process_fit_file
 
-        await process_fit_file(activity.fit_file_path, athlete, activity, session)
+        await process_fit_file(upload_src.fit_file_path, athlete, activity, session)
 
         resp = await client.get("/api/power/bests", headers=auth_headers)
         assert resp.status_code == 200

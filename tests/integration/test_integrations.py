@@ -12,7 +12,7 @@ from jose import jwt
 from sqlalchemy import select
 
 from backend.app.core.config import settings
-from backend.app.models.orm import Activity, Athlete, ProviderConnection
+from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection
 
 
 # ── Test helpers ───────────────────────────────────────────────────────────────
@@ -42,13 +42,13 @@ async def _add_activity(
 ) -> Activity:
     act = Activity(
         athlete_id=athlete.id,
-        source=source,
-        external_id=external_id,
         start_time=datetime(2024, 1, 15, tzinfo=timezone.utc),
         duration_s=3600,
         status="processed",
     )
     session.add(act)
+    await session.flush()
+    session.add(ActivitySource(activity_id=act.id, provider=source, external_id=external_id))
     await session.commit()
     return act
 

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, Athlete, ProviderConnection
+from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection
 from backend.app.services.provider_sync import ensure_fresh_token, sync_provider_activities
 from backend.app.services.providers.base import NormalizedActivity
 
@@ -25,7 +25,6 @@ def _mock_conn(
     refresh_token: str = "refresh-tok",
     token_expires_at: datetime | None = None,
 ) -> ProviderConnection:
-    """Return a lightweight mock that satisfies ensure_fresh_token's attribute access."""
     conn = MagicMock(spec=ProviderConnection)
     conn.provider = provider
     conn.access_token = access_token
@@ -151,12 +150,14 @@ class TestEnsureFreshToken:
 
 
 class TestSyncProviderActivities:
-    async def test_imports_single_new_activity(self, session):
+    async def test_imports_new_activity_creates_source(self, session):
+        """A new activity creates exactly one Activity + one ActivitySource."""
         athlete = await _make_athlete(session)
         conn = await _make_connection(session, athlete)
 
         mock_client = MagicMock()
         mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
         mock_client.get_activity_streams = AsyncMock(return_value={})
         mock_cls = MagicMock(return_value=mock_client)
 
@@ -166,25 +167,34 @@ class TestSyncProviderActivities:
         assert count == 1
         assert earliest == date(2024, 6, 1)
 
-    async def test_skips_already_imported_external_id(self, session):
+        # Verify Activity + ActivitySource were created
+        acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
+        assert len(acts) == 1
+        srcs = (await session.execute(select(ActivitySource).where(ActivitySource.activity_id == acts[0].id))).scalars().all()
+        assert len(srcs) == 1
+        assert srcs[0].provider == "strava"
+        assert srcs[0].external_id == "act-1"
+
+    async def test_skips_already_imported_source(self, session):
+        """If (provider, external_id) already has an ActivitySource, skip it."""
         athlete = await _make_athlete(session, user_id="user-2")
         conn = await _make_connection(session, athlete)
 
-        # Pre-seed an activity with the same source + external_id
-        session.add(
-            Activity(
-                athlete_id=athlete.id,
-                source="strava",
-                external_id="act-1",
-                start_time=datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc),
-                duration_s=3600,
-                status="processed",
-            )
+        # Pre-seed Activity + ActivitySource
+        act = Activity(
+            athlete_id=athlete.id,
+            start_time=datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc),
+            duration_s=3600,
+            status="processed",
         )
+        session.add(act)
+        await session.flush()
+        session.add(ActivitySource(activity_id=act.id, provider="strava", external_id="act-1"))
         await session.commit()
 
         mock_client = MagicMock()
         mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
         mock_client.get_activity_streams = AsyncMock(return_value={})
         mock_cls = MagicMock(return_value=mock_client)
 
@@ -194,41 +204,228 @@ class TestSyncProviderActivities:
         assert count == 0
         assert earliest is None
 
-    async def test_cross_source_dedup_links_upload_to_provider(self, session):
-        """An FIT-uploaded activity at the same time is linked, not duplicated."""
+    async def test_same_workout_second_provider_adds_source_to_existing_activity(self, session):
+        """When a second provider syncs the same workout, it adds an ActivitySource
+        to the existing Activity instead of creating a new one."""
         athlete = await _make_athlete(session, user_id="user-3")
-        conn = await _make_connection(session, athlete)
+        strava_conn = await _make_connection(session, athlete, provider="strava")
+        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
 
         base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
-        upload_act = Activity(
-            athlete_id=athlete.id,
-            source="upload",
-            external_id=None,
-            start_time=base_time,
-            duration_s=3600,
-            status="processed",
-        )
-        session.add(upload_act)
+
+        # Sync Strava first
+        strava_mock = MagicMock()
+        strava_mock.list_activities = AsyncMock(side_effect=[[_norm("strava-1", "strava", base_time)], []])
+        strava_mock.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        strava_mock.get_activity_streams = AsyncMock(return_value={})
+        strava_cls = MagicMock(return_value=strava_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
+            await sync_provider_activities(athlete, strava_conn, session)
+
+        # Sync Wahoo — same start_time, should attach to existing Activity
+        wahoo_mock = MagicMock()
+        wahoo_mock.list_activities = AsyncMock(side_effect=[[_norm("wahoo-1", "wahoo", base_time)], []])
+        wahoo_mock.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        wahoo_mock.get_activity_streams = AsyncMock(return_value={})
+        wahoo_cls = MagicMock(return_value=wahoo_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
+            await sync_provider_activities(athlete, wahoo_conn, session)
+
+        # Exactly ONE Activity, TWO ActivitySources
+        acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
+        assert len(acts) == 1
+
+        srcs = (await session.execute(select(ActivitySource).where(ActivitySource.activity_id == acts[0].id))).scalars().all()
+        providers = {s.provider for s in srcs}
+        assert providers == {"strava", "wahoo"}
+
+    async def test_wahoo_with_fit_repopulates_when_strava_is_existing_winner(self, session):
+        """Wahoo with a FIT file (priority=2) beats an existing Strava source (priority=3)
+        and repopulates the Activity metrics."""
+        athlete = await _make_athlete(session, user_id="user-4")
+        athlete.ftp = 250
         await session.commit()
-        await session.refresh(upload_act)
 
-        norm_act = _norm(ext_id="strava-99", start_time=base_time)
-        mock_client = MagicMock()
-        mock_client.list_activities = AsyncMock(side_effect=[[norm_act], []])
-        mock_client.get_activity_streams = AsyncMock(return_value={})
-        mock_cls = MagicMock(return_value=mock_client)
+        strava_conn = await _make_connection(session, athlete, provider="strava")
+        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
 
-        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
-            count, earliest = await sync_provider_activities(athlete, conn, session)
+        base_time = datetime(2024, 7, 1, 8, 0, tzinfo=timezone.utc)
 
-        # Linked, not counted as a new import
-        assert count == 0
-        # The upload activity now carries the provider external_id
-        await session.refresh(upload_act)
-        assert upload_act.external_id == "strava-99"
+        # Strava syncs first with power stream data
+        strava_mock = MagicMock()
+        strava_mock.list_activities = AsyncMock(side_effect=[[_norm("strava-1", "strava", base_time)], []])
+        strava_mock.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        strava_mock.get_activity_streams = AsyncMock(return_value={"power": [150] * 120})
+        strava_cls = MagicMock(return_value=strava_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
+            await sync_provider_activities(athlete, strava_conn, session)
+
+        # Capture Strava-derived TSS
+        acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
+        assert len(acts) == 1
+        strava_tss = acts[0].tss
+
+        # Wahoo syncs with a FIT file — should repopulate (priority 2 beats priority 3)
+        fit_bytes = b"fakeFITdata"
+        wahoo_mock = MagicMock()
+        wahoo_mock.list_activities = AsyncMock(side_effect=[[_norm("wahoo-1", "wahoo", base_time)], []])
+        # Return fake FIT bytes so we know FIT was "downloaded"
+        wahoo_mock.download_fit_file = AsyncMock(return_value=fit_bytes)
+        wahoo_cls = MagicMock(return_value=wahoo_mock)
+
+        from unittest.mock import patch as _patch
+        import fitdecode
+
+        fake_profile = MagicMock()
+        fake_profile.power = [200] * 120
+        fake_profile.heartRate = []
+        fake_profile.cadence = []
+        fake_profile.speed = []
+        fake_profile.altitude = []
+        fake_profile.avgHeartRate = None
+        fake_profile.peakHR = None
+        fake_profile.avgPower = 200.0
+        fake_profile.avgCadence = 0
+        fake_profile.avgSpeed = 0
+        fake_profile.duration = 3600
+        fake_profile.distance = 50000
+        fake_profile.elevationGain = 500
+        fake_profile.start_time = base_time
+        fake_profile.sport_type = "cycling"
+
+        with (
+            patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}),
+            patch("backend.app.services.provider_sync.fitdecode.FitReader"),
+            patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
+            patch("backend.app.services.provider_sync.encrypt_file"),
+        ):
+            wahoo_count, _ = await sync_provider_activities(athlete, wahoo_conn, session)
+
+        assert wahoo_count == 1
+
+        await session.refresh(acts[0])
+        # Activity should now have Wahoo FIT data (higher power → higher TSS)
+        assert acts[0].tss is not None
+        # Two sources on the single Activity
+        srcs = (await session.execute(select(ActivitySource).where(ActivitySource.activity_id == acts[0].id))).scalars().all()
+        assert {s.provider for s in srcs} == {"strava", "wahoo"}
+
+    async def test_lower_priority_source_does_not_repopulate(self, session):
+        """Strava (priority=3) does not repopulate when Wahoo+FIT (priority=2) is existing winner."""
+        athlete = await _make_athlete(session, user_id="user-5")
+        athlete.ftp = 250
+        await session.commit()
+
+        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
+        strava_conn = await _make_connection(session, athlete, provider="strava")
+
+        base_time = datetime(2024, 7, 2, 8, 0, tzinfo=timezone.utc)
+
+        # Wahoo syncs first with a FIT file (priority=2)
+        fit_bytes = b"fakeFIT"
+        wahoo_mock = MagicMock()
+        wahoo_mock.list_activities = AsyncMock(side_effect=[[_norm("wahoo-1", "wahoo", base_time)], []])
+        wahoo_mock.download_fit_file = AsyncMock(return_value=fit_bytes)
+        wahoo_cls = MagicMock(return_value=wahoo_mock)
+
+        fake_profile = MagicMock()
+        fake_profile.power = [220] * 3600
+        fake_profile.heartRate = []
+        fake_profile.cadence = []
+        fake_profile.speed = []
+        fake_profile.altitude = []
+        fake_profile.avgHeartRate = None
+        fake_profile.peakHR = None
+        fake_profile.avgPower = 220.0
+        fake_profile.avgCadence = 0
+        fake_profile.avgSpeed = 0
+        fake_profile.duration = 3600
+        fake_profile.distance = 50000
+        fake_profile.elevationGain = 500
+        fake_profile.start_time = base_time
+        fake_profile.sport_type = "cycling"
+
+        with (
+            patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}),
+            patch("backend.app.services.provider_sync.fitdecode.FitReader"),
+            patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
+            patch("backend.app.services.provider_sync.encrypt_file"),
+        ):
+            await sync_provider_activities(athlete, wahoo_conn, session)
+
+        acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
+        assert len(acts) == 1
+        wahoo_tss = acts[0].tss
+
+        # Strava syncs with different stream data — should NOT repopulate (priority 3 > 2)
+        strava_mock = MagicMock()
+        strava_mock.list_activities = AsyncMock(side_effect=[[_norm("strava-1", "strava", base_time)], []])
+        strava_mock.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        strava_mock.get_activity_streams = AsyncMock(return_value={"power": [100] * 120})
+        strava_cls = MagicMock(return_value=strava_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
+            strava_count, _ = await sync_provider_activities(athlete, strava_conn, session)
+
+        assert strava_count == 0  # Strava source added but not counted as a new/updated activity
+
+        await session.refresh(acts[0])
+        # Metrics should be unchanged from Wahoo's data
+        assert acts[0].tss == wahoo_tss
+
+        srcs = (await session.execute(select(ActivitySource).where(ActivitySource.activity_id == acts[0].id))).scalars().all()
+        assert {s.provider for s in srcs} == {"wahoo", "strava"}
+
+    async def test_blank_wahoo_strava_with_data_becomes_winner(self, session):
+        """Wahoo without FIT (priority=4) is already existing; Strava (priority=3) wins
+        and repopulates the Activity metrics."""
+        athlete = await _make_athlete(session, user_id="user-6")
+        athlete.ftp = 250
+        await session.commit()
+
+        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
+        strava_conn = await _make_connection(session, athlete, provider="strava")
+
+        base_time = datetime(2024, 7, 5, 8, 0, tzinfo=timezone.utc)
+
+        # Wahoo syncs first — no FIT, no streams → blank (priority=4)
+        wahoo_mock = MagicMock()
+        wahoo_mock.list_activities = AsyncMock(side_effect=[[_norm("wahoo-blank", "wahoo", base_time)], []])
+        wahoo_mock.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        wahoo_mock.get_activity_streams = AsyncMock(return_value={})
+        wahoo_cls = MagicMock(return_value=wahoo_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
+            await sync_provider_activities(athlete, wahoo_conn, session)
+
+        acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
+        assert len(acts) == 1
+        assert acts[0].tss is None  # blank Wahoo has no TSS
+
+        # Strava syncs with power data → priority=3 beats blank Wahoo priority=4 → repopulates
+        strava_mock = MagicMock()
+        strava_mock.list_activities = AsyncMock(side_effect=[[_norm("strava-real", "strava", base_time)], []])
+        strava_mock.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        strava_mock.get_activity_streams = AsyncMock(return_value={"power": [200] * 120})
+        strava_cls = MagicMock(return_value=strava_mock)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
+            strava_count, _ = await sync_provider_activities(athlete, strava_conn, session)
+
+        assert strava_count == 1  # repopulated
+
+        await session.refresh(acts[0])
+        # Activity should now have Strava's data
+        assert acts[0].tss is not None
+
+        srcs = (await session.execute(select(ActivitySource).where(ActivitySource.activity_id == acts[0].id))).scalars().all()
+        assert {s.provider for s in srcs} == {"wahoo", "strava"}
 
     async def test_returns_correct_count_and_earliest_date(self, session):
-        athlete = await _make_athlete(session, user_id="user-4")
+        athlete = await _make_athlete(session, user_id="user-7")
         conn = await _make_connection(session, athlete)
 
         activities = [
@@ -240,6 +437,7 @@ class TestSyncProviderActivities:
         ]
         mock_client = MagicMock()
         mock_client.list_activities = AsyncMock(side_effect=[activities, []])
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
         mock_client.get_activity_streams = AsyncMock(return_value={})
         mock_cls = MagicMock(return_value=mock_client)
 
@@ -252,11 +450,12 @@ class TestSyncProviderActivities:
     async def test_stream_data_persisted_with_activity(self, session):
         from backend.app.models.orm import ActivityStream
 
-        athlete = await _make_athlete(session, user_id="user-5")
+        athlete = await _make_athlete(session, user_id="user-8")
         conn = await _make_connection(session, athlete)
 
         mock_client = MagicMock()
         mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
         mock_client.get_activity_streams = AsyncMock(
             return_value={"power": [200, 210, 220], "heartrate": [140, 145, 150]}
         )
@@ -267,12 +466,9 @@ class TestSyncProviderActivities:
 
         assert count == 1
 
-        result = await session.execute(
-            select(Activity).where(
-                Activity.athlete_id == athlete.id, Activity.source == "strava"
-            )
-        )
-        act = result.scalar_one()
+        act = (await session.execute(
+            select(Activity).where(Activity.athlete_id == athlete.id)
+        )).scalar_one()
         stream_result = await session.execute(
             select(ActivityStream).where(ActivityStream.activity_id == act.id)
         )
@@ -281,7 +477,7 @@ class TestSyncProviderActivities:
         assert "heartrate" in stream_types
 
     async def test_unknown_provider_returns_zero(self, session):
-        athlete = await _make_athlete(session, user_id="user-6")
+        athlete = await _make_athlete(session, user_id="user-9")
         conn = await _make_connection(session, athlete, provider="unknown")
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {}):
@@ -292,18 +488,23 @@ class TestSyncProviderActivities:
 
     async def test_pagination_stops_on_empty_page(self, session):
         """list_activities is called until it returns an empty list."""
-        athlete = await _make_athlete(session, user_id="user-7")
+        athlete = await _make_athlete(session, user_id="user-10")
         conn = await _make_connection(session, athlete)
 
+        # Each activity has a distinct start_time so they aren't merged
+        t1 = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
+        t2 = datetime(2024, 6, 2, 10, 0, tzinfo=timezone.utc)
+        t3 = datetime(2024, 6, 3, 10, 0, tzinfo=timezone.utc)
+
         mock_client = MagicMock()
-        # Page 1 has 2 activities, page 2 has 1, page 3 is empty → stop
         mock_client.list_activities = AsyncMock(
             side_effect=[
-                [_norm("a1"), _norm("a2")],
-                [_norm("a3")],
+                [_norm("a1", start_time=t1), _norm("a2", start_time=t2)],
+                [_norm("a3", start_time=t3)],
                 [],
             ]
         )
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
         mock_client.get_activity_streams = AsyncMock(return_value={})
         mock_cls = MagicMock(return_value=mock_client)
 
@@ -312,292 +513,3 @@ class TestSyncProviderActivities:
 
         assert count == 3
         assert mock_client.list_activities.call_count == 3
-
-    async def test_cross_provider_dedup_marks_second_as_duplicate(self, session):
-        """
-        When the same workout is synced from two different providers and the
-        first-synced activity already has TSS data, the second import is stored
-        with duplicate_of_id pointing to the first.
-        """
-        athlete = await _make_athlete(session, user_id="user-8")
-        athlete.ftp = 250
-        await session.commit()
-
-        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
-        strava_conn = await _make_connection(session, athlete, provider="strava")
-
-        base_time = datetime(2024, 7, 1, 8, 0, tzinfo=timezone.utc)
-
-        # Sync Wahoo first — with power streams so it gets a real TSS
-        wahoo_mock = MagicMock()
-        wahoo_mock.list_activities = AsyncMock(
-            side_effect=[[_norm("wahoo-1", "wahoo", base_time)], []]
-        )
-        wahoo_mock.get_activity_streams = AsyncMock(
-            return_value={"power": [200] * 120}
-        )
-        wahoo_cls = MagicMock(return_value=wahoo_mock)
-
-        with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
-            wahoo_count, _ = await sync_provider_activities(athlete, wahoo_conn, session)
-        assert wahoo_count == 1
-
-        # Sync Strava with the same start_time (as happens when Wahoo pushes to Strava)
-        strava_mock = MagicMock()
-        strava_mock.list_activities = AsyncMock(
-            side_effect=[[_norm("strava-1", "strava", base_time)], []]
-        )
-        strava_mock.get_activity_streams = AsyncMock(return_value={})
-        strava_cls = MagicMock(return_value=strava_mock)
-
-        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
-            strava_count, _ = await sync_provider_activities(athlete, strava_conn, session)
-        assert strava_count == 1  # imported, but as duplicate
-
-        all_result = await session.execute(
-            select(Activity).where(Activity.athlete_id == athlete.id)
-        )
-        activities = all_result.scalars().all()
-        assert len(activities) == 2
-
-        duplicates = [a for a in activities if a.duplicate_of_id is not None]
-        assert len(duplicates) == 1, "exactly one activity should be marked as duplicate"
-
-        dup = duplicates[0]
-        assert dup.source == "strava"
-
-        canonical = next(a for a in activities if a.duplicate_of_id is None)
-        assert canonical.source == "wahoo"
-        assert canonical.tss is not None, "canonical (Wahoo) should carry TSS"
-        assert dup.duplicate_of_id == canonical.id
-
-    async def test_blank_first_provider_demoted_when_second_has_data(self, session):
-        """
-        If the first-synced provider activity has no TSS (e.g. a Wahoo activity
-        that came through a third-party app with no FIT file), and the second
-        provider (Strava) has power data that yields a real TSS, the Strava
-        activity should become the canonical record counted toward metrics and
-        the blank Wahoo activity should be marked as its duplicate.
-        """
-        athlete = await _make_athlete(session, user_id="user-12")
-        athlete.ftp = 250
-        await session.commit()
-
-        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
-        strava_conn = await _make_connection(session, athlete, provider="strava")
-
-        base_time = datetime(2024, 7, 5, 8, 0, tzinfo=timezone.utc)
-
-        # Wahoo syncs first — no streams, no FTP match → tss=None ("blank")
-        wahoo_mock = MagicMock()
-        wahoo_mock.list_activities = AsyncMock(
-            side_effect=[[_norm("wahoo-blank", "wahoo", base_time)], []]
-        )
-        wahoo_mock.get_activity_streams = AsyncMock(return_value={})
-        wahoo_cls = MagicMock(return_value=wahoo_mock)
-
-        with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
-            await sync_provider_activities(athlete, wahoo_conn, session)
-
-        # Strava syncs with 120 s of power data → normalized_power → TSS
-        strava_mock = MagicMock()
-        strava_mock.list_activities = AsyncMock(
-            side_effect=[[_norm("strava-real", "strava", base_time)], []]
-        )
-        strava_mock.get_activity_streams = AsyncMock(
-            return_value={"power": [200] * 120}
-        )
-        strava_cls = MagicMock(return_value=strava_mock)
-
-        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
-            await sync_provider_activities(athlete, strava_conn, session)
-
-        all_result = await session.execute(
-            select(Activity).where(Activity.athlete_id == athlete.id)
-        )
-        activities = all_result.scalars().all()
-        assert len(activities) == 2
-
-        wahoo_act = next(a for a in activities if a.source == "wahoo")
-        strava_act = next(a for a in activities if a.source == "strava")
-
-        # Strava is canonical; Wahoo is demoted to duplicate
-        assert strava_act.duplicate_of_id is None, "Strava should be the canonical record"
-        assert wahoo_act.duplicate_of_id == strava_act.id, "blank Wahoo should be duplicate of Strava"
-
-        # Only Strava (with TSS) contributes to metrics
-        assert strava_act.tss is not None
-        metrics_contributors = [
-            a for a in activities if a.tss is not None and a.duplicate_of_id is None
-        ]
-        assert len(metrics_contributors) == 1
-        assert metrics_contributors[0].source == "strava"
-
-
-class TestDedupAfterFitProcessing:
-    """
-    Tests for _dedup_after_fit_processing: the guard that prevents double-counting
-    TSS when a provider imports a workout while the FIT upload bg task is still
-    pending (start_time not yet set on the upload activity).
-    """
-
-    async def test_fit_upload_marked_duplicate_when_provider_activity_exists(self, session):
-        """
-        If a provider imported the same workout before the FIT bg task ran,
-        the upload activity should be marked as a duplicate and its TSS nulled.
-        """
-        from backend.app.api.activities import _dedup_after_fit_processing
-
-        athlete = await _make_athlete(session, user_id="user-9")
-        base_time = datetime(2024, 7, 2, 9, 0, tzinfo=timezone.utc)
-
-        # Provider activity already in DB (imported while FIT upload was pending)
-        provider_act = Activity(
-            id="wahoo-act-id",
-            athlete_id=athlete.id,
-            source="wahoo",
-            external_id="wahoo-42",
-            start_time=base_time,
-            duration_s=3600,
-            tss=80.0,
-            status="processed",
-        )
-        session.add(provider_act)
-        await session.commit()
-
-        # Simulate what process_fit_file sets on the upload activity
-        upload_act = Activity(
-            id="upload-act-id",
-            athlete_id=athlete.id,
-            source="upload",
-            external_id=None,
-            start_time=base_time,  # now set after FIT parsing
-            duration_s=3600,
-            tss=82.0,
-            status="processed",
-        )
-        session.add(upload_act)
-        await session.commit()
-
-        await _dedup_after_fit_processing(upload_act, athlete.id, session)
-        await session.commit()
-        await session.refresh(upload_act)
-
-        # duplicate_of_id is set; TSS is preserved so it still shows on the activity
-        assert upload_act.duplicate_of_id == "wahoo-act-id"
-        assert upload_act.tss == 82.0
-
-    async def test_fit_upload_not_marked_duplicate_when_no_provider_activity(self, session):
-        """
-        When no provider activity exists, _dedup_after_fit_processing leaves
-        the upload activity unchanged.
-        """
-        from backend.app.api.activities import _dedup_after_fit_processing
-
-        athlete = await _make_athlete(session, user_id="user-10")
-        base_time = datetime(2024, 7, 3, 9, 0, tzinfo=timezone.utc)
-
-        upload_act = Activity(
-            id="upload-act-solo",
-            athlete_id=athlete.id,
-            source="upload",
-            external_id=None,
-            start_time=base_time,
-            duration_s=3600,
-            tss=75.0,
-            status="processed",
-        )
-        session.add(upload_act)
-        await session.commit()
-
-        await _dedup_after_fit_processing(upload_act, athlete.id, session)
-        await session.commit()
-        await session.refresh(upload_act)
-
-        assert upload_act.duplicate_of_id is None
-        assert upload_act.tss == 75.0
-
-    async def test_tss_not_double_counted_after_fit_upload_with_wahoo_and_strava(self, session):
-        """
-        Full scenario: FIT upload is pending while both Wahoo and Strava sync.
-        After FIT processing, only one activity should contribute TSS.
-
-        Timeline:
-          1. FIT upload (pending, start_time=None)
-          2. Wahoo sync → creates wahoo activity (tss=80)
-          3. Strava sync → creates strava duplicate (tss=None, duplicate_of_id=wahoo)
-          4. FIT bg task → sets start_time+tss on upload, calls _dedup_after_fit_processing
-        Expected: upload gets duplicate_of_id=wahoo, tss=None → only wahoo's TSS counted.
-        """
-        from backend.app.api.activities import _dedup_after_fit_processing
-
-        athlete = await _make_athlete(session, user_id="user-11")
-        base_time = datetime(2024, 7, 4, 7, 0, tzinfo=timezone.utc)
-
-        # Step 1: pending upload (start_time not yet set)
-        upload_act = Activity(
-            id="fit-upload-id",
-            athlete_id=athlete.id,
-            source="upload",
-            status="pending",
-        )
-        session.add(upload_act)
-        await session.commit()
-
-        # Step 2: Wahoo syncs while upload is still pending
-        wahoo_act = Activity(
-            id="wahoo-id",
-            athlete_id=athlete.id,
-            source="wahoo",
-            external_id="wahoo-99",
-            start_time=base_time,
-            duration_s=3600,
-            tss=80.0,
-            status="processed",
-        )
-        session.add(wahoo_act)
-        await session.commit()
-
-        # Step 3: Strava syncs → finds wahoo via Tier 3 → marked as duplicate
-        strava_act = Activity(
-            id="strava-id",
-            athlete_id=athlete.id,
-            source="strava",
-            external_id="strava-99",
-            start_time=base_time,
-            duration_s=3600,
-            tss=None,
-            duplicate_of_id="wahoo-id",
-            status="processed",
-        )
-        session.add(strava_act)
-        await session.commit()
-
-        # Step 4: FIT bg task runs — process_fit_file sets start_time + tss
-        upload_act.start_time = base_time
-        upload_act.tss = 82.0
-        upload_act.status = "processed"
-        await session.commit()
-
-        await _dedup_after_fit_processing(upload_act, athlete.id, session)
-        await session.commit()
-        await session.refresh(upload_act)
-
-        # Collect all activities and count those contributing TSS
-        all_result = await session.execute(
-            select(Activity).where(Activity.athlete_id == athlete.id)
-        )
-        all_acts = all_result.scalars().all()
-        tss_contributors = [a for a in all_acts if a.tss is not None]
-
-        # All three activities may carry a TSS value for display purposes;
-        # metrics_engine excludes duplicates via duplicate_of_id, not tss IS NULL.
-        metrics_contributors = [
-            a for a in all_acts if a.tss is not None and a.duplicate_of_id is None
-        ]
-        assert len(all_acts) == 3
-        assert len(metrics_contributors) == 1, (
-            "only the canonical (wahoo) activity should contribute to metrics"
-        )
-        assert metrics_contributors[0].source == "wahoo"
-        assert upload_act.duplicate_of_id == "wahoo-id"

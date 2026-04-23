@@ -8,14 +8,10 @@ Features to implement:
   - for wahoo
 - weekly TSS vs planned
 
-
 Testing:
 
 - test Ollama connection (local)
-- test strava connection
-  - seems to work!
-- test wahoo connection
-  - missing data
+
 
 # Before Strava Integration Goes Live
 

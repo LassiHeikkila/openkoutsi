@@ -43,7 +43,7 @@ export interface AthleteProfile {
 export interface Activity {
   id: string
   athlete_id: string
-  strava_id: string | null
+  sources: string[]
   name: string
   sport_type: string
   start_time: string
@@ -57,7 +57,6 @@ export interface Activity {
   tss: number | null
   intensity_factor: number | null
   has_fit_file: boolean
-  source: string
   status: string
   created_at: string
 }

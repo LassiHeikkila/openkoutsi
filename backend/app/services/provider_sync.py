@@ -2,8 +2,17 @@
 Generic provider sync pipeline.
 
 Works with any provider registered in the PROVIDERS registry. The logic is
-identical regardless of source: refresh tokens, paginate activities, dedup,
-fetch streams, compute TSS, persist.
+identical regardless of source: refresh tokens, paginate activities, find or
+create the single Activity record for this real-world workout, attach an
+ActivitySource row, and (re)populate the Activity's metrics if the new source
+has higher priority than whatever was there before.
+
+Priority (lower = higher priority):
+  1  upload   — manual FIT upload
+  2  wahoo    — Wahoo cloud sync with a FIT file
+  3  strava   — Strava API (stream-based)
+  4  wahoo    — Wahoo cloud sync without a FIT file (blank)
+  5  manual   — manually entered activity
 """
 
 import asyncio
@@ -13,30 +22,69 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import fitdecode
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
 from backend.app.core.file_encryption import encrypt_file
-from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete, ProviderConnection
+from backend.app.models.orm import (
+    Activity,
+    ActivityDistanceBest,
+    ActivityPowerBest,
+    ActivitySource,
+    ActivityStream,
+    Athlete,
+    ProviderConnection,
+)
 from backend.app.services.fit_processor import _resolve_sport_type
 from backend.app.services.providers.registry import PROVIDERS
-from backend.app.services.training_math import calculate_tss, compute_distance_bests, compute_power_bests, normalized_power
+from backend.app.services.training_math import (
+    calculate_tss,
+    compute_distance_bests,
+    compute_power_bests,
+    normalized_power,
+)
 from openkoutsi.fit import summarizeWorkout
 
 log = logging.getLogger(__name__)
 
 _DUPLICATE_WINDOW = timedelta(minutes=5)
 
+# Sentinel: _fill_from_source uses this to know FIT hasn't been fetched yet
+_NOTFETCHED = object()
 
-# ── Token management ──────────────────────────────────────────────────────
+
+# ── Priority ──────────────────────────────────────────────────────────────────
+
+def _source_priority(provider: str, has_fit: bool) -> int:
+    """Lower number = higher priority."""
+    if provider == "upload":
+        return 1
+    if provider == "wahoo" and has_fit:
+        return 2
+    if provider == "strava":
+        return 3
+    if provider == "wahoo":          # no FIT file
+        return 4
+    return 5                          # manual, unknown
+
+
+def _winning_priority(activity: Activity) -> int:
+    """Priority of the source currently populating this Activity's metrics."""
+    if not activity.sources:
+        return 999
+    return min(
+        _source_priority(s.provider, bool(s.fit_file_path))
+        for s in activity.sources
+    )
+
+
+# ── Token management ──────────────────────────────────────────────────────────
 
 async def ensure_fresh_token(
     conn: ProviderConnection, session: AsyncSession
 ) -> str:
     """Refresh the access token if it has expired. Returns current token."""
-    # SQLite may return timezone-naive datetimes even for timezone-aware columns;
-    # normalise to UTC before comparing.
     expires_at = conn.token_expires_at
     if expires_at is not None and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
@@ -61,7 +109,7 @@ async def ensure_fresh_token(
     return conn.access_token or ""
 
 
-# ── Full sync ─────────────────────────────────────────────────────────────
+# ── Full sync ─────────────────────────────────────────────────────────────────
 
 async def sync_provider_activities(
     athlete: Athlete,
@@ -71,8 +119,13 @@ async def sync_provider_activities(
     """
     Import all activities from a provider that aren't already in the database.
 
-    Returns (count_imported, earliest_start_date) so the caller can trigger
-    metrics recalculation from the right point in time.
+    For each activity from the provider:
+      - If this (provider, external_id) pair already has an ActivitySource → skip.
+      - If an Activity exists within ±5 min → attach a new ActivitySource and
+        repopulate the Activity if the new source has higher priority.
+      - Otherwise → create a new Activity + ActivitySource.
+
+    Returns (count_created_or_updated, earliest_start_date).
     """
     provider_name = connection.provider
     client_cls = PROVIDERS.get(provider_name)
@@ -95,96 +148,131 @@ async def sync_provider_activities(
         for norm in activities:
             ext_id = norm.external_id
 
-            # Already imported from this provider — check if duration needs correcting.
-            dupe = await session.execute(
-                select(Activity).where(
+            # ── Already imported this (provider, external_id)? ────────────
+            src_result = await session.execute(
+                select(ActivitySource)
+                .join(Activity, ActivitySource.activity_id == Activity.id)
+                .where(
                     Activity.athlete_id == athlete.id,
-                    Activity.source == provider_name,
-                    Activity.external_id == ext_id,
+                    ActivitySource.provider == provider_name,
+                    ActivitySource.external_id == ext_id,
                 )
             )
-            existing_dupe = dupe.scalar_one_or_none()
-            if existing_dupe is not None:
-                # Fix activities imported before moving_time was preferred over
-                # elapsed_time: if the stored duration is longer than what the
-                # provider now reports as moving_time, update it and recompute TSS.
+            existing_src = src_result.scalar_one_or_none()
+            if existing_src is not None:
+                # Handle duration correction (moving_time preference)
+                act = existing_src.activity
                 if (
                     norm.duration_s
-                    and existing_dupe.duration_s
-                    and norm.duration_s < existing_dupe.duration_s
-                    and existing_dupe.duplicate_of_id is None
+                    and act.duration_s
+                    and norm.duration_s < act.duration_s
                 ):
-                    old_duration = existing_dupe.duration_s
-                    existing_dupe.duration_s = norm.duration_s
-                    if existing_dupe.normalized_power and athlete.ftp:
+                    old_dur = act.duration_s
+                    act.duration_s = norm.duration_s
+                    if act.normalized_power and athlete.ftp:
                         new_tss, new_if = calculate_tss(
-                            norm.duration_s,
-                            existing_dupe.normalized_power,
-                            existing_dupe.avg_hr,
-                            athlete.ftp,
-                            athlete.max_hr,
+                            norm.duration_s, act.normalized_power, act.avg_hr,
+                            athlete.ftp, athlete.max_hr,
                         )
-                        existing_dupe.tss = new_tss
-                        existing_dupe.intensity_factor = new_if
-                    elif existing_dupe.avg_hr and athlete.max_hr:
+                        act.tss = new_tss
+                        act.intensity_factor = new_if
+                    elif act.avg_hr and athlete.max_hr:
                         new_tss, _ = calculate_tss(
-                            norm.duration_s,
-                            None,
-                            existing_dupe.avg_hr,
-                            athlete.ftp,
-                            athlete.max_hr,
+                            norm.duration_s, None, act.avg_hr, athlete.ftp, athlete.max_hr,
                         )
-                        existing_dupe.tss = new_tss
+                        act.tss = new_tss
                     await session.commit()
                     log.info(
                         "Corrected duration for %s/%s: %ds → %ds",
-                        provider_name, ext_id,
-                        old_duration, norm.duration_s,
+                        provider_name, ext_id, old_dur, norm.duration_s,
                     )
                 continue
 
-            # Cross-source duplicate: same workout uploaded via FIT file.
-            # Link the existing record instead of creating a new one.
-            cross = await session.execute(
-                select(Activity).where(
-                    Activity.athlete_id == athlete.id,
-                    Activity.external_id.is_(None),
-                    Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
-                    Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+            # ── Activity within the time window? ──────────────────────────
+            if norm.start_time is not None:
+                act_result = await session.execute(
+                    select(Activity).where(
+                        Activity.athlete_id == athlete.id,
+                        Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
+                        Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+                    )
                 )
-            )
-            existing = cross.scalar_one_or_none()
-            if existing is not None:
-                existing.external_id = ext_id
-                if existing.source == "upload":
-                    existing.source = provider_name
-                await session.commit()
+                existing_act = act_result.scalar_one_or_none()
+            else:
+                existing_act = None
+
+            if existing_act is not None:
+                # Same real-world workout — attach a new source.
+                new_src = ActivitySource(
+                    activity_id=existing_act.id,
+                    provider=provider_name,
+                    external_id=ext_id,
+                )
+                session.add(new_src)
+                await session.flush()
+
+                # Pre-fetch FIT to determine actual priority before deciding
+                # whether to repopulate. This avoids the bug where Wahoo with
+                # FIT (priority=2) would be skipped because the pessimistic
+                # priority (no FIT, priority=4) doesn't beat Strava (priority=3).
+                prefetched_fit: bytes | None = None
+                try:
+                    prefetched_fit = await client.download_fit_file(
+                        access_token, norm.external_id
+                    )
+                except Exception:
+                    prefetched_fit = None
+
+                actual_priority = _source_priority(
+                    provider_name, prefetched_fit is not None
+                )
+                if actual_priority < _winning_priority(existing_act):
+                    await _repopulate_activity(
+                        existing_act, new_src, norm, client, access_token,
+                        athlete, session, prefetched_fit=prefetched_fit,
+                    )
+                    count += 1
+                    if existing_act.start_time:
+                        day = (
+                            existing_act.start_time.date()
+                            if hasattr(existing_act.start_time, "date")
+                            else existing_act.start_time
+                        )
+                        if earliest is None or day < earliest:
+                            earliest = day
+                else:
+                    # Lower priority — just record the source, don't touch metrics.
+                    await session.commit()
                 continue
 
-            # Cross-provider duplicate: same workout already imported from another provider.
-            # The activity with TSS data is kept as canonical; the other is marked as
-            # duplicate so metrics_engine can exclude it via duplicate_of_id.
-            cross_prov = await session.execute(
-                select(Activity).where(
-                    Activity.athlete_id == athlete.id,
-                    Activity.source != provider_name,
-                    Activity.duplicate_of_id.is_(None),
-                    Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
-                    Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
-                )
+            # ── New workout — create Activity + ActivitySource ─────────────
+            activity = Activity(
+                athlete_id=athlete.id,
+                name=norm.name,
+                sport_type=norm.sport_type,
+                start_time=norm.start_time,
+                duration_s=norm.duration_s,
+                distance_m=norm.distance_m,
+                elevation_m=norm.elevation_m,
+                avg_power=norm.avg_power,
+                avg_hr=norm.avg_hr,
+                max_hr=norm.max_hr,
+                avg_speed_ms=norm.avg_speed_ms,
+                avg_cadence=norm.avg_cadence,
+                status="pending",
             )
-            existing_prov = cross_prov.scalar_one_or_none()
+            session.add(activity)
+            await session.flush()
 
-            if existing_prov is not None and existing_prov.tss is None:
-                # Existing activity is blank (no TSS — e.g. a Wahoo activity synced
-                # from a third-party app with no FIT file). Import the incoming
-                # activity as the canonical record and demote the existing one.
-                activity = await _import_activity(norm, athlete, client, access_token, session, duplicate_of_id=None)
-                existing_prov.duplicate_of_id = activity.id
-                await session.commit()
-            else:
-                duplicate_of_id = existing_prov.id if existing_prov is not None else None
-                activity = await _import_activity(norm, athlete, client, access_token, session, duplicate_of_id=duplicate_of_id)
+            src = ActivitySource(
+                activity_id=activity.id,
+                provider=provider_name,
+                external_id=ext_id,
+            )
+            session.add(src)
+            await session.flush()
+
+            await _populate_activity(activity, src, norm, client, access_token, athlete, session)
             count += 1
 
             if activity.start_time:
@@ -196,7 +284,6 @@ async def sync_provider_activities(
                 if earliest is None or day < earliest:
                     earliest = day
 
-            # Optional auto-analysis
             app_cfg = athlete.app_settings or {}
             if app_cfg.get("auto_analyze"):
                 from backend.app.core.config import settings as _settings
@@ -213,31 +300,87 @@ async def sync_provider_activities(
     return count, earliest
 
 
-# ── Single activity import ─────────────────────────────────────────────────
+# ── Data population ───────────────────────────────────────────────────────────
 
-async def _import_activity(
+async def _populate_activity(
+    activity: Activity,
+    src: ActivitySource,
     norm,
-    athlete: Athlete,
     client,
     access_token: str,
+    athlete: Athlete,
     session: AsyncSession,
-    duplicate_of_id: str | None = None,
-) -> Activity:
-    # ── FIT-first path (Wahoo and any future FIT-capable provider) ────────
-    fit_bytes: bytes | None = None
-    try:
-        fit_bytes = await client.download_fit_file(access_token, norm.external_id)
-    except Exception:
-        fit_bytes = None
+) -> None:
+    """Populate a new Activity's metrics, streams and bests from src's data."""
+    await _fill_from_source(activity, src, norm, client, access_token, athlete, session)
+
+
+async def _repopulate_activity(
+    activity: Activity,
+    new_src: ActivitySource,
+    norm,
+    client,
+    access_token: str,
+    athlete: Athlete,
+    session: AsyncSession,
+    *,
+    prefetched_fit=_NOTFETCHED,
+) -> None:
+    """Re-populate an existing Activity's metrics with data from a higher-priority source.
+
+    Deletes all existing streams and bests first, then re-fills from the new source.
+    Pass prefetched_fit to avoid downloading the FIT file twice (already fetched
+    during the priority check in sync_provider_activities).
+    """
+    await session.execute(
+        delete(ActivityStream).where(ActivityStream.activity_id == activity.id)
+    )
+    await session.execute(
+        delete(ActivityPowerBest).where(ActivityPowerBest.activity_id == activity.id)
+    )
+    await session.execute(
+        delete(ActivityDistanceBest).where(ActivityDistanceBest.activity_id == activity.id)
+    )
+    await session.flush()
+    await _fill_from_source(
+        activity, new_src, norm, client, access_token, athlete, session,
+        prefetched_fit=prefetched_fit,
+    )
+
+
+async def _fill_from_source(
+    activity: Activity,
+    src: ActivitySource,
+    norm,
+    client,
+    access_token: str,
+    athlete: Athlete,
+    session: AsyncSession,
+    *,
+    prefetched_fit=_NOTFETCHED,
+) -> None:
+    """Core import logic: try FIT first, fall back to stream API.
+
+    prefetched_fit: if _NOTFETCHED, the FIT will be downloaded here.
+                    If None, FIT was already tried and failed (skip download).
+                    If bytes, use the pre-fetched FIT data directly.
+    """
+    # ── FIT-first path (Wahoo and any future FIT-capable provider) ──────
+    if prefetched_fit is _NOTFETCHED:
+        fit_bytes: bytes | None = None
+        try:
+            fit_bytes = await client.download_fit_file(access_token, norm.external_id)
+        except Exception:
+            fit_bytes = None
+    else:
+        fit_bytes = prefetched_fit  # type: ignore[assignment]
 
     if fit_bytes is not None:
-        activity_id = str(uuid.uuid4())
         storage_dir = Path(settings.file_storage_path) / athlete.id
         storage_dir.mkdir(parents=True, exist_ok=True)
-        fit_path = storage_dir / f"{activity_id}.fit"
+        fit_path = storage_dir / f"{activity.id}.fit"
         fit_path.write_bytes(fit_bytes)
 
-        # Parse FIT synchronously (fitdecode is blocking)
         try:
             with fitdecode.FitReader(str(fit_path)) as fr:
                 profile = summarizeWorkout(fr)
@@ -245,206 +388,165 @@ async def _import_activity(
             log.exception("FIT parsing failed for %s/%s", norm.source, norm.external_id)
             profile = None
 
-        # Encrypt FIT file before writing anything to the DB
         encrypted = False
         try:
             encrypt_file(fit_path, athlete.user_id)
             encrypted = True
         except Exception:
-            log.warning("FIT encryption failed for activity %s", activity_id)
+            log.warning("FIT encryption failed for activity %s", activity.id)
 
-        # Derive stream arrays and aggregate metrics from the FIT profile
+        src.fit_file_path = str(fit_path)
+        src.fit_file_encrypted = encrypted
+
         if profile is not None:
             power_data   = [float(v) for v in profile.power]
             hr_data      = [float(v) for v in profile.heartRate]
             cadence_data = [float(v) for v in profile.cadence]
-            speed_ms     = [v / 3.6 for v in profile.speed]   # km/h → m/s
+            speed_ms     = [v / 3.6 for v in profile.speed]
             alt_data     = [float(v) for v in profile.altitude]
 
-            np_val    = normalized_power(power_data) if power_data else None
-            avg_hr_v  = profile.avgHeartRate if hr_data else norm.avg_hr
-            dur_v     = profile.duration or norm.duration_s or 0
+            np_val   = normalized_power(power_data) if power_data else None
+            avg_hr_v = profile.avgHeartRate if hr_data else norm.avg_hr
+            dur_v    = profile.duration or norm.duration_s or 0
             tss, intensity_factor = calculate_tss(dur_v, np_val, avg_hr_v, athlete.ftp, athlete.max_hr)
 
-            activity = Activity(
-                id=activity_id,
-                athlete_id=athlete.id,
-                external_id=norm.external_id,
-                source=norm.source,
-                name=norm.name or "Uploaded Activity",
-                sport_type=norm.sport_type or _resolve_sport_type(profile.sport_type),
-                start_time=profile.start_time or norm.start_time,
-                duration_s=profile.duration,
-                distance_m=float(profile.distance) if profile.distance else None,
-                elevation_m=float(profile.elevationGain) if profile.elevationGain else None,
-                avg_power=profile.avgPower if power_data else norm.avg_power,
-                normalized_power=np_val,
-                avg_hr=avg_hr_v,
-                max_hr=profile.peakHR if hr_data else norm.max_hr,
-                avg_speed_ms=(profile.avgSpeed / 3.6) if profile.speed else norm.avg_speed_ms,
-                avg_cadence=float(profile.avgCadence) if profile.cadence else norm.avg_cadence,
-                tss=tss,
-                intensity_factor=intensity_factor,
-                fit_file_path=str(fit_path),
-                fit_file_encrypted=encrypted,
-                duplicate_of_id=duplicate_of_id,
-                status="processed",
-            )
+            activity.name           = activity.name or norm.name or "Uploaded Activity"
+            activity.sport_type     = activity.sport_type or norm.sport_type or _resolve_sport_type(profile.sport_type)
+            activity.start_time     = profile.start_time or norm.start_time
+            activity.duration_s     = profile.duration
+            activity.distance_m     = float(profile.distance) if profile.distance else norm.distance_m
+            activity.elevation_m    = float(profile.elevationGain) if profile.elevationGain else norm.elevation_m
+            activity.avg_power      = profile.avgPower if power_data else norm.avg_power
+            activity.normalized_power = np_val
+            activity.avg_hr         = avg_hr_v
+            activity.max_hr         = profile.peakHR if hr_data else norm.max_hr
+            activity.avg_speed_ms   = (profile.avgSpeed / 3.6) if profile.speed else norm.avg_speed_ms
+            activity.avg_cadence    = float(profile.avgCadence) if profile.cadence else norm.avg_cadence
+            activity.tss            = tss
+            activity.intensity_factor = intensity_factor
+            activity.status         = "processed"
+
+            _add_streams(activity, session, power_data, hr_data, cadence_data, speed_ms, alt_data)
+            _add_power_bests(activity, athlete, session, power_data)
+            _add_distance_bests(activity, athlete, session, speed_ms)
         else:
-            # FIT parsing failed — fall back to summary data only
-            power_data = hr_data = cadence_data = speed_ms = alt_data = []
-            activity = Activity(
-                id=activity_id,
-                athlete_id=athlete.id,
-                external_id=norm.external_id,
-                source=norm.source,
-                name=norm.name,
-                sport_type=norm.sport_type,
-                start_time=norm.start_time,
-                duration_s=norm.duration_s,
-                distance_m=norm.distance_m,
-                elevation_m=norm.elevation_m,
-                avg_power=norm.avg_power,
-                avg_hr=norm.avg_hr,
-                max_hr=norm.max_hr,
-                avg_speed_ms=norm.avg_speed_ms,
-                avg_cadence=norm.avg_cadence,
-                fit_file_path=str(fit_path),
-                fit_file_encrypted=encrypted,
-                duplicate_of_id=duplicate_of_id,
-                status="processed",
-            )
-
-        session.add(activity)
-        await session.flush()
-
-        for stream_type, data in [
-            ("power",     power_data),
-            ("heartrate", hr_data),
-            ("cadence",   cadence_data),
-            ("speed",     speed_ms),
-            ("altitude",  alt_data),
-        ]:
-            if data:
-                session.add(ActivityStream(
-                    id=str(uuid.uuid4()),
-                    activity_id=activity.id,
-                    stream_type=stream_type,
-                    data=data,
-                ))
-
-        if power_data:
-            for dur_s, pwr_w in compute_power_bests(power_data).items():
-                session.add(ActivityPowerBest(
-                    activity_id=activity.id,
-                    athlete_id=athlete.id,
-                    duration_s=dur_s,
-                    power_w=pwr_w,
-                    activity_start_time=activity.start_time,
-                ))
-
-        if speed_ms:
-            for dist_m, time_s in compute_distance_bests(speed_ms).items():
-                session.add(ActivityDistanceBest(
-                    activity_id=activity.id,
-                    athlete_id=athlete.id,
-                    distance_m=dist_m,
-                    time_s=time_s,
-                    activity_start_time=activity.start_time,
-                ))
+            # FIT parse failed — use summary metadata only
+            activity.name      = activity.name or norm.name
+            activity.sport_type = activity.sport_type or norm.sport_type
+            activity.start_time = norm.start_time
+            activity.duration_s = norm.duration_s
+            activity.distance_m = norm.distance_m
+            activity.elevation_m = norm.elevation_m
+            activity.avg_power  = norm.avg_power
+            activity.avg_hr     = norm.avg_hr
+            activity.max_hr     = norm.max_hr
+            activity.avg_speed_ms = norm.avg_speed_ms
+            activity.avg_cadence = norm.avg_cadence
+            activity.status = "processed"
 
         await session.commit()
         await session.refresh(activity)
-        return activity
+        return
 
-    # ── Stream-based fallback (Strava and providers without FIT download) ──
+    # ── Stream-based fallback (Strava, providers without FIT download) ───
     try:
         streams_raw = await client.get_activity_streams(access_token, norm.external_id)
     except Exception:
         streams_raw = {}
 
-    power_data = streams_raw.get("power", [])
-    hr_data = streams_raw.get("heartrate", [])
-    cadence_data = streams_raw.get("cadence", [])
-    speed_data = streams_raw.get("speed", [])
+    power_data    = streams_raw.get("power", [])
+    hr_data       = streams_raw.get("heartrate", [])
+    cadence_data  = streams_raw.get("cadence", [])
+    speed_data    = streams_raw.get("speed", [])
     altitude_data = streams_raw.get("altitude", [])
 
-    np = normalized_power(power_data) if power_data else None
-    avg_hr = (
-        (sum(hr_data) / len(hr_data)) if hr_data else norm.avg_hr
-    )
-    duration_s = norm.duration_s or 0
+    np_val  = normalized_power(power_data) if power_data else None
+    avg_hr  = (sum(hr_data) / len(hr_data)) if hr_data else norm.avg_hr
+    dur_s   = norm.duration_s or 0
+    tss, intensity_factor = calculate_tss(dur_s, np_val, avg_hr, athlete.ftp, athlete.max_hr)
 
-    tss, intensity_factor = calculate_tss(
-        duration_s, np, avg_hr, athlete.ftp, athlete.max_hr
-    )
+    activity.name      = activity.name or norm.name
+    activity.sport_type = activity.sport_type or norm.sport_type
+    activity.start_time = norm.start_time
+    activity.duration_s = norm.duration_s
+    activity.distance_m = norm.distance_m
+    activity.elevation_m = norm.elevation_m
+    activity.avg_power  = norm.avg_power or (sum(power_data) / len(power_data) if power_data else None)
+    activity.normalized_power = np_val
+    activity.avg_hr     = avg_hr
+    activity.max_hr     = norm.max_hr
+    activity.avg_speed_ms = norm.avg_speed_ms
+    activity.avg_cadence = norm.avg_cadence
+    activity.tss        = tss
+    activity.intensity_factor = intensity_factor
+    activity.status     = "processed"
 
-    activity = Activity(
-        id=str(uuid.uuid4()),
-        athlete_id=athlete.id,
-        external_id=norm.external_id,
-        source=norm.source,
-        name=norm.name,
-        sport_type=norm.sport_type,
-        start_time=norm.start_time,
-        duration_s=norm.duration_s,
-        distance_m=norm.distance_m,
-        elevation_m=norm.elevation_m,
-        avg_power=norm.avg_power or (sum(power_data) / len(power_data) if power_data else None),
-        normalized_power=np,
-        avg_hr=avg_hr,
-        max_hr=norm.max_hr,
-        avg_speed_ms=norm.avg_speed_ms,
-        avg_cadence=norm.avg_cadence,
-        tss=tss,
-        intensity_factor=intensity_factor,
-        duplicate_of_id=duplicate_of_id,
-        status="processed",
-    )
-    session.add(activity)
-    await session.flush()
-
-    for stream_type, data in [
-        ("power", power_data),
-        ("heartrate", hr_data),
-        ("cadence", cadence_data),
-        ("speed", speed_data),
-        ("altitude", altitude_data),
-    ]:
-        if data:
-            session.add(
-                ActivityStream(
-                    id=str(uuid.uuid4()),
-                    activity_id=activity.id,
-                    stream_type=stream_type,
-                    data=data,
-                )
-            )
-
-    if power_data:
-        for duration_s, power_w in compute_power_bests(power_data).items():
-            session.add(
-                ActivityPowerBest(
-                    activity_id=activity.id,
-                    athlete_id=athlete.id,
-                    duration_s=duration_s,
-                    power_w=power_w,
-                    activity_start_time=activity.start_time,
-                )
-            )
-
-    if speed_data:
-        for distance_m, time_s in compute_distance_bests(speed_data).items():
-            session.add(
-                ActivityDistanceBest(
-                    activity_id=activity.id,
-                    athlete_id=athlete.id,
-                    distance_m=distance_m,
-                    time_s=time_s,
-                    activity_start_time=activity.start_time,
-                )
-            )
+    _add_streams(activity, session, power_data, hr_data, cadence_data, speed_data, altitude_data)
+    _add_power_bests(activity, athlete, session, power_data)
+    _add_distance_bests(activity, athlete, session, speed_data)
 
     await session.commit()
     await session.refresh(activity)
-    return activity
+
+
+# ── Stream / bests helpers ────────────────────────────────────────────────────
+
+def _add_streams(
+    activity: Activity,
+    session: AsyncSession,
+    power_data: list,
+    hr_data: list,
+    cadence_data: list,
+    speed_data: list,
+    altitude_data: list,
+) -> None:
+    for stream_type, data in [
+        ("power",     power_data),
+        ("heartrate", hr_data),
+        ("cadence",   cadence_data),
+        ("speed",     speed_data),
+        ("altitude",  altitude_data),
+    ]:
+        if data:
+            session.add(ActivityStream(
+                id=str(uuid.uuid4()),
+                activity_id=activity.id,
+                stream_type=stream_type,
+                data=data,
+            ))
+
+
+def _add_power_bests(
+    activity: Activity,
+    athlete: Athlete,
+    session: AsyncSession,
+    power_data: list,
+) -> None:
+    if not power_data:
+        return
+    for dur_s, pwr_w in compute_power_bests(power_data).items():
+        session.add(ActivityPowerBest(
+            activity_id=activity.id,
+            athlete_id=athlete.id,
+            duration_s=dur_s,
+            power_w=pwr_w,
+            activity_start_time=activity.start_time,
+        ))
+
+
+def _add_distance_bests(
+    activity: Activity,
+    athlete: Athlete,
+    session: AsyncSession,
+    speed_data: list,
+) -> None:
+    if not speed_data:
+        return
+    for dist_m, time_s in compute_distance_bests(speed_data).items():
+        session.add(ActivityDistanceBest(
+            activity_id=activity.id,
+            athlete_id=athlete.id,
+            distance_m=dist_m,
+            time_s=time_s,
+            activity_start_time=activity.start_time,
+        ))

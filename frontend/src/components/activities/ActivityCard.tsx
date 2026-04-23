@@ -33,7 +33,7 @@ export function ActivityCard({ activity }: Props) {
               <p className="font-medium text-sm truncate">{activity.name}</p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <SourceBadge source={activity.source} />
+              <SourceBadge sources={activity.sources} />
               {activity.status === 'pending' && (
                 <Badge variant="outline" className="text-xs">{t('processing')}</Badge>
               )}

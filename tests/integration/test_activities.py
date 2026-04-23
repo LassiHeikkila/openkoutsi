@@ -12,7 +12,7 @@ import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, Athlete
+from backend.app.models.orm import Activity, ActivitySource, Athlete
 
 TESTDATA = Path(__file__).parent.parent.parent / "testdata"
 SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"
@@ -289,11 +289,19 @@ class TestFitUpload:
         assert data["status"] == "pending"
         activity_id = data["id"]
 
-        # Load the activity and athlete from the test session
+        # Load the activity, its upload source, and the athlete from the test session
         act_result = await session.execute(
             select(Activity).where(Activity.id == activity_id)
         )
         activity = act_result.scalar_one()
+
+        src_result = await session.execute(
+            select(ActivitySource).where(
+                ActivitySource.activity_id == activity_id,
+                ActivitySource.provider == "upload",
+            )
+        )
+        upload_src = src_result.scalar_one()
 
         ath_result = await session.execute(
             select(Athlete).where(Athlete.id == activity.athlete_id)
@@ -304,7 +312,7 @@ class TestFitUpload:
         from backend.app.services.fit_processor import process_fit_file
         from backend.app.services.metrics_engine import recalculate_from
 
-        await process_fit_file(activity.fit_file_path, athlete, activity, session)
+        await process_fit_file(upload_src.fit_file_path, athlete, activity, session)
 
         start_date = activity.start_time.date() if activity.start_time else None
         if start_date:
@@ -355,11 +363,18 @@ class TestFitUpload:
         # Process the file so the activity gets a start_time (needed for duplicate detection)
         act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
         activity = act_result.scalar_one()
+        src_result = await session.execute(
+            select(ActivitySource).where(
+                ActivitySource.activity_id == activity_id,
+                ActivitySource.provider == "upload",
+            )
+        )
+        upload_src = src_result.scalar_one()
         ath_result = await session.execute(select(Athlete).where(Athlete.id == activity.athlete_id))
         athlete = ath_result.scalar_one()
 
         from backend.app.services.fit_processor import process_fit_file
-        await process_fit_file(activity.fit_file_path, athlete, activity, session)
+        await process_fit_file(upload_src.fit_file_path, athlete, activity, session)
 
         # Second upload of the same file — should be rejected as duplicate
         with open(SAMPLE_FIT, "rb") as f:
@@ -446,6 +461,13 @@ class TestDownloadFitFile:
 
         act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
         activity = act_result.scalar_one()
+        src_result = await session.execute(
+            select(ActivitySource).where(
+                ActivitySource.activity_id == activity_id,
+                ActivitySource.provider == "upload",
+            )
+        )
+        upload_src = src_result.scalar_one()
         ath_result = await session.execute(select(Athlete).where(Athlete.id == activity.athlete_id))
         athlete = ath_result.scalar_one()
 
@@ -455,8 +477,8 @@ class TestDownloadFitFile:
         from backend.app.core.file_encryption import encrypt_file
 
         with patch.object(cfg.settings, "encryption_key", test_key):
-            encrypt_file(Path(activity.fit_file_path), athlete.user_id)
-            activity.fit_file_encrypted = True
+            encrypt_file(Path(upload_src.fit_file_path), athlete.user_id)
+            upload_src.fit_file_encrypted = True
             await session.commit()
 
             resp = await client.get(f"/api/activities/{activity_id}/fit", headers=auth_headers)

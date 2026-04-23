@@ -146,16 +146,24 @@ class TestExportAthlete:
         assert upload_resp.status_code == 201
         activity_id = upload_resp.json()["id"]
 
+        from backend.app.models.orm import ActivitySource
         act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
         activity = act_result.scalar_one()
+        src_result = await session.execute(
+            select(ActivitySource).where(
+                ActivitySource.activity_id == activity_id,
+                ActivitySource.provider == "upload",
+            )
+        )
+        upload_src = src_result.scalar_one()
         ath_result = await session.execute(select(Athlete).where(Athlete.id == activity.athlete_id))
         athlete = ath_result.scalar_one()
 
         original_bytes = SAMPLE_FIT.read_bytes()
 
         with patch.object(cfg.settings, "encryption_key", test_key):
-            encrypt_file(Path(activity.fit_file_path), athlete.user_id)
-            activity.fit_file_encrypted = True
+            encrypt_file(Path(upload_src.fit_file_path), athlete.user_id)
+            upload_src.fit_file_encrypted = True
             await session.commit()
 
             resp = await client.get("/api/athlete/export", headers=auth_headers)

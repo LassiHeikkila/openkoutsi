@@ -29,7 +29,6 @@ async def recalculate_from(
             Activity.athlete_id == athlete_id,
             Activity.start_time >= cutoff,
             Activity.tss.is_not(None),
-            Activity.duplicate_of_id.is_(None),
             Activity.status == "processed",
         )
     )

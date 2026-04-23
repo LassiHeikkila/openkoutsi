@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
 from backend.app.db.base import AsyncSessionLocal, get_session
-from backend.app.models.orm import Activity, Athlete, ProviderConnection, User
+from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection, User
 from backend.app.services.provider_sync import ensure_fresh_token, sync_provider_activities
 from backend.app.services.providers.registry import PROVIDERS
 
@@ -268,32 +268,48 @@ async def disconnect(
             pass  # best-effort
 
     if delete_data:
-        # Find the earliest deleted activity's date for metrics recalculation.
-        earliest_result = await session.execute(
-            select(Activity.start_time)
+        from pathlib import Path
+        from backend.app.services.metrics_engine import recalculate_from
+
+        # Find all ActivitySource rows for this provider + athlete.
+        src_result = await session.execute(
+            select(ActivitySource)
+            .join(Activity, ActivitySource.activity_id == Activity.id)
             .where(
                 Activity.athlete_id == athlete.id,
-                Activity.source == provider,
-            )
-            .order_by(Activity.start_time.asc())
-            .limit(1)
-        )
-        earliest_row = earliest_result.scalar_one_or_none()
-
-        await session.execute(
-            delete(Activity).where(
-                Activity.athlete_id == athlete.id,
-                Activity.source == provider,
+                ActivitySource.provider == provider,
             )
         )
+        sources = src_result.scalars().all()
 
-        if earliest_row is not None:
-            earliest_date = (
-                earliest_row.date()
-                if hasattr(earliest_row, "date")
-                else earliest_row
+        earliest_date = None
+        for src in sources:
+            act = src.activity
+            # Delete the FIT file if this source contributed one.
+            if src.fit_file_path:
+                p = Path(src.fit_file_path)
+                if p.exists():
+                    p.unlink(missing_ok=True)
+            await session.delete(src)
+            await session.flush()
+
+            # If the activity has no remaining sources, delete it.
+            remaining = await session.execute(
+                select(ActivitySource).where(ActivitySource.activity_id == act.id)
             )
-            from backend.app.services.metrics_engine import recalculate_from
+            if remaining.scalar_one_or_none() is None:
+                if act.start_time:
+                    day = (
+                        act.start_time.date()
+                        if hasattr(act.start_time, "date")
+                        else act.start_time
+                    )
+                    if earliest_date is None or day < earliest_date:
+                        earliest_date = day
+                await session.delete(act)
+                await session.flush()
+
+        if earliest_date is not None:
             await recalculate_from(athlete.id, earliest_date, session)
 
     await session.delete(conn)

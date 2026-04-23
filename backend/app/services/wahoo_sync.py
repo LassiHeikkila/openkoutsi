@@ -6,18 +6,22 @@ Full activity sync is handled by the generic provider_sync.py pipeline.
 """
 
 import logging
-from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.orm import Activity, Athlete, ProviderConnection
-from backend.app.services.provider_sync import _import_activity, ensure_fresh_token
+from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection
+from backend.app.services.provider_sync import (
+    _DUPLICATE_WINDOW,
+    _populate_activity,
+    _repopulate_activity,
+    _winning_priority,
+    _source_priority,
+    ensure_fresh_token,
+)
 from backend.app.services.providers.wahoo import WahooClient, _normalize_workout
 
 log = logging.getLogger(__name__)
-
-_DUPLICATE_WINDOW = timedelta(seconds=30)
 
 _wahoo_client = WahooClient()
 
@@ -69,55 +73,100 @@ async def process_wahoo_webhook(payload: dict, session: AsyncSession) -> None:
     if athlete is None:
         return
 
-    # Already imported from Wahoo — idempotent
+    # Idempotent: skip if this (provider, external_id) is already imported
     dupe = await session.execute(
-        select(Activity).where(
+        select(ActivitySource)
+        .join(Activity, ActivitySource.activity_id == Activity.id)
+        .where(
             Activity.athlete_id == athlete.id,
-            Activity.source == "wahoo",
-            Activity.external_id == norm.external_id,
+            ActivitySource.provider == "wahoo",
+            ActivitySource.external_id == norm.external_id,
         )
     )
     if dupe.scalar_one_or_none() is not None:
         log.debug("Wahoo webhook: activity %s already imported — skipping", norm.external_id)
         return
 
-    # FIT upload cross-source: link instead of creating a new row
-    cross_upload = await session.execute(
+    access_token = await ensure_fresh_token(conn, session)
+
+    # Check for existing Activity at the same time window
+    existing_result = await session.execute(
         select(Activity).where(
             Activity.athlete_id == athlete.id,
-            Activity.external_id.is_(None),
             Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
             Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
         )
     )
-    existing_upload = cross_upload.scalar_one_or_none()
-    if existing_upload is not None:
-        existing_upload.external_id = norm.external_id
-        if existing_upload.source == "upload":
-            existing_upload.source = "wahoo"
-        await session.commit()
+    existing_act = existing_result.scalar_one_or_none()
+
+    if existing_act is not None:
+        # Same real-world workout — attach a Wahoo source.
+        new_src = ActivitySource(
+            activity_id=existing_act.id,
+            provider="wahoo",
+            external_id=norm.external_id,
+        )
+        session.add(new_src)
+        await session.flush()
+
+        # Pre-fetch FIT to determine actual priority (Wahoo with FIT = priority 2,
+        # without FIT = priority 4).
+        prefetched_fit: bytes | None = None
+        try:
+            prefetched_fit = await _wahoo_client.download_fit_file(
+                access_token, norm.external_id
+            )
+        except Exception:
+            prefetched_fit = None
+
+        actual_priority = _source_priority("wahoo", prefetched_fit is not None)
+        if actual_priority < _winning_priority(existing_act):
+            await _repopulate_activity(
+                existing_act, new_src, norm, _wahoo_client, access_token,
+                athlete, session, prefetched_fit=prefetched_fit,
+            )
+            if existing_act.start_time:
+                from backend.app.services.metrics_engine import recalculate_from
+                start_date = (
+                    existing_act.start_time.date()
+                    if hasattr(existing_act.start_time, "date")
+                    else existing_act.start_time
+                )
+                await recalculate_from(athlete.id, start_date, session)
+        else:
+            await session.commit()
         return
 
-    # Cross-provider duplicate: same workout already imported from another provider
-    # (e.g. Strava). Import Wahoo's copy (FIT streams) but suppress TSS.
-    cross_prov = await session.execute(
-        select(Activity).where(
-            Activity.athlete_id == athlete.id,
-            Activity.source != "wahoo",
-            Activity.duplicate_of_id.is_(None),
-            Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
-            Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
-        )
+    # New workout — create Activity + ActivitySource
+    activity = Activity(
+        athlete_id=athlete.id,
+        name=norm.name,
+        sport_type=norm.sport_type,
+        start_time=norm.start_time,
+        duration_s=norm.duration_s,
+        distance_m=norm.distance_m,
+        elevation_m=norm.elevation_m,
+        avg_power=norm.avg_power,
+        avg_hr=norm.avg_hr,
+        max_hr=norm.max_hr,
+        avg_speed_ms=norm.avg_speed_ms,
+        avg_cadence=norm.avg_cadence,
+        status="pending",
     )
-    existing_prov = cross_prov.scalar_one_or_none()
-    duplicate_of_id = existing_prov.id if existing_prov is not None else None
+    session.add(activity)
+    await session.flush()
 
-    access_token = await ensure_fresh_token(conn, session)
-    activity = await _import_activity(
-        norm, athlete, _wahoo_client, access_token, session, duplicate_of_id=duplicate_of_id
+    src = ActivitySource(
+        activity_id=activity.id,
+        provider="wahoo",
+        external_id=norm.external_id,
     )
+    session.add(src)
+    await session.flush()
 
-    if activity.start_time and not duplicate_of_id:
+    await _populate_activity(activity, src, norm, _wahoo_client, access_token, athlete, session)
+
+    if activity.start_time:
         from backend.app.services.metrics_engine import recalculate_from
         start_date = (
             activity.start_time.date()
@@ -127,7 +176,7 @@ async def process_wahoo_webhook(payload: dict, session: AsyncSession) -> None:
         await recalculate_from(athlete.id, start_date, session)
 
     app_cfg = athlete.app_settings or {}
-    if app_cfg.get("auto_analyze") and not duplicate_of_id:
+    if app_cfg.get("auto_analyze"):
         from backend.app.core.config import settings as _settings
         if _settings.llm_base_url:
             import asyncio

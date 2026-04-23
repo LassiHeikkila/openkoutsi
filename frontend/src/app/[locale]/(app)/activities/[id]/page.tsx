@@ -221,7 +221,7 @@ export default function ActivityDetailPage({ params }: Props) {
             )}
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-sm text-muted-foreground capitalize">{activity.sport_type}</p>
-              <SourceBadge source={activity.source} />
+              <SourceBadge sources={activity.sources} />
             </div>
           </div>
         </div>

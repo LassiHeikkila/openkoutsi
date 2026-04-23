@@ -252,10 +252,10 @@ async def export_athlete(
             "max_hr": a.max_hr,
             "tss": a.tss,
             "intensity_factor": a.intensity_factor,
-            "source": a.source,
+            "sources": [s.provider for s in (a.sources or [])],
             "status": a.status,
             "created_at": a.created_at.isoformat(),
-            "has_fit_file": bool(a.fit_file_path),
+            "has_fit_file": a.has_fit_file,
         }
         for a in activities
     ]
@@ -265,13 +265,15 @@ async def export_athlete(
         zf.writestr("profile.json", json.dumps(profile_data, indent=2))
         zf.writestr("activities.json", json.dumps(activities_data, indent=2))
         for a in activities:
-            if a.fit_file_path:
-                fit_path = Path(a.fit_file_path)
+            fit_sources = [s for s in (a.sources or []) if s.fit_file_path]
+            for src in fit_sources:
+                fit_path = Path(src.fit_file_path)
                 if fit_path.exists():
-                    if a.fit_file_encrypted:
+                    if src.fit_file_encrypted:
                         zf.writestr(f"fit_files/{a.id}.fit", decrypt_file(fit_path, athlete.user_id))
                     else:
                         zf.write(fit_path, f"fit_files/{a.id}.fit")
+                    break  # only include the first (best) FIT per activity
     buf.seek(0)
 
     return StreamingResponse(

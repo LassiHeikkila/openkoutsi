@@ -226,7 +226,7 @@ class ActivitySource(Base):
     fit_file_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    activity: Mapped["Activity"] = relationship("Activity", back_populates="sources")
+    activity: Mapped["Activity"] = relationship("Activity", back_populates="sources", lazy="selectin")
 
 
 class ActivityStream(Base):

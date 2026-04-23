@@ -17,12 +17,12 @@ class Zones:
     
     def getZone(self, v: int) -> int:
         for i, (lower, upper) in enumerate(self.zones):
-            if i == len(self.zones) - 1:
-                return i
             if v >= lower and v <= upper:
                 return i
-
-        raise Exception(f"could not determine zone for value {v}")
+        # Below Z1 → clamp to Z1; above last zone → clamp to last zone.
+        if v < self.zones[0][0]:
+            return 0
+        return len(self.zones) - 1
 
 
     def validate(self) -> None:

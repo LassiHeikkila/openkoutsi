@@ -68,7 +68,7 @@ def _build_prompt(activity: Activity, athlete: Athlete) -> str:
     if activity.avg_hr:
         lines.append(f"  Average heart rate: {activity.avg_hr:.0f} bpm")
     if activity.max_hr:
-        lines.append(f"  Max heart rate: {activity.max_hr:.0f} bpm")
+        lines.append(f"  Peak heart rate: {activity.max_hr:.0f} bpm")
     if athlete.ftp:
         lines.append(f"  Athlete FTP: {athlete.ftp} W")
     if athlete.max_hr:

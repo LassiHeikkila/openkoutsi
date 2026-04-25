@@ -65,10 +65,11 @@ class TestCalculateTss:
     def test_hr_based_tss_when_no_power(self):
         # avg_hr=150, max_hr=185, duration=3600 s
         # lthr = 0.9 * 185 = 166.5
-        # TSS = (3600 * 150 * 1.92) / (166.5 * 3600) * 100
+        # TSS = (duration_s / 3600) × (avg_hr / lthr)² × 100
+        # TSS = (3600 / 3600) * (150 / 166.5)^2 * 100
         tss, intensity_factor = calculate_tss(3600, None, 150.0, None, 185)
         lthr = 0.9 * 185
-        expected_tss = (3600 * 150 * 1.92) / (lthr * 3600) * 100
+        expected_tss = (3600 / 3600) * math.pow((150 / lthr), 2) * 100
         assert tss == pytest.approx(expected_tss, rel=1e-6)
         assert intensity_factor is None
 

@@ -7,6 +7,7 @@ Features to implement:
   - for zwift
   - for wahoo
 - [ ] weekly TSS vs planned
+- [ ] extract lap data from workouts
 - [ ] use summarizeWorkout in backend/app/services/providers/wahoo.py
 
 Testing:

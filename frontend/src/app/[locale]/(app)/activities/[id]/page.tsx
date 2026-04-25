@@ -2,7 +2,7 @@
 
 import { use, useRef, useState } from 'react'
 import useSWR from 'swr'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from '@/navigation'
 import { fetcher, apiFetch, apiDownload } from '@/lib/api'
 import type { ActivityDetail, AthleteProfile } from '@/lib/types'
@@ -37,6 +37,7 @@ interface Props {
 export default function ActivityDetailPage({ params }: Props) {
   const t = useTranslations('activities')
   const tCommon = useTranslations('common')
+  const locale = useLocale()
   const { id } = use(params)
   const router = useRouter()
   const [editingTitle, setEditingTitle] = useState(false)
@@ -123,16 +124,17 @@ export default function ActivityDetailPage({ params }: Props) {
 
   async function handleAnalyze() {
     if (llmConfig && activity && athlete) {
-      // Frontend LLM path: stream directly from browser
+      // User-configured LLM path: proxied through the backend (/api/llm/chat).
+      // The API key is decrypted server-side — it never touches the browser.
       abortRef.current = new AbortController()
       setStreamingText('')
       try {
         const full = await streamAnalysis(
           activity,
           athlete,
-          llmConfig,
           (chunk) => setStreamingText((t) => (t ?? '') + chunk),
           abortRef.current.signal,
+          locale,
         )
         // Persist result to backend
         await apiFetch(`/api/activities/${id}/analysis`, {
@@ -154,7 +156,7 @@ export default function ActivityDetailPage({ params }: Props) {
         })
       }
     } else {
-      // Server-side LLM path
+      // Server-side LLM path (server has its own LLM configured)
       try {
         await apiFetch(`/api/activities/${id}/analyze`, { method: 'POST' })
         mutate()

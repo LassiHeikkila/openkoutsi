@@ -1,23 +1,29 @@
 /**
- * Frontend LLM utilities — OpenAI-compatible streaming API.
+ * Frontend LLM utilities — OpenAI-compatible API via backend proxy.
  *
- * Users configure their own LLM endpoint (e.g. a local Ollama instance) in
- * Settings → AI / LLM.  The config is stored in athlete.app_settings and
- * accessed here at call-time, so no server-side API keys are required.
+ * All LLM calls go through POST /api/llm/chat on the backend, which:
+ *   1. Reads the user's configured endpoint and model from their athlete profile.
+ *   2. Decrypts the API key in-memory (it is stored encrypted, never returned
+ *      to the browser).
+ *   3. Forwards the request to the external LLM and streams the response back.
  *
- * Mixed-content note: if the app is served over HTTPS and the user points
- * llm_base_url at an http:// address (e.g. http://localhost:11434/v1) the
- * browser will block the request.  Self-hosted HTTP deployments work fine.
+ * Benefits over direct browser ↔ LLM calls:
+ *   - API key is never transmitted to or stored in the browser.
+ *   - No Content-Security-Policy exceptions needed for external LLM origins.
+ *   - Mixed-content (http:// LLM behind https:// app) is not an issue because
+ *     the connection happens server-to-server.
  */
 
 import type { ActivityDetail, AthleteProfile } from './types'
+import { API_URL, getAccessToken, setAccessToken, clearTokens } from './api'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
 export interface LlmConfig {
   base_url: string
-  api_key: string
   model: string
+  /** True when an API key is stored encrypted on the server. */
+  api_key_set: boolean
 }
 
 /** Extract LLM config from app_settings; returns null when not configured. */
@@ -28,19 +34,91 @@ export function getLlmConfig(
   if (!base_url) return null
   return {
     base_url,
-    api_key: ((appSettings?.llm_api_key as string) || '').trim(),
     model: ((appSettings?.llm_model as string) || 'llama3.2').trim(),
+    api_key_set: Boolean(appSettings?.llm_api_key_set),
   }
+}
+
+// ── Internal fetch helpers ────────────────────────────────────────────────
+
+/** Build an Authorization header from the in-memory access token. */
+function _authHeaders(): Record<string, string> {
+  const token = getAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+/**
+ * POST to the backend LLM proxy, returning a raw Response.
+ * Handles a single token-refresh retry on 401.
+ */
+async function _proxyFetch(
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+  retry = true,
+): Promise<Response> {
+  const resp = await fetch(`${API_URL}/api/llm/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ..._authHeaders() },
+    body: JSON.stringify(body),
+    credentials: 'include',
+    signal,
+  })
+
+  if (resp.status === 401 && retry) {
+    // Attempt token refresh (mirrors the logic in apiFetch)
+    try {
+      const refresh = await fetch(`${API_URL}/api/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (refresh.ok) {
+        const data = await refresh.json()
+        setAccessToken(data.access_token)
+        return _proxyFetch(body, signal, false)
+      }
+    } catch {
+      // fall through
+    }
+    clearTokens()
+    if (typeof window !== 'undefined') window.location.href = '/login'
+    throw new Error('Unauthorized')
+  }
+
+  return resp
 }
 
 // ── Activity analysis ─────────────────────────────────────────────────────
 
-const ANALYSIS_SYSTEM_PROMPT =
+const ANALYSIS_SYSTEM_PROMPT_BASE =
   'You are an expert endurance sports coach. Analyse the following workout data and ' +
   'provide actionable coaching feedback in 3-5 paragraphs. Cover: effort quality and ' +
   'pacing, power/heart-rate relationship if data is available, training load context, ' +
   'and 1-2 specific recommendations for the athlete\'s next sessions. ' +
   'Write in plain prose — no markdown headers, no bullet points, no code blocks.'
+
+const LOCALE_LANGUAGE: Record<string, string> = {
+  en: 'English',
+  fi: 'Finnish',
+  sv: 'Swedish',
+  de: 'German',
+  fr: 'French',
+  es: 'Spanish',
+  pt: 'Portuguese',
+  it: 'Italian',
+  nl: 'Dutch',
+  pl: 'Polish',
+  ru: 'Russian',
+  ja: 'Japanese',
+  zh: 'Chinese',
+  ko: 'Korean',
+}
+
+function buildAnalysisSystemPrompt(locale?: string): string {
+  if (!locale) return ANALYSIS_SYSTEM_PROMPT_BASE
+  const language = LOCALE_LANGUAGE[locale.split('-')[0].toLowerCase()]
+  if (!language) return ANALYSIS_SYSTEM_PROMPT_BASE
+  return `${ANALYSIS_SYSTEM_PROMPT_BASE} Respond in ${language}.`
+}
 
 function buildAnalysisPrompt(activity: ActivityDetail, athlete: AthleteProfile): string {
   const lines: string[] = [
@@ -80,35 +158,28 @@ function buildAnalysisPrompt(activity: ActivityDetail, athlete: AthleteProfile):
 }
 
 /**
- * Stream a coaching analysis from the LLM.
+ * Stream a coaching analysis via the backend LLM proxy.
  * Calls `onChunk` for each text fragment as it arrives.
- * Returns the full accumulated text when the stream is complete.
+ * Returns the full accumulated text when the stream completes.
  */
 export async function streamAnalysis(
   activity: ActivityDetail,
   athlete: AthleteProfile,
-  config: LlmConfig,
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
+  locale?: string,
 ): Promise<string> {
-  const url = `${config.base_url.replace(/\/$/, '')}/chat/completions`
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (config.api_key) headers['Authorization'] = `Bearer ${config.api_key}`
-
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: config.model,
+  const resp = await _proxyFetch(
+    {
       messages: [
-        { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
+        { role: 'system', content: buildAnalysisSystemPrompt(locale) },
         { role: 'user', content: buildAnalysisPrompt(activity, athlete) },
       ],
       temperature: 0.7,
       stream: true,
-    }),
+    },
     signal,
-  })
+  )
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
@@ -264,7 +335,7 @@ function parsePlanResponse(raw: string, numWeeks: number): WorkoutDay[][] {
 }
 
 /**
- * Call the LLM to generate a full training plan.
+ * Call the backend LLM proxy to generate a full training plan.
  * Returns a 2-D array: weeks × days (7 entries per week).
  * Retries once on JSON parse failure.
  */
@@ -273,26 +344,17 @@ export async function generatePlanWeeks(
   numWeeks: number,
   goal: string | null,
   athlete: AthleteProfile,
-  llmConfig: LlmConfig,
 ): Promise<WorkoutDay[][]> {
-  const url = `${llmConfig.base_url.replace(/\/$/, '')}/chat/completions`
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (llmConfig.api_key) headers['Authorization'] = `Bearer ${llmConfig.api_key}`
-
   const userPrompt = buildPlanPrompt(config, numWeeks, goal, athlete)
 
   async function callLlm(): Promise<string> {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: llmConfig.model,
-        messages: [
-          { role: 'system', content: PLAN_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-      }),
+    const resp = await _proxyFetch({
+      messages: [
+        { role: 'system', content: PLAN_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.3,
+      stream: false,
     })
     if (!resp.ok) {
       const text = await resp.text().catch(() => '')
@@ -306,7 +368,7 @@ export async function generatePlanWeeks(
   try {
     return parsePlanResponse(raw, numWeeks)
   } catch {
-    // One retry with same prompt
+    // One retry with the same prompt
     const raw2 = await callLlm()
     return parsePlanResponse(raw2, numWeeks)
   }

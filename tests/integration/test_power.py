@@ -1,7 +1,7 @@
 """
 Integration tests for /api/power/bests endpoint.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -195,6 +195,65 @@ class TestGetPowerBestsMultipleActivities:
         sixty_s = [e for e in resp.json()["bests"] if e["duration_s"] == 60]
         assert len(sixty_s) == 3
         assert max(e["rank"] for e in sixty_s) == 3
+
+
+class TestPowerBestsDaysFilter:
+    """The ?days=N parameter restricts bests to a rolling time window."""
+
+    async def test_activity_within_window_is_included(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # Activity from 10 days ago — inside a 30-day window.
+        recent = datetime.now(timezone.utc) - timedelta(days=10)
+        await _insert_activity_with_power(
+            session, athlete, [300.0] * 60, recent.isoformat()
+        )
+
+        resp = await client.get("/api/power/bests?days=30", headers=auth_headers)
+        assert resp.status_code == 200
+        assert len(resp.json()["bests"]) > 0
+
+    async def test_activity_outside_window_is_excluded(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # Activity from 60 days ago — outside a 30-day window.
+        old = datetime.now(timezone.utc) - timedelta(days=60)
+        await _insert_activity_with_power(
+            session, athlete, [300.0] * 60, old.isoformat()
+        )
+
+        resp = await client.get("/api/power/bests?days=30", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["bests"] == []
+
+    async def test_no_days_param_returns_all_activities(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+        old = datetime.now(timezone.utc) - timedelta(days=365)
+        await _insert_activity_with_power(
+            session, athlete, [300.0] * 60, old.isoformat()
+        )
+
+        all_resp = await client.get("/api/power/bests", headers=auth_headers)
+        filtered_resp = await client.get("/api/power/bests?days=30", headers=auth_headers)
+
+        assert len(all_resp.json()["bests"]) > 0
+        assert filtered_resp.json()["bests"] == []
+
+    async def test_days_filter_only_returns_bests_within_window(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+        recent = datetime.now(timezone.utc) - timedelta(days=5)
+        old = datetime.now(timezone.utc) - timedelta(days=200)
+        # Old activity has higher power — should NOT appear in the 90-day window.
+        await _insert_activity_with_power(session, athlete, [400.0] * 60, old.isoformat())
+        await _insert_activity_with_power(session, athlete, [250.0] * 60, recent.isoformat())
+
+        resp = await client.get("/api/power/bests?days=90", headers=auth_headers)
+        bests = resp.json()["bests"]
+        sixty_s = [e for e in bests if e["duration_s"] == 60]
+        assert len(sixty_s) == 1
+        assert sixty_s[0]["power_w"] == pytest.approx(250.0, abs=0.1)
+
+    async def test_days_must_be_at_least_1(self, client, auth_headers):
+        resp = await client.get("/api/power/bests?days=0", headers=auth_headers)
+        assert resp.status_code == 422
 
 
 @pytest.mark.skipif(not SAMPLE_FIT.exists(), reason="FIT fixture not found")

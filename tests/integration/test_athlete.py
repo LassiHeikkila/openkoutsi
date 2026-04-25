@@ -72,6 +72,77 @@ class TestUpdateAthlete:
         assert resp.status_code == 401
 
 
+class TestLlmApiKeyHandling:
+    """The LLM API key must be encrypted at rest and never returned to the client."""
+
+    def _patch_enc_key(self):
+        from cryptography.fernet import Fernet
+        from backend.app.core import config
+        return patch.object(config.settings, "encryption_key", Fernet.generate_key().decode())
+
+    async def test_saving_key_does_not_return_plaintext(self, client, auth_headers):
+        with self._patch_enc_key():
+            resp = await client.put(
+                "/api/athlete/",
+                json={"app_settings": {"llm_base_url": "http://localhost:11434/v1", "llm_api_key": "sk-secret"}},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        settings = data["app_settings"]
+        assert "llm_api_key" not in settings
+        assert "llm_api_key_enc" not in settings
+
+    async def test_key_set_indicator_is_true_after_saving(self, client, auth_headers):
+        with self._patch_enc_key():
+            resp = await client.put(
+                "/api/athlete/",
+                json={"app_settings": {"llm_base_url": "http://localhost:11434/v1", "llm_api_key": "sk-secret"}},
+                headers=auth_headers,
+            )
+        assert resp.json()["app_settings"]["llm_api_key_set"] is True
+
+    async def test_get_athlete_never_returns_encrypted_key(self, client, auth_headers):
+        with self._patch_enc_key():
+            await client.put(
+                "/api/athlete/",
+                json={"app_settings": {"llm_api_key": "sk-secret"}},
+                headers=auth_headers,
+            )
+            resp = await client.get("/api/athlete/", headers=auth_headers)
+        settings = resp.json()["app_settings"]
+        assert "llm_api_key" not in settings
+        assert "llm_api_key_enc" not in settings
+
+    async def test_clearing_key_sets_indicator_to_false(self, client, auth_headers):
+        with self._patch_enc_key():
+            await client.put(
+                "/api/athlete/",
+                json={"app_settings": {"llm_api_key": "sk-secret"}},
+                headers=auth_headers,
+            )
+            resp = await client.put(
+                "/api/athlete/",
+                json={"app_settings": {"llm_api_key": None}},
+                headers=auth_headers,
+            )
+        assert resp.json()["app_settings"]["llm_api_key_set"] is False
+
+    async def test_no_key_indicator_is_false_by_default(self, client, auth_headers):
+        resp = await client.get("/api/athlete/", headers=auth_headers)
+        assert resp.json()["app_settings"].get("llm_api_key_set") is False
+
+    async def test_saving_key_without_encryption_key_returns_503(self, client, auth_headers):
+        from backend.app.core import config
+        with patch.object(config.settings, "encryption_key", None):
+            resp = await client.put(
+                "/api/athlete/",
+                json={"app_settings": {"llm_api_key": "sk-secret"}},
+                headers=auth_headers,
+            )
+        assert resp.status_code == 503
+
+
 class TestExportAthlete:
     async def test_export_returns_zip(self, client, auth_headers):
         resp = await client.get("/api/athlete/export", headers=auth_headers)

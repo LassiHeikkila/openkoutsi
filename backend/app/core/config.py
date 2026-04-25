@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     llm_api_key: str = ""    # empty is fine for local models
     llm_model: str = ""      # e.g. "llama3.2", "gpt-4o-mini", "mistral"
 
+    # Comma-separated list of LLM base URLs that users are allowed to choose from.
+    # When set, users can only pick from this list; the free-text URL input is hidden.
+    # When empty (default), users may enter any URL (subject to SSRF guards).
+    # Example: "http://localhost:11434/v1,https://api.openai.com/v1"
+    llm_allowed_servers: str = ""
+
+    @property
+    def llm_allowed_servers_list(self) -> list[str]:
+        """Parsed list of allowed LLM server base URLs (stripped, non-empty entries only)."""
+        if not self.llm_allowed_servers:
+            return []
+        return [s.strip() for s in self.llm_allowed_servers.split(",") if s.strip()]
+
     # Field-level encryption key for sensitive DB columns (Fernet/base64-urlsafe, 32 bytes).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # Leave empty in development to disable encryption (tokens stored as plaintext).

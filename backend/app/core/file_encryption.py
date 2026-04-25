@@ -57,3 +57,53 @@ def decrypt_file(path: Path, user_id: str) -> bytes:
     """Read and decrypt the file at *path*, returning the plaintext bytes."""
     fernet = _derive_user_fernet(user_id)
     return fernet.decrypt(path.read_bytes())
+
+
+# ── Small-secret encryption (LLM API keys etc.) ───────────────────────────
+#
+# Uses the same master ENCRYPTION_KEY but a different HKDF info string so
+# that the derived key is completely independent from the FIT-file key.
+# This means a compromised FIT-file key cannot be used to decrypt secrets
+# and vice-versa.
+
+def _derive_user_fernet_secrets(user_id: str):
+    """Return a Fernet instance keyed to this user's secrets (distinct from FIT key)."""
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    from backend.app.core.config import settings
+
+    if not settings.encryption_key:
+        raise RuntimeError(
+            "ENCRYPTION_KEY is not set — cannot encrypt/decrypt secrets"
+        )
+
+    raw_master = base64.urlsafe_b64decode(settings.encryption_key.encode())
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=f"llm-api-key:{user_id}".encode(),
+    )
+    derived = hkdf.derive(raw_master)
+    return Fernet(base64.urlsafe_b64encode(derived))
+
+
+def encrypt_secret(plaintext: str, user_id: str) -> str:
+    """Encrypt a short secret string using the user's derived secrets key.
+
+    Returns a URL-safe base-64 Fernet token (str).  The result can be stored
+    in the database; only the server can decrypt it.
+    """
+    fernet = _derive_user_fernet_secrets(user_id)
+    return fernet.encrypt(plaintext.encode()).decode()
+
+
+def decrypt_secret(token: str, user_id: str) -> str:
+    """Decrypt a Fernet token previously produced by *encrypt_secret*.
+
+    Returns the original plaintext string.
+    """
+    fernet = _derive_user_fernet_secrets(user_id)
+    return fernet.decrypt(token.encode()).decode()

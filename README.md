@@ -14,6 +14,8 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Strava sync** — OAuth2 connection with full activity history import and real-time webhook updates
 - **Fitness metrics** — CTL (fitness), ATL (fatigue), TSB (form) calculated via exponentially weighted averages, displayed as interactive charts
 - **Zone analysis** — power and heart-rate zone distribution per activity
+- **Power curve time ranges** — all-time, 12M, 6M, or 3M rolling windows for the power curve chart
+- **AI coaching analysis** — per-activity LLM analysis and AI-generated training plans; bring your own API key (encrypted at rest, proxied server-side — never exposed to the browser)
 - **Training plan generation** — periodized plans (Base → Build → Peak → Taper) generated from your goals, availability, and current fitness
 - **Privacy-first** — full data export (JSON + FIT files) and account deletion at any time
 - **Self-hostable** — runs as a single Docker container or bare `uv` + `pnpm` processes; no public URL required

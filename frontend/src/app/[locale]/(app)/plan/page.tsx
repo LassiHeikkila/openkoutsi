@@ -136,7 +136,6 @@ function GeneratePlanDialog({
           numWeeks,
           goal || null,
           athlete,
-          llmConfig,
         )
         await apiFetch('/api/plans/', {
           method: 'POST',

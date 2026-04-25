@@ -11,12 +11,29 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from '@/components/ui/use-toast'
+import { HelpCircle } from 'lucide-react'
 
 export default function SettingsPage() {
   const t = useTranslations('app')
   const tCommon = useTranslations('common')
   const { data: athlete, mutate } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+  const { data: serversData } = useSWR<{ servers: string[] }>('/api/llm/servers', fetcher)
+  const allowedServers = serversData?.servers ?? []
 
   const autoAnalyze = Boolean(athlete?.app_settings?.auto_analyze)
   const llmConfig = getLlmConfig(athlete?.app_settings)
@@ -30,12 +47,17 @@ export default function SettingsPage() {
   const [llmInitialised, setLlmInitialised] = useState(false)
   if (athlete && !llmInitialised) {
     setLlmBaseUrl((athlete.app_settings?.llm_base_url as string) || '')
-    setLlmApiKey((athlete.app_settings?.llm_api_key as string) || '')
+    // Never pre-fill the key field — it is never returned by the server.
     setLlmModel((athlete.app_settings?.llm_model as string) || '')
     setLlmInitialised(true)
   }
 
+  const apiKeyConfigured = Boolean(athlete?.app_settings?.llm_api_key_set)
+
+  // Mixed-content warning only applies when the user enters a free-form URL.
+  // When an allow-list is active, the admin chose those URLs deliberately.
   const isHttpsMixed =
+    allowedServers.length === 0 &&
     typeof window !== 'undefined' &&
     window.location.protocol === 'https:' &&
     llmBaseUrl.startsWith('http://')
@@ -61,17 +83,25 @@ export default function SettingsPage() {
   async function handleSaveLlm() {
     setLlmSaving(true)
     try {
+      const newSettings: Record<string, unknown> = {
+        ...(athlete?.app_settings ?? {}),
+        llm_base_url: llmBaseUrl.trim() || null,
+        llm_model: llmModel.trim() || null,
+      }
+      // Strip the read-only derived flag before sending.
+      delete newSettings.llm_api_key_set
+
+      // Only include llm_api_key if the user typed something.
+      // Leaving the field blank means "keep the existing key unchanged".
+      if (llmApiKey.trim()) {
+        newSettings.llm_api_key = llmApiKey.trim()
+      }
+
       await apiFetch('/api/athlete/', {
         method: 'PUT',
-        body: JSON.stringify({
-          app_settings: {
-            ...(athlete?.app_settings ?? {}),
-            llm_base_url: llmBaseUrl.trim() || null,
-            llm_api_key: llmApiKey.trim() || null,
-            llm_model: llmModel.trim() || null,
-          },
-        }),
+        body: JSON.stringify({ app_settings: newSettings }),
       })
+      setLlmApiKey('')   // clear the input — the key is now on the server
       setLlmDirty(false)
       mutate()
       toast({ title: t('settings.llm.saved') })
@@ -89,16 +119,17 @@ export default function SettingsPage() {
   async function handleClearLlm() {
     setLlmSaving(true)
     try {
+      const newSettings: Record<string, unknown> = {
+        ...(athlete?.app_settings ?? {}),
+        llm_base_url: null,
+        llm_model: null,
+        llm_api_key: null,  // explicit null → server clears llm_api_key_enc
+      }
+      delete newSettings.llm_api_key_set
+
       await apiFetch('/api/athlete/', {
         method: 'PUT',
-        body: JSON.stringify({
-          app_settings: {
-            ...(athlete?.app_settings ?? {}),
-            llm_base_url: null,
-            llm_api_key: null,
-            llm_model: null,
-          },
-        }),
+        body: JSON.stringify({ app_settings: newSettings }),
       })
       setLlmBaseUrl('')
       setLlmApiKey('')
@@ -172,18 +203,41 @@ export default function SettingsPage() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="llm-base-url">{t('settings.llm.baseUrl')}</Label>
-              <Input
-                id="llm-base-url"
-                placeholder={t('settings.llm.baseUrlPlaceholder')}
-                value={llmBaseUrl}
-                onChange={(e) => { setLlmBaseUrl(e.target.value); setLlmDirty(true) }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('settings.llm.baseUrlHint', {
-                  ollamaUrl: 'http://localhost:11434/v1',
-                  openaiUrl: 'https://api.openai.com/v1',
-                })}
-              </p>
+              {allowedServers.length > 0 ? (
+                <>
+                  <Select
+                    value={llmBaseUrl}
+                    onValueChange={(v) => { setLlmBaseUrl(v); setLlmDirty(true) }}
+                  >
+                    <SelectTrigger id="llm-base-url">
+                      <SelectValue placeholder={t('settings.llm.selectServer')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allowedServers.map((url) => (
+                        <SelectItem key={url} value={url}>{url}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.llm.serverRestricted')}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Input
+                    id="llm-base-url"
+                    placeholder={t('settings.llm.baseUrlPlaceholder')}
+                    value={llmBaseUrl}
+                    onChange={(e) => { setLlmBaseUrl(e.target.value); setLlmDirty(true) }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.llm.baseUrlHint', {
+                      ollamaUrl: 'http://localhost:11434/v1',
+                      openaiUrl: 'https://api.openai.com/v1',
+                    })}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -197,14 +251,47 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="llm-api-key">
-                {t('settings.llm.apiKey')}{' '}
-                <span className="text-muted-foreground font-normal">{t('settings.llm.apiKeyOptional')}</span>
-              </Label>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="llm-api-key">
+                  {t('settings.llm.apiKey')}{' '}
+                  <span className="text-muted-foreground font-normal">{t('settings.llm.apiKeyOptional')}</span>
+                </Label>
+                {/* Info popup explaining the security model */}
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={t('settings.llm.apiKeySecurityTitle')}
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>{t('settings.llm.apiKeySecurityTitle')}</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {t('settings.llm.apiKeySecurityBody')}
+                    </p>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {apiKeyConfigured && (
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  {t('settings.llm.apiKeySet')}
+                </p>
+              )}
+
               <Input
                 id="llm-api-key"
                 type="password"
-                placeholder={t('settings.llm.apiKeyPlaceholder')}
+                placeholder={
+                  apiKeyConfigured
+                    ? t('settings.llm.apiKeySetHint')
+                    : t('settings.llm.apiKeyPlaceholder')
+                }
                 value={llmApiKey}
                 onChange={(e) => { setLlmApiKey(e.target.value); setLlmDirty(true) }}
               />

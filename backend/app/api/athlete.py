@@ -31,6 +31,19 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
     return athlete
 
 
+def _safe_app_settings(athlete: Athlete) -> dict:
+    """Return app_settings safe to send to the frontend.
+
+    * Strips ``llm_api_key_enc`` (never send the ciphertext to the browser).
+    * Adds the derived ``llm_api_key_set: bool`` so the UI can show a
+      "key is configured" indicator without ever seeing the key itself.
+    """
+    raw: dict = dict(athlete.app_settings or {})
+    safe = {k: v for k, v in raw.items() if k != "llm_api_key_enc"}
+    safe["llm_api_key_set"] = bool(raw.get("llm_api_key_enc"))
+    return safe
+
+
 def _athlete_response(
     athlete: Athlete, connected_providers: list[str]
 ) -> AthleteResponse:
@@ -48,7 +61,7 @@ def _athlete_response(
         power_zones=athlete.power_zones or [],
         ftp_tests=athlete.ftp_tests or [],
         connected_providers=connected_providers,
-        app_settings=athlete.app_settings or {},
+        app_settings=_safe_app_settings(athlete),
         avatar_url=avatar_url,
         created_at=athlete.created_at,
         updated_at=athlete.updated_at,
@@ -118,7 +131,41 @@ async def update_athlete(
     if body.power_zones is not None:
         athlete.power_zones = [z.model_dump() for z in body.power_zones]
     if body.app_settings is not None:
-        athlete.app_settings = body.app_settings
+        # Start from the submitted dict, then handle special fields.
+        new_settings: dict = dict(body.app_settings)
+
+        # Strip the derived read-only indicator so it is never persisted.
+        new_settings.pop("llm_api_key_set", None)
+
+        # When LLM_ALLOWED_SERVERS is configured, reject base URLs not in the list.
+        if "llm_base_url" in new_settings and new_settings["llm_base_url"]:
+            from backend.app.core.config import settings as app_settings
+            allowed = app_settings.llm_allowed_servers_list
+            if allowed and new_settings["llm_base_url"].strip() not in allowed:
+                raise HTTPException(
+                    status_code=400,
+                    detail="That LLM server is not in the server's allowed list.",
+                )
+
+        # Encrypt llm_api_key before storage so the plaintext never touches
+        # the database.  The ciphertext is stored under a different key
+        # (llm_api_key_enc) and is never returned to the frontend.
+        if "llm_api_key" in new_settings:
+            raw_key = new_settings.pop("llm_api_key")
+            if raw_key:
+                try:
+                    from backend.app.core.file_encryption import encrypt_secret
+                    new_settings["llm_api_key_enc"] = encrypt_secret(str(raw_key), user.id)
+                except RuntimeError as exc:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=f"Cannot encrypt API key — ENCRYPTION_KEY not set on this server: {exc}",
+                    )
+            else:
+                # Explicit null / empty string → clear the stored key.
+                new_settings["llm_api_key_enc"] = None
+
+        athlete.app_settings = new_settings
 
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 if [ "${PWD##*/}" != "openkoutsi" ]; then
     echo "this script must run from the repository root!"
     exit 1
@@ -10,8 +12,8 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-TARGET=$1
-TARGET_SERVER=$2
+TARGET_SERVER=$1
+USER=$2
 
 pushd frontend || exit 2
 
@@ -26,7 +28,9 @@ fi
 
 echo "copying to server..."
 
-rsync -a --delete .next/standalone/ "${TARGET}/.next/standalone/"
+ssh "${TARGET_SERVER}" "sudo -S systemctl stop openkoutsi-frontend@${USER}.service"
+
+rsync -a --delete .next/standalone/ "${TARGET_SERVER}:/home/${USER}/projects/openkoutsi/frontend/.next/standalone/"
 
 ssh "${TARGET_SERVER}" "sudo -S systemctl daemon-reload"
 ssh "${TARGET_SERVER}" "sudo -S systemctl start openkoutsi-frontend@${USER}.service"

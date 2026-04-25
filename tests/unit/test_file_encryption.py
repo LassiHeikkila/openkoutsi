@@ -86,3 +86,66 @@ class TestEncryptDecryptRoundtrip:
         # Encrypt with k1, decrypt with k2 — they must agree.
         ciphertext = k1.encrypt(b"hello")
         assert k2.decrypt(ciphertext) == b"hello"
+
+
+class TestEncryptDecryptSecret:
+    """Tests for the small-secret (LLM API key) encrypt/decrypt helpers."""
+
+    def test_roundtrip_returns_original_string(self):
+        with _patch_key():
+            from backend.app.core.file_encryption import decrypt_secret, encrypt_secret
+
+            token = encrypt_secret("sk-mysecretkey", "user-abc")
+            result = decrypt_secret(token, "user-abc")
+
+        assert result == "sk-mysecretkey"
+
+    def test_ciphertext_differs_from_plaintext(self):
+        with _patch_key():
+            from backend.app.core.file_encryption import encrypt_secret
+
+            token = encrypt_secret("hunter2", "user-abc")
+
+        assert "hunter2" not in token
+
+    def test_different_users_produce_different_ciphertext(self):
+        with _patch_key():
+            from backend.app.core.file_encryption import encrypt_secret
+
+            t1 = encrypt_secret("same-key", "user-a")
+            t2 = encrypt_secret("same-key", "user-b")
+
+        assert t1 != t2
+
+    def test_wrong_user_cannot_decrypt(self):
+        from cryptography.fernet import InvalidToken
+
+        with _patch_key():
+            from backend.app.core.file_encryption import decrypt_secret, encrypt_secret
+
+            token = encrypt_secret("secret", "user-a")
+            with pytest.raises(InvalidToken):
+                decrypt_secret(token, "user-b")
+
+    def test_secrets_key_is_independent_from_fit_file_key(self):
+        """The LLM-key derivation uses a different HKDF info string, so the
+        derived Fernet key must differ from the FIT-file one."""
+        with _patch_key():
+            from backend.app.core.file_encryption import (
+                _derive_user_fernet,
+                _derive_user_fernet_secrets,
+            )
+
+            fit_key = _derive_user_fernet("user-x")
+            sec_key = _derive_user_fernet_secrets("user-x")
+
+        ciphertext = fit_key.encrypt(b"data")
+        with pytest.raises(Exception):
+            sec_key.decrypt(ciphertext)
+
+    def test_missing_encryption_key_raises_runtime_error(self):
+        with _patch_key(key=None):
+            from backend.app.core.file_encryption import encrypt_secret
+
+            with pytest.raises(RuntimeError, match="ENCRYPTION_KEY"):
+                encrypt_secret("value", "user-abc")

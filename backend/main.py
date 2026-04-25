@@ -207,6 +207,7 @@ def create_app() -> FastAPI:
     from backend.app.api.strava import router as strava_router
     from backend.app.api.wahoo import router as wahoo_router
     from backend.app.api.plans import router as plans_router
+    from backend.app.api.llm import router as llm_router
 
     app = FastAPI(title="openkoutsi API", version="1.0.0", lifespan=lifespan)
 
@@ -232,6 +233,7 @@ def create_app() -> FastAPI:
     app.include_router(strava_router, prefix="/api")
     app.include_router(wahoo_router, prefix="/api")
     app.include_router(plans_router, prefix="/api")
+    app.include_router(llm_router, prefix="/api")
 
     @app.get("/api/version")
     async def get_version():

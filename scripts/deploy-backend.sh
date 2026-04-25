@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 TARGET=$1
 USER=$2
 

@@ -1,6 +1,6 @@
 import type { AllTimeDistanceBests, AllTimePowerBests, TokenPair } from './types'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // In-memory access token (not persisted to storage)
 let _accessToken: string | null = null

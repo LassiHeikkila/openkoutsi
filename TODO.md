@@ -1,12 +1,13 @@
 Features to implement:
 
-- team support
-- setting to sync FTP from wahoo/strava/...
-- setting to sync power zones from wahoo/strava/...
-- generating workouts
+- [ ] team support
+- [ ] setting to sync FTP from wahoo/strava/...
+- [ ] setting to sync power zones from wahoo/strava/...
+- [ ] generating workouts
   - for zwift
   - for wahoo
-- weekly TSS vs planned
+- [ ] weekly TSS vs planned
+- [ ] use summarizeWorkout in backend/app/services/providers/wahoo.py
 
 Testing:
 

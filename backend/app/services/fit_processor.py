@@ -2,11 +2,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-import fitdecode
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openkoutsi.fit import summarizeWorkout
-from backend.app.models.orm import Activity, ActivityDistanceBest, ActivityPowerBest, ActivityStream, Athlete
+from openkoutsi.fit import summarizeWorkout, getStartTime
+from backend.app.models.orm import (
+    Activity,
+    ActivityDistanceBest,
+    ActivityPowerBest,
+    ActivityStream,
+    Athlete,
+)
 from backend.app.services.training_math import (
     normalized_power,
     calculate_tss,
@@ -42,20 +47,7 @@ def read_fit_start_time(path: str) -> Optional[datetime]:
     Reads only until the first data record, so it's fast even for large files.
     Returns a UTC-aware datetime, or None if the file contains no timestamps.
     """
-    try:
-        with fitdecode.FitReader(path) as fr:
-            for frame in fr:
-                if frame.frame_type != fitdecode.FIT_FRAME_DATA:
-                    continue
-                if frame.name == "record":
-                    ts = frame.get_value("timestamp")
-                    if ts is not None:
-                        if isinstance(ts, datetime) and ts.tzinfo is None:
-                            ts = ts.replace(tzinfo=timezone.utc)
-                        return ts
-    except Exception:
-        pass
-    return None
+    return getStartTime(path)
 
 
 async def process_fit_file(
@@ -64,8 +56,7 @@ async def process_fit_file(
     activity: Activity,
     session: AsyncSession,
 ) -> Activity:
-    with fitdecode.FitReader(path) as fr:
-        profile = summarizeWorkout(fr)
+    profile = summarizeWorkout(path)
 
     np = normalized_power(profile.power) if profile.power else None
     tss, intensity_factor = calculate_tss(

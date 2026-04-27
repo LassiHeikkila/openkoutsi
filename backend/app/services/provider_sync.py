@@ -16,12 +16,12 @@ Priority (lower = higher priority):
 """
 
 import asyncio
+import io
 import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-import fitdecode
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +56,7 @@ _NOTFETCHED = object()
 
 # ── Priority ──────────────────────────────────────────────────────────────────
 
+
 def _source_priority(provider: str, has_fit: bool) -> int:
     """Lower number = higher priority."""
     if provider == "upload":
@@ -64,9 +65,9 @@ def _source_priority(provider: str, has_fit: bool) -> int:
         return 2
     if provider == "strava":
         return 3
-    if provider == "wahoo":          # no FIT file
+    if provider == "wahoo":  # no FIT file
         return 4
-    return 5                          # manual, unknown
+    return 5  # manual, unknown
 
 
 def _winning_priority(activity: Activity) -> int:
@@ -74,25 +75,19 @@ def _winning_priority(activity: Activity) -> int:
     if not activity.sources:
         return 999
     return min(
-        _source_priority(s.provider, bool(s.fit_file_path))
-        for s in activity.sources
+        _source_priority(s.provider, bool(s.fit_file_path)) for s in activity.sources
     )
 
 
 # ── Token management ──────────────────────────────────────────────────────────
 
-async def ensure_fresh_token(
-    conn: ProviderConnection, session: AsyncSession
-) -> str:
+
+async def ensure_fresh_token(conn: ProviderConnection, session: AsyncSession) -> str:
     """Refresh the access token if it has expired. Returns current token."""
     expires_at = conn.token_expires_at
     if expires_at is not None and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if (
-        expires_at
-        and datetime.now(timezone.utc) >= expires_at
-        and conn.refresh_token
-    ):
+    if expires_at and datetime.now(timezone.utc) >= expires_at and conn.refresh_token:
         client_cls = PROVIDERS.get(conn.provider)
         if client_cls is None:
             log.warning("Unknown provider %s — cannot refresh token", conn.provider)
@@ -110,6 +105,7 @@ async def ensure_fresh_token(
 
 
 # ── Full sync ─────────────────────────────────────────────────────────────────
+
 
 async def sync_provider_activities(
     athlete: Athlete,
@@ -171,20 +167,30 @@ async def sync_provider_activities(
                     act.duration_s = norm.duration_s
                     if act.normalized_power and athlete.ftp:
                         new_tss, new_if = calculate_tss(
-                            norm.duration_s, act.normalized_power, act.avg_hr,
-                            athlete.ftp, athlete.max_hr,
+                            norm.duration_s,
+                            act.normalized_power,
+                            act.avg_hr,
+                            athlete.ftp,
+                            athlete.max_hr,
                         )
                         act.tss = new_tss
                         act.intensity_factor = new_if
                     elif act.avg_hr and athlete.max_hr:
                         new_tss, _ = calculate_tss(
-                            norm.duration_s, None, act.avg_hr, athlete.ftp, athlete.max_hr,
+                            norm.duration_s,
+                            None,
+                            act.avg_hr,
+                            athlete.ftp,
+                            athlete.max_hr,
                         )
                         act.tss = new_tss
                     await session.commit()
                     log.info(
                         "Corrected duration for %s/%s: %ds → %ds",
-                        provider_name, ext_id, old_dur, norm.duration_s,
+                        provider_name,
+                        ext_id,
+                        old_dur,
+                        norm.duration_s,
                     )
                 continue
 
@@ -241,8 +247,14 @@ async def sync_provider_activities(
                 )
                 if actual_priority < _winning_priority(existing_act):
                     await _repopulate_activity(
-                        existing_act, new_src, norm, client, access_token,
-                        athlete, session, prefetched_fit=prefetched_fit,
+                        existing_act,
+                        new_src,
+                        norm,
+                        client,
+                        access_token,
+                        athlete,
+                        session,
+                        prefetched_fit=prefetched_fit,
                     )
                     count += 1
                     if existing_act.start_time:
@@ -285,7 +297,9 @@ async def sync_provider_activities(
             session.add(src)
             await session.flush()
 
-            await _populate_activity(activity, src, norm, client, access_token, athlete, session)
+            await _populate_activity(
+                activity, src, norm, client, access_token, athlete, session
+            )
             count += 1
 
             if activity.start_time:
@@ -302,7 +316,9 @@ async def sync_provider_activities(
                 from backend.app.core.config import settings as _settings
 
                 if _settings.llm_base_url:
-                    from backend.app.services.llm_activity_analyzer import analyze_activity_bg
+                    from backend.app.services.llm_activity_analyzer import (
+                        analyze_activity_bg,
+                    )
 
                     activity.analysis_status = "pending"
                     await session.commit()
@@ -314,6 +330,7 @@ async def sync_provider_activities(
 
 
 # ── Data population ───────────────────────────────────────────────────────────
+
 
 async def _populate_activity(
     activity: Activity,
@@ -352,11 +369,19 @@ async def _repopulate_activity(
         delete(ActivityPowerBest).where(ActivityPowerBest.activity_id == activity.id)
     )
     await session.execute(
-        delete(ActivityDistanceBest).where(ActivityDistanceBest.activity_id == activity.id)
+        delete(ActivityDistanceBest).where(
+            ActivityDistanceBest.activity_id == activity.id
+        )
     )
     await session.flush()
     await _fill_from_source(
-        activity, new_src, norm, client, access_token, athlete, session,
+        activity,
+        new_src,
+        norm,
+        client,
+        access_token,
+        athlete,
+        session,
         prefetched_fit=prefetched_fit,
     )
 
@@ -395,8 +420,7 @@ async def _fill_from_source(
         fit_path.write_bytes(fit_bytes)
 
         try:
-            with fitdecode.FitReader(str(fit_path)) as fr:
-                profile = summarizeWorkout(fr)
+            profile = summarizeWorkout(io.BytesIO(fit_bytes))
         except Exception:
             log.exception("FIT parsing failed for %s/%s", norm.source, norm.external_id)
             profile = None
@@ -412,47 +436,65 @@ async def _fill_from_source(
         src.fit_file_encrypted = encrypted
 
         if profile is not None:
-            power_data   = [float(v) for v in profile.power]
-            hr_data      = [float(v) for v in profile.heartRate]
+            power_data = [float(v) for v in profile.power]
+            hr_data = [float(v) for v in profile.heartRate]
             cadence_data = [float(v) for v in profile.cadence]
-            speed_ms     = [v / 3.6 for v in profile.speed]
-            alt_data     = [float(v) for v in profile.altitude]
+            speed_ms = [v / 3.6 for v in profile.speed]
+            alt_data = [float(v) for v in profile.altitude]
 
-            np_val   = normalized_power(power_data) if power_data else None
+            np_val = normalized_power(power_data) if power_data else None
             avg_hr_v = profile.avgHeartRate if hr_data else norm.avg_hr
-            dur_v    = profile.duration or norm.duration_s or 0
-            tss, intensity_factor = calculate_tss(dur_v, np_val, avg_hr_v, athlete.ftp, athlete.max_hr)
+            dur_v = profile.duration or norm.duration_s or 0
+            tss, intensity_factor = calculate_tss(
+                dur_v, np_val, avg_hr_v, athlete.ftp, athlete.max_hr
+            )
 
-            activity.name           = activity.name or norm.name or "Uploaded Activity"
-            activity.sport_type     = activity.sport_type or norm.sport_type or _resolve_sport_type(profile.sport_type)
-            activity.start_time     = profile.start_time or norm.start_time
-            activity.duration_s     = profile.duration
-            activity.distance_m     = float(profile.distance) if profile.distance else norm.distance_m
-            activity.elevation_m    = float(profile.elevationGain) if profile.elevationGain else norm.elevation_m
-            activity.avg_power      = profile.avgPower if power_data else norm.avg_power
+            activity.name = activity.name or norm.name or "Uploaded Activity"
+            activity.sport_type = (
+                activity.sport_type
+                or norm.sport_type
+                or _resolve_sport_type(profile.sport_type)
+            )
+            activity.start_time = profile.start_time or norm.start_time
+            activity.duration_s = profile.duration
+            activity.distance_m = (
+                float(profile.distance) if profile.distance else norm.distance_m
+            )
+            activity.elevation_m = (
+                float(profile.elevationGain)
+                if profile.elevationGain
+                else norm.elevation_m
+            )
+            activity.avg_power = profile.avgPower if power_data else norm.avg_power
             activity.normalized_power = np_val
-            activity.avg_hr         = avg_hr_v
-            activity.max_hr         = profile.peakHR if hr_data else norm.max_hr
-            activity.avg_speed_ms   = (profile.avgSpeed / 3.6) if profile.speed else norm.avg_speed_ms
-            activity.avg_cadence    = float(profile.avgCadence) if profile.cadence else norm.avg_cadence
-            activity.tss            = tss
+            activity.avg_hr = avg_hr_v
+            activity.max_hr = profile.peakHR if hr_data else norm.max_hr
+            activity.avg_speed_ms = (
+                (profile.avgSpeed / 3.6) if profile.speed else norm.avg_speed_ms
+            )
+            activity.avg_cadence = (
+                float(profile.avgCadence) if profile.cadence else norm.avg_cadence
+            )
+            activity.tss = tss
             activity.intensity_factor = intensity_factor
-            activity.status         = "processed"
+            activity.status = "processed"
 
-            _add_streams(activity, session, power_data, hr_data, cadence_data, speed_ms, alt_data)
+            _add_streams(
+                activity, session, power_data, hr_data, cadence_data, speed_ms, alt_data
+            )
             _add_power_bests(activity, athlete, session, power_data)
             _add_distance_bests(activity, athlete, session, speed_ms)
         else:
             # FIT parse failed — use summary metadata only
-            activity.name      = activity.name or norm.name
+            activity.name = activity.name or norm.name
             activity.sport_type = activity.sport_type or norm.sport_type
             activity.start_time = norm.start_time
             activity.duration_s = norm.duration_s
             activity.distance_m = norm.distance_m
             activity.elevation_m = norm.elevation_m
-            activity.avg_power  = norm.avg_power
-            activity.avg_hr     = norm.avg_hr
-            activity.max_hr     = norm.max_hr
+            activity.avg_power = norm.avg_power
+            activity.avg_hr = norm.avg_hr
+            activity.max_hr = norm.max_hr
             activity.avg_speed_ms = norm.avg_speed_ms
             activity.avg_cadence = norm.avg_cadence
             activity.status = "processed"
@@ -467,34 +509,40 @@ async def _fill_from_source(
     except Exception:
         streams_raw = {}
 
-    power_data    = streams_raw.get("power", [])
-    hr_data       = streams_raw.get("heartrate", [])
-    cadence_data  = streams_raw.get("cadence", [])
-    speed_data    = streams_raw.get("speed", [])
+    power_data = streams_raw.get("power", [])
+    hr_data = streams_raw.get("heartrate", [])
+    cadence_data = streams_raw.get("cadence", [])
+    speed_data = streams_raw.get("speed", [])
     altitude_data = streams_raw.get("altitude", [])
 
-    np_val  = normalized_power(power_data) if power_data else None
-    avg_hr  = (sum(hr_data) / len(hr_data)) if hr_data else norm.avg_hr
-    dur_s   = norm.duration_s or 0
-    tss, intensity_factor = calculate_tss(dur_s, np_val, avg_hr, athlete.ftp, athlete.max_hr)
+    np_val = normalized_power(power_data) if power_data else None
+    avg_hr = (sum(hr_data) / len(hr_data)) if hr_data else norm.avg_hr
+    dur_s = norm.duration_s or 0
+    tss, intensity_factor = calculate_tss(
+        dur_s, np_val, avg_hr, athlete.ftp, athlete.max_hr
+    )
 
-    activity.name      = activity.name or norm.name
+    activity.name = activity.name or norm.name
     activity.sport_type = activity.sport_type or norm.sport_type
     activity.start_time = norm.start_time
     activity.duration_s = norm.duration_s
     activity.distance_m = norm.distance_m
     activity.elevation_m = norm.elevation_m
-    activity.avg_power  = norm.avg_power or (sum(power_data) / len(power_data) if power_data else None)
+    activity.avg_power = norm.avg_power or (
+        sum(power_data) / len(power_data) if power_data else None
+    )
     activity.normalized_power = np_val
-    activity.avg_hr     = avg_hr
-    activity.max_hr     = norm.max_hr
+    activity.avg_hr = avg_hr
+    activity.max_hr = norm.max_hr
     activity.avg_speed_ms = norm.avg_speed_ms
     activity.avg_cadence = norm.avg_cadence
-    activity.tss        = tss
+    activity.tss = tss
     activity.intensity_factor = intensity_factor
-    activity.status     = "processed"
+    activity.status = "processed"
 
-    _add_streams(activity, session, power_data, hr_data, cadence_data, speed_data, altitude_data)
+    _add_streams(
+        activity, session, power_data, hr_data, cadence_data, speed_data, altitude_data
+    )
     _add_power_bests(activity, athlete, session, power_data)
     _add_distance_bests(activity, athlete, session, speed_data)
 
@@ -503,6 +551,7 @@ async def _fill_from_source(
 
 
 # ── Stream / bests helpers ────────────────────────────────────────────────────
+
 
 def _add_streams(
     activity: Activity,
@@ -514,19 +563,21 @@ def _add_streams(
     altitude_data: list,
 ) -> None:
     for stream_type, data in [
-        ("power",     power_data),
+        ("power", power_data),
         ("heartrate", hr_data),
-        ("cadence",   cadence_data),
-        ("speed",     speed_data),
-        ("altitude",  altitude_data),
+        ("cadence", cadence_data),
+        ("speed", speed_data),
+        ("altitude", altitude_data),
     ]:
         if data:
-            session.add(ActivityStream(
-                id=str(uuid.uuid4()),
-                activity_id=activity.id,
-                stream_type=stream_type,
-                data=data,
-            ))
+            session.add(
+                ActivityStream(
+                    id=str(uuid.uuid4()),
+                    activity_id=activity.id,
+                    stream_type=stream_type,
+                    data=data,
+                )
+            )
 
 
 def _add_power_bests(
@@ -538,13 +589,15 @@ def _add_power_bests(
     if not power_data:
         return
     for dur_s, pwr_w in compute_power_bests(power_data).items():
-        session.add(ActivityPowerBest(
-            activity_id=activity.id,
-            athlete_id=athlete.id,
-            duration_s=dur_s,
-            power_w=pwr_w,
-            activity_start_time=activity.start_time,
-        ))
+        session.add(
+            ActivityPowerBest(
+                activity_id=activity.id,
+                athlete_id=athlete.id,
+                duration_s=dur_s,
+                power_w=pwr_w,
+                activity_start_time=activity.start_time,
+            )
+        )
 
 
 def _add_distance_bests(
@@ -556,10 +609,12 @@ def _add_distance_bests(
     if not speed_data:
         return
     for dist_m, time_s in compute_distance_bests(speed_data).items():
-        session.add(ActivityDistanceBest(
-            activity_id=activity.id,
-            athlete_id=athlete.id,
-            distance_m=dist_m,
-            time_s=time_s,
-            activity_start_time=activity.start_time,
-        ))
+        session.add(
+            ActivityDistanceBest(
+                activity_id=activity.id,
+                athlete_id=athlete.id,
+                distance_m=dist_m,
+                time_s=time_s,
+                activity_start_time=activity.start_time,
+            )
+        )

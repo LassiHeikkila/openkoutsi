@@ -44,13 +44,15 @@ async def process_wahoo_webhook(payload: dict, session: AsyncSession) -> None:
         log.warning("Wahoo webhook missing user.id — ignoring")
         return
 
-    # Merge top-level workout_summary into workout dict in case it isn't nested there
-    workout = dict(payload.get("workout") or {})
+    # Wahoo may send workout nested inside workout_summary (observed production structure)
+    # or at the top level (documented structure). Support both.
+    workout_summary = payload.get("workout_summary") or {}
+    workout = dict(payload.get("workout") or workout_summary.get("workout") or {})
     if not workout:
         log.warning("Wahoo webhook missing workout object — ignoring")
         return
-    if not workout.get("workout_summary") and payload.get("workout_summary"):
-        workout["workout_summary"] = payload["workout_summary"]
+    if not workout.get("workout_summary"):
+        workout["workout_summary"] = workout_summary
 
     norm = _normalize_workout(workout)
 

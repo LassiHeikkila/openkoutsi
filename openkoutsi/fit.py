@@ -1,11 +1,31 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import cast, Optional
 
 import fitdecode
 
 from . import workout
 
+def getStartTime(fileish) -> Optional[datetime]:
+    try:
+        with fitdecode.FitReader(fileish) as fr:
+            for frame in fr:
+                if frame.frame_type != fitdecode.FIT_FRAME_DATA:
+                    continue
+                frame = cast(fitdecode.records.FitDataMessage, frame)
+                
+                if frame.name == "record":
+                    ts = frame.get_value("timestamp")
+                    if ts is not None:
+                        if isinstance(ts, datetime) and ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        return ts
+    except Exception:
+        pass
+    return None
 
-def summarizeWorkout(fr) -> workout.Profile:
+def summarizeWorkout(fileish) -> workout.Profile:
+    fr = fitdecode.FitReader(fileish)
+
     first_ts: datetime | None = None
     last_ts = None
     duration_from_session = None
@@ -13,15 +33,17 @@ def summarizeWorkout(fr) -> workout.Profile:
     elevation_gain_from_session = 0
     sport_from_file: str | None = None
 
-    heart_rate: list[int] = []
+    heart_rate: list[float] = []
     speed: list[float] = []
-    power: list[int] = []
-    cadence: list[int] = []
+    power: list[float] = []
+    cadence: list[float] = []
     altitude: list[float] = []
 
     for frame in fr:
         if frame.frame_type != fitdecode.FIT_FRAME_DATA:
             continue
+
+        frame = cast(fitdecode.records.FitDataMessage, frame)
 
         if frame.name == "sport":
             s = frame.get_value("sport", fallback=None)
@@ -50,7 +72,7 @@ def summarizeWorkout(fr) -> workout.Profile:
 
             hr = frame.get_value("heart_rate", fallback=None)
             if hr is not None:
-                heart_rate.append(int(hr))
+                heart_rate.append(float(hr))
 
             spd = frame.get_value("speed", fallback=None)
             if spd is not None:
@@ -58,11 +80,11 @@ def summarizeWorkout(fr) -> workout.Profile:
 
             pwr = frame.get_value("power", fallback=None)
             if pwr is not None:
-                power.append(int(pwr))
+                power.append(float(pwr))
 
             cad = frame.get_value("cadence", fallback=None)
             if cad is not None:
-                cadence.append(int(cad))
+                cadence.append(float(cad))
 
             alt = frame.get_value("altitude", fallback=None)
             if alt is not None:

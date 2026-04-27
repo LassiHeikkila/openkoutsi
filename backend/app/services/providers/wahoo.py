@@ -320,50 +320,22 @@ def _normalize_workout(raw: dict) -> NormalizedActivity:
 
 def _parse_fit_streams(fit_bytes: bytes) -> dict[str, list[float]]:
     """Extract time-series streams from a FIT file in memory."""
-    power: list[float] = []
-    heartrate: list[float] = []
-    cadence: list[float] = []
-    speed: list[float] = []
-    altitude: list[float] = []
+    from openkoutsi.fit import summarizeWorkout
 
-    with fitdecode.FitReader(io.BytesIO(fit_bytes)) as fr:
-        for frame in fr:
-            if frame.frame_type != fitdecode.FIT_FRAME_DATA:
-                continue
-            if frame.name != "record":
-                continue
-
-            pwr = frame.get_value("power")
-            if pwr is not None:
-                power.append(float(pwr))
-
-            hr = frame.get_value("heart_rate")
-            if hr is not None:
-                heartrate.append(float(hr))
-
-            cad = frame.get_value("cadence")
-            if cad is not None:
-                cadence.append(float(cad))
-
-            spd = frame.get_value("speed")
-            if spd is not None:
-                speed.append(float(spd))  # m/s in FIT files
-
-            alt = frame.get_value("altitude")
-            if alt is not None:
-                altitude.append(float(alt))
+    profile = summarizeWorkout(io.BytesIO(fit_bytes))
 
     result: dict[str, list[float]] = {}
-    if power:
-        result["power"] = power
-    if heartrate:
-        result["heartrate"] = heartrate
-    if cadence:
-        result["cadence"] = cadence
-    if speed:
-        result["speed"] = speed
-    if altitude:
-        result["altitude"] = altitude
+    if profile.power:
+        result["power"] = [float(v) for v in profile.power]
+    if profile.heartRate:
+        result["heartrate"] = [float(v) for v in profile.heartRate]
+    if profile.cadence:
+        result["cadence"] = [float(v) for v in profile.cadence]
+    if profile.speed:
+        # summarizeWorkout stores speed in km/h; callers expect m/s
+        result["speed"] = [v / 3.6 for v in profile.speed]
+    if profile.altitude:
+        result["altitude"] = [float(v) for v in profile.altitude]
     return result
 
 

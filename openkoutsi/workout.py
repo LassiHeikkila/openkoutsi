@@ -14,14 +14,14 @@ class Profile:
     avgHeartRate: float  # BPM
     avgSpeed: float  # km/h
     avgPower: float  # W
-    peakPower: int  # W
-    peakHR: int  # BPM
-    peakCadence: int  # RPM
-    avgCadence: int  # RPM
-    heartRate: list[int]  # BPM at each second
+    peakPower: float  # W
+    peakHR: float  # BPM
+    peakCadence: float  # RPM
+    avgCadence: float  # RPM
+    heartRate: list[float]  # BPM at each second
     speed: list[float]  # km/h at each second
-    power: list[int]  # W at each second
-    cadence: list[int]  # RPM at each second
+    power: list[float]  # W at each second
+    cadence: list[float]  # RPM at each second
     altitude: list[float]  # metres at each second
 
     sport_type: str | None  # raw sport string from FIT file, e.g. "running"
@@ -32,10 +32,10 @@ class Profile:
         duration: int,
         distance: int,
         elevationGain: int,
-        heartRate: list[int],
+        heartRate: list[float],
         speed: list[float],
-        power: list[int],
-        cadence: list[int],
+        power: list[float],
+        cadence: list[float],
         altitude: list[float] | None = None,
         sport_type: str | None = None,
     ):
@@ -117,8 +117,8 @@ def zoneBreakdown(
     timeInPowerZones = {powerZones.zoneName(i): 0 for i in range(len(powerZones.zones))}
 
     for i in range(sample_count):
-        hr_zone = hrZones.getZone(workout.heartRate[i])
-        power_zone = powerZones.getZone(workout.power[i])
+        hr_zone = hrZones.getZone(int(workout.heartRate[i]))
+        power_zone = powerZones.getZone(int(workout.power[i]))
         hr_zone_name = hrZones.zoneName(hr_zone)
         power_zone_name = powerZones.zoneName(power_zone)
 

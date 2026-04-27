@@ -298,7 +298,6 @@ class TestSyncProviderActivities:
 
         with (
             patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}),
-            patch("backend.app.services.provider_sync.fitdecode.FitReader"),
             patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
             patch("backend.app.services.provider_sync.encrypt_file"),
         ):
@@ -350,7 +349,6 @@ class TestSyncProviderActivities:
 
         with (
             patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}),
-            patch("backend.app.services.provider_sync.fitdecode.FitReader"),
             patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
             patch("backend.app.services.provider_sync.encrypt_file"),
         ):

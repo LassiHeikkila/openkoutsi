@@ -1,3 +1,5 @@
+<img src="frontend/design/exports/frame-wheels-black.svg" alt="openkoutsi" width="120">
+
 # openkoutsi
 
 A self-hosted cycling coaching platform. Upload FIT files or sync from Strava, track fitness metrics (CTL/ATL/TSB), and generate periodized training plans — all from your own server.

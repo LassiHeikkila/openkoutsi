@@ -178,11 +178,9 @@ async def process_wahoo_webhook(payload: dict, session: AsyncSession) -> None:
         await recalculate_from(athlete.id, start_date, session)
 
     app_cfg = athlete.app_settings or {}
-    if app_cfg.get("auto_analyze"):
-        from backend.app.core.config import settings as _settings
-        if _settings.llm_base_url:
-            import asyncio
-            from backend.app.services.llm_activity_analyzer import analyze_activity_bg
-            activity.analysis_status = "pending"
-            await session.commit()
-            asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))
+    if app_cfg.get("auto_analyze") and app_cfg.get("llm_base_url"):
+        import asyncio
+        from backend.app.services.llm_activity_analyzer import analyze_activity_bg
+        activity.analysis_status = "pending"
+        await session.commit()
+        asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))

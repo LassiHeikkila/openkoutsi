@@ -312,17 +312,14 @@ async def sync_provider_activities(
                     earliest = day
 
             app_cfg = athlete.app_settings or {}
-            if app_cfg.get("auto_analyze"):
-                from backend.app.core.config import settings as _settings
+            if app_cfg.get("auto_analyze") and app_cfg.get("llm_base_url"):
+                from backend.app.services.llm_activity_analyzer import (
+                    analyze_activity_bg,
+                )
 
-                if _settings.llm_base_url:
-                    from backend.app.services.llm_activity_analyzer import (
-                        analyze_activity_bg,
-                    )
-
-                    activity.analysis_status = "pending"
-                    await session.commit()
-                    asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))
+                activity.analysis_status = "pending"
+                await session.commit()
+                asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))
 
         page += 1
 

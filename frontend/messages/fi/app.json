@@ -150,6 +150,7 @@
     "syncZonesDone": "Vyöhykkeet synkronoitu palvelusta {name}",
     "syncZonesFailed": "Vyöhykkeiden synkronointi epäonnistui palvelusta {name}",
     "syncZonesReconnect": "Yhdistä {name} uudelleen ottaaksesi vyöhykkeiden synkronoinnin käyttöön.",
+    "syncZonesNoData": "Vyöhykkeitä ei löydy palvelusta {name}. Varmista, että tehovyöhykkeet on määritelty {name}-sovelluksessa, ja yritä yhdistää uudelleen.",
     "syncZonesProvides": {
       "strava": "Sykevyöhykkeet + tehovyöhykkeet + FTP",
       "wahoo": "Tehovyöhykkeet + FTP"

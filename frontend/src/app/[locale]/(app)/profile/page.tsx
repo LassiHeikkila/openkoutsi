@@ -266,10 +266,13 @@ export default function ProfilePage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : tCommon('unknownError')
       const isScope = msg.includes('insufficient_scope')
+      const isNoZones = msg.includes('no_zones_returned')
       toast({
         title: t('profile.syncZonesFailed', { name: providerName }),
         description: isScope
           ? t('profile.syncZonesReconnect', { name: providerName })
+          : isNoZones
+          ? t('profile.syncZonesNoData', { name: providerName })
           : msg,
         variant: 'destructive',
       })

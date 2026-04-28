@@ -62,7 +62,7 @@ def _maybe_auto_analyze(activity_id: str, athlete: Athlete) -> bool:
     Returns True if a task was scheduled (caller should set analysis_status=pending).
     """
     app_settings = athlete.app_settings or {}
-    if app_settings.get("auto_analyze") and settings.llm_base_url:
+    if app_settings.get("auto_analyze") and app_settings.get("llm_base_url"):
         from backend.app.services.llm_activity_analyzer import analyze_activity_bg
         asyncio.create_task(analyze_activity_bg(activity_id, athlete.id))
         return True

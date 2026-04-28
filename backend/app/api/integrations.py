@@ -268,6 +268,9 @@ async def sync_zones(
     if zone_data is None:
         raise HTTPException(status_code=400, detail=f"{provider} does not support zone sync")
 
+    if zone_data.ftp is None and zone_data.hr_zones is None and zone_data.power_zones is None:
+        raise HTTPException(status_code=422, detail="no_zones_returned")
+
     updated: list[str] = []
 
     if zone_data.ftp is not None:

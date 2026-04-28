@@ -144,6 +144,7 @@
     "syncZonesDone": "Zones synced from {name}",
     "syncZonesFailed": "Could not sync zones from {name}",
     "syncZonesReconnect": "Please disconnect and reconnect {name} to enable zone sync.",
+    "syncZonesNoData": "No zones found in {name}. Make sure power zones are configured in the {name} app and try reconnecting.",
     "syncZonesProvides": {
       "strava": "HR zones + power zones + FTP",
       "wahoo": "Power zones + FTP"

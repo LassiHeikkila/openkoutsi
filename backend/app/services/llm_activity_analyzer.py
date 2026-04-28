@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, AsyncIterator
 import httpx
 from sqlalchemy import select
 
-from ..core.config import settings
 from ..db.base import AsyncSessionLocal
 from ..models.orm import Activity, Athlete
 
@@ -79,16 +78,32 @@ def _build_prompt(activity: Activity, athlete: Athlete) -> str:
 
 async def _stream_analysis(activity: Activity, athlete: Athlete) -> AsyncIterator[str]:
     """Yield text chunks from the LLM via streaming SSE."""
-    if not settings.llm_base_url or not settings.llm_model:
-        raise ValueError("LLM_BASE_URL and LLM_MODEL must be configured")
+    app_settings = athlete.app_settings or {}
+    base_url = (app_settings.get("llm_base_url") or "").strip()
+    model = (app_settings.get("llm_model") or "").strip()
 
-    url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+    if not base_url or not model:
+        raise ValueError("LLM base URL and model must be configured in Settings → AI / LLM")
+
+    url = f"{base_url.rstrip('/')}/chat/completions"
     headers: dict[str, str] = {"Content-Type": "application/json"}
-    if settings.llm_api_key:
-        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+
+    enc_key = app_settings.get("llm_api_key_enc")
+    if enc_key:
+        try:
+            from backend.app.core.file_encryption import decrypt_secret
+            from backend.app.db.base import AsyncSessionLocal
+            from backend.app.models.orm import User
+            from sqlalchemy import select as sa_select
+            async with AsyncSessionLocal() as s:
+                user = (await s.execute(sa_select(User).where(User.id == athlete.user_id))).scalar_one()
+            api_key = decrypt_secret(str(enc_key), user.id)
+            headers["Authorization"] = f"Bearer {api_key}"
+        except Exception:
+            log.warning("Could not decrypt LLM API key for athlete %s — proceeding without auth", athlete.id)
 
     payload = {
-        "model": settings.llm_model,
+        "model": model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": _build_prompt(activity, athlete)},

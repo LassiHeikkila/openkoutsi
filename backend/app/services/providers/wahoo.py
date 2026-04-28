@@ -283,11 +283,8 @@ class WahooClient(BaseProviderClient):
             r = await client.get(f"{_API_BASE}/power_zones", headers=headers)
         r.raise_for_status()
         raw = r.json()
-        print("WAHOO fetch_zones raw:", json.dumps(raw, default=str)[:2000], flush=True)
-
         entries: list[dict] = raw if isinstance(raw, list) else raw.get("power_zones", [])
         if not entries:
-            print("WAHOO fetch_zones: no entries", flush=True)
             return ZoneData()
 
         # Use the first entry (Wahoo returns one record per workout type family;
@@ -298,11 +295,9 @@ class WahooClient(BaseProviderClient):
 
         zone_count = int(entry.get("zone_count", 7))
         thresholds = [entry.get(f"zone_{i}") for i in range(1, zone_count + 1)]
-        print(f"WAHOO fetch_zones zone_count={zone_count} thresholds={thresholds} ftp={ftp}", flush=True)
         thresholds = [int(t) for t in thresholds if t is not None]
 
         power_zones = _normalize_wahoo_zones(thresholds)
-        print(f"WAHOO fetch_zones power_zones={power_zones}", flush=True)
 
         return ZoneData(ftp=ftp, power_zones=power_zones or None)
 

@@ -21,6 +21,10 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Privacy-first** — full data export (JSON + FIT files) and account deletion at any time
 - **Self-hostable** — runs as a single Docker container or bare `uv` + `pnpm` processes; no public URL required
 
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
+
 ## Architecture
 
 ```

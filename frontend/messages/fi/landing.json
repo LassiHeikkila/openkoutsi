@@ -7,7 +7,7 @@
     "signup": "Rekister\u00f6idy"
   },
   "hero": {
-    "eyebrow": "avoimen l\u00e4hdekoodin \u00b7 AGPL-3.0",
+    "eyebrow": "avoimen l\u00e4hdekoodin \u00b7 Apache-2.0",
     "h1line1": "Jokainen watti.",
     "h1line2": "Jokainen kilometri.",
     "h1line3": "Sinun.",
@@ -55,7 +55,7 @@
     "copied": "KOPIOITU"
   },
   "footer": {
-    "license": "AGPL-3.0",
+    "license": "Apache-2.0",
     "copyright": "\u00a9 2026 osallistujat",
     "github": "GitHub"
   }

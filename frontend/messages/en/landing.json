@@ -7,7 +7,7 @@
     "signup": "Sign up"
   },
   "hero": {
-    "eyebrow": "open source \u00b7 AGPL-3.0",
+    "eyebrow": "open source \u00b7 Apache-2.0",
     "h1line1": "Every watt.",
     "h1line2": "Every kilometre.",
     "h1line3": "Yours.",
@@ -55,7 +55,7 @@
     "copied": "COPIED"
   },
   "footer": {
-    "license": "AGPL-3.0",
+    "license": "Apache-2.0",
     "copyright": "\u00a9 2026 contributors",
     "github": "GitHub"
   }

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -4 136 136" fill="none" stroke="#111" stroke-linecap="round" stroke-linejoin="round">
+  
+  <defs>
+    <path id="dt-path" d="M 45.4 77.67 L 72.6 32.33" fill="none"></path>
+  </defs>
+
+  
+  <path d="M 29.459 88.991 A 27 27 0 1 1 9.404 53.546 L 6.070 59.102 A 21 21 0 1 0 22.978 88.991 Z" fill="#111" stroke="none"></path>
+  <path d="M 89.564 53.580 A 27 27 0 1 1 68.912 57.609 L 70.221 64.153 A 21 21 0 1 0 90.880 60.159 Z" fill="#111" stroke="none"></path>
+  <g fill="#111" stroke="#111">
+  <line x1="34" y1="30" x2="74" y2="30" stroke-width="9"></line>
+  <line x1="4" y1="80" x2="44" y2="80" stroke-width="9"></line>
+  <line x1="74" y1="30" x2="44" y2="80" stroke-width="9"></line>
+  <line x1="34" y1="30" x2="4" y2="80" stroke-width="9"></line>
+  <line x1="34" y1="30" x2="44" y2="80" stroke-width="9"></line>
+  <line x1="74" y1="30" x2="76" y2="40" stroke-width="9"></line>
+  <line x1="76" y1="40" x2="84" y2="80" stroke-width="9"></line>
+  <circle cx="4" cy="80" r="2.5" stroke="none"></circle>
+  <circle cx="84" cy="80" r="2.5" stroke="none"></circle>
+</g>
+  
+  <text font-family="&#39;JetBrains Mono&#39;, ui-monospace, monospace" font-weight="700" font-size="5" fill="#fff" stroke="none" letter-spacing="1.8" dominant-baseline="middle">
+    <textPath href="#dt-path" startOffset="50%" text-anchor="middle">OPENKOUTSI</textPath>
+  </text>
+
+</svg>

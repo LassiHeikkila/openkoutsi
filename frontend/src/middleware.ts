@@ -18,11 +18,11 @@ const PROTECTED_PREFIXES = [
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Pass through Next.js internals and static assets immediately
+  // Pass through Next.js internals, API routes, and static files immediately
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
-    pathname === '/favicon.ico'
+    /\.[\w]+$/.test(pathname)  // any path with a file extension (e.g. .svg, .png, .ico)
   ) {
     return NextResponse.next()
   }
@@ -54,5 +54,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|.*\\.\\w+$).*)'],
 }

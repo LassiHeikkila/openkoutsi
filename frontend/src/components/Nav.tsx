@@ -39,7 +39,10 @@ function NavInner({ onClose }: NavInnerProps) {
     <nav className="flex flex-col h-full w-56 border-r bg-card px-3 py-4 gap-1">
       <div className="px-3 pb-4 mb-2 border-b flex items-start justify-between">
         <div>
-          <p className="font-semibold text-lg leading-none">openkoutsi</p>
+          <div className="flex items-center gap-2 mb-1">
+            <img src="/logo.svg" alt="" aria-hidden="true" className="h-6 w-6" />
+            <p className="font-semibold text-lg leading-none">openkoutsi</p>
+          </div>
           {athlete && (
             <div className="flex items-center gap-2 mt-2">
               <div className="relative h-7 w-7 shrink-0 rounded-full overflow-hidden bg-muted border">

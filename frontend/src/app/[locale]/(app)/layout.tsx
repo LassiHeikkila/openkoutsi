@@ -50,6 +50,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           >
             <Menu className="h-5 w-5" />
           </button>
+          <img src="/logo.svg" alt="" aria-hidden="true" className="h-5 w-5" />
           <p className="font-semibold text-sm">openkoutsi</p>
         </header>
 

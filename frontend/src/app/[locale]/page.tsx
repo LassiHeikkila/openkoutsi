@@ -40,7 +40,7 @@ export default function RootPage() {
       <nav className="nav">
         <div className="container nav-inner">
           <div className="logo">
-            <div className="logo-mark" />
+            <img src="/logo.svg" alt="openkoutsi" className="logo-img" />
             openkoutsi
           </div>
           <div className="nav-right">
@@ -151,7 +151,7 @@ export default function RootPage() {
               <span className="pill">docker</span>
               <span className="pill">sqlite</span>
               <span className="pill">arm64 / amd64</span>
-              <span className="pill">AGPL-3.0</span>
+              <span className="pill">Apache-2.0</span>
             </div>
           </div>
           <div className="snippet-box">

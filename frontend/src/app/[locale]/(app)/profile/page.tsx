@@ -74,7 +74,7 @@ export default function ProfilePage() {
   const t = useTranslations('app')
   const tCommon = useTranslations('common')
   const { athlete, refreshAthlete } = useAuth()
-  const { data: profile } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+  const { data: profile, mutate: mutateProfile } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
   const { data: weightLog } = useSWR<WeightLogEntry[]>('/api/athlete/weight-log', fetcher)
   const { data: availableProviders } = useSWR<{ available: string[] }>('/api/integrations/available', fetcher)
 
@@ -259,9 +259,8 @@ export default function ProfilePage() {
         hr_zones: Zone[] | null
         power_zones: Zone[] | null
       }>(`/api/integrations/${provider}/sync-zones`, { method: 'POST' })
-      if (res.hr_zones) setHrZones(res.hr_zones)
-      if (res.power_zones) setPowerZones(res.power_zones)
       if (res.ftp != null) setFtp(String(res.ftp))
+      await mutateProfile()
       await refreshAthlete()
       toast({ title: t('profile.syncZonesDone', { name: providerName }) })
     } catch (err) {

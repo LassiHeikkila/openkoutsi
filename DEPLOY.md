@@ -213,3 +213,12 @@ Check logs with `journalctl -u openkoutsi-backend@$(whoami) -f` (replace the uni
 - [ ] `NEXT_PUBLIC_API_URL` in `frontend/.env.local` points to the API
 - [ ] TLS termination in place for both frontend and API
 - [ ] Strava app callback domain updated to production domain (if using Strava)
+
+### Upgrading: zone sync (added in this release)
+
+Zone syncing requires new OAuth scopes. **Existing users who already connected Strava or Wahoo must disconnect and reconnect** to grant the new permissions:
+
+- **Strava** now requests `profile:read_all` (in addition to `read,activity:read_all`) to access athlete zones and FTP.
+- **Wahoo** now requests `power_zones_read` (in addition to the existing scopes) to access power zones.
+
+Existing activity syncing is **unaffected** — only zone sync will fail with a "reconnect required" message until the user re-authorises.

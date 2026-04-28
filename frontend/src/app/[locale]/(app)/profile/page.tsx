@@ -17,6 +17,7 @@ import { ZoneEditor } from '@/components/profile/ZoneEditor'
 import { ProviderCard } from '@/components/profile/ProviderCard'
 import { Switch } from '@/components/ui/switch'
 import { Suspense } from 'react'
+import { RefreshCw } from 'lucide-react'
 
 // ── Default zone templates ────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ export default function ProfilePage() {
   const [restingHr, setRestingHr] = useState(athlete?.resting_hr?.toString() ?? '')
   const [saving, setSaving] = useState(false)
   const [syncingProvider, setSyncingProvider] = useState<string | null>(null)
+  const [syncingZones, setSyncingZones] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [removingAvatar, setRemovingAvatar] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -247,6 +249,36 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleSyncZones(provider: string) {
+    const providerName = PROVIDER_NAMES[provider] ?? provider
+    setSyncingZones(provider)
+    try {
+      const res = await apiFetch<{
+        updated: string[]
+        ftp: number | null
+        hr_zones: Zone[] | null
+        power_zones: Zone[] | null
+      }>(`/api/integrations/${provider}/sync-zones`, { method: 'POST' })
+      if (res.hr_zones) setHrZones(res.hr_zones)
+      if (res.power_zones) setPowerZones(res.power_zones)
+      if (res.ftp != null) setFtp(String(res.ftp))
+      await refreshAthlete()
+      toast({ title: t('profile.syncZonesDone', { name: providerName }) })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tCommon('unknownError')
+      const isScope = msg.includes('insufficient_scope')
+      toast({
+        title: t('profile.syncZonesFailed', { name: providerName }),
+        description: isScope
+          ? t('profile.syncZonesReconnect', { name: providerName })
+          : msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setSyncingZones(null)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-2xl">
       <h1 className="text-2xl font-bold">{t('profile.title')}</h1>
@@ -374,6 +406,43 @@ export default function ProfilePage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Sync zones from provider */}
+      {profile?.connected_providers && profile.connected_providers.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{t('profile.syncZones')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(
+              [
+                { provider: 'strava', name: 'Strava' },
+                { provider: 'wahoo',  name: 'Wahoo'  },
+              ] as const
+            )
+              .filter(({ provider }) => profile.connected_providers.includes(provider))
+              .map(({ provider, name }) => (
+                <div key={provider} className="flex items-center justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    {name}: {t(`profile.syncZonesProvides.${provider}`)}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={syncingZones !== null}
+                    onClick={() => handleSyncZones(provider)}
+                    className="shrink-0"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncingZones === provider ? 'animate-spin' : ''}`} />
+                    {syncingZones === provider
+                      ? t('profile.syncZonesSyncing')
+                      : t('profile.syncZonesFrom', { name })}
+                  </Button>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Heart rate zones */}
       <Card>

@@ -138,6 +138,16 @@
     "populateFromFtp": "Populate from FTP",
     "hrZonesHint": "Set your max HR above, then use \u201cPopulate from max HR\u201d to generate default zones \u2014 or add them manually.",
     "powerZonesHint": "Set your FTP above, then use \u201cPopulate from FTP\u201d to generate default zones \u2014 or add them manually.",
+    "syncZones": "Sync zones",
+    "syncZonesFrom": "Sync from {name}",
+    "syncZonesSyncing": "Syncing\u2026",
+    "syncZonesDone": "Zones synced from {name}",
+    "syncZonesFailed": "Could not sync zones from {name}",
+    "syncZonesReconnect": "Please disconnect and reconnect {name} to enable zone sync.",
+    "syncZonesProvides": {
+      "strava": "HR zones + power zones + FTP",
+      "wahoo": "Power zones + FTP"
+    },
     "saveHrZones": "Save HR zones",
     "savingHrZones": "Saving\u2026",
     "hrZonesSaved": "Heart rate zones saved",

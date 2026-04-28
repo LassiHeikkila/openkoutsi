@@ -20,14 +20,14 @@ log = logging.getLogger(__name__)
 _dbg = logging.getLogger("wahoo.raw_debug")
 
 from backend.app.core.config import settings
-from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity
+from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity, ZoneData
 
 _BASE = "https://api.wahooligan.com"
 _AUTH_URL = f"{_BASE}/oauth/authorize"
 _TOKEN_URL = f"{_BASE}/oauth/token"
 _API_BASE = f"{_BASE}/v1"
 
-_SCOPES = "user_read workouts_read offline_data"
+_SCOPES = "user_read workouts_read offline_data power_zones_read"
 _PAGE_SIZE = 30
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
@@ -277,8 +277,41 @@ class WahooClient(BaseProviderClient):
         )
         return streams
 
+    async def fetch_zones(self, access_token: str) -> ZoneData:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            r = await client.get(f"{_API_BASE}/power_zones", headers=headers)
+        r.raise_for_status()
+        entries: list[dict] = r.json()
+        if not entries:
+            return ZoneData()
+
+        # Use the first entry (Wahoo returns one record per workout type family;
+        # the first is typically the cycling / generic power zone set).
+        entry = entries[0]
+        ftp_raw = entry.get("ftp")
+        ftp = int(ftp_raw) if ftp_raw else None
+
+        zone_count = int(entry.get("zone_count", 7))
+        thresholds = [entry.get(f"zone_{i}") for i in range(1, zone_count + 1)]
+        thresholds = [int(t) for t in thresholds if t is not None]
+
+        power_zones = _normalize_wahoo_zones(thresholds)
+
+        return ZoneData(ftp=ftp, power_zones=power_zones or None)
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+
+def _normalize_wahoo_zones(thresholds: list[int]) -> list[dict]:
+    """Convert Wahoo threshold list (upper bounds) to [{low, high, name}] format."""
+    zones = []
+    for i, upper in enumerate(thresholds):
+        low = thresholds[i - 1] if i > 0 else 0
+        high = upper if i < len(thresholds) - 1 else 9999
+        zones.append({"name": f"Z{i + 1}", "low": low, "high": high})
+    return zones
+
 
 def _normalize_workout(raw: dict) -> NormalizedActivity:
     _dbg.debug(

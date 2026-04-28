@@ -7,7 +7,7 @@ it in providers/registry.py — no new router code needed.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -240,6 +240,64 @@ async def _bg_provider_sync(athlete_id: str, provider: str) -> None:
             "%s sync complete: %d new activities for athlete %s",
             provider, count, athlete_id,
         )
+
+
+# ── Zone sync ──────────────────────────────────────────────────────────────
+
+@router.post("/{provider}/sync-zones")
+async def sync_zones(
+    provider: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Fetch training zones (HR, power) and FTP from the provider and save to the athlete profile."""
+    client_cls = _require_provider(provider)
+    athlete = await _get_athlete(user, session)
+    conn = await _get_connection(athlete, provider, session)
+
+    access_token = await ensure_fresh_token(conn, session)
+
+    client = client_cls()
+    try:
+        zone_data = await client.fetch_zones(access_token)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(status_code=403, detail="insufficient_scope")
+        raise HTTPException(status_code=502, detail="Provider API error during zone fetch")
+
+    if zone_data is None:
+        raise HTTPException(status_code=400, detail=f"{provider} does not support zone sync")
+
+    updated: list[str] = []
+
+    if zone_data.ftp is not None:
+        if zone_data.ftp != athlete.ftp:
+            athlete.ftp = zone_data.ftp
+            ftp_tests = list(athlete.ftp_tests or [])
+            ftp_tests.append({
+                "date": date.today().isoformat(),
+                "ftp": zone_data.ftp,
+                "method": provider,
+            })
+            athlete.ftp_tests = ftp_tests
+        updated.append("ftp")
+
+    if zone_data.hr_zones is not None:
+        athlete.hr_zones = zone_data.hr_zones
+        updated.append("hr_zones")
+
+    if zone_data.power_zones is not None:
+        athlete.power_zones = zone_data.power_zones
+        updated.append("power_zones")
+
+    await session.commit()
+
+    return {
+        "updated": updated,
+        "ftp": athlete.ftp,
+        "hr_zones": athlete.hr_zones,
+        "power_zones": athlete.power_zones,
+    }
 
 
 # ── Disconnect ─────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ Wraps the low-level StravaClient HTTP wrapper and adapts it to the
 BaseProviderClient interface so the generic sync pipeline can drive it.
 """
 
+import asyncio
 import urllib.parse
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,14 +13,14 @@ from typing import Optional
 import httpx
 
 from backend.app.core.config import settings
-from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity
+from backend.app.services.providers.base import BaseProviderClient, NormalizedActivity, ZoneData
 
 _AUTH_BASE = "https://www.strava.com"
 _API_BASE = f"{_AUTH_BASE}/api/v3"
 _STREAM_KEYS = "time,heartrate,watts,cadence,velocity_smooth,altitude,distance"
 
 _STRAVA_AUTH_URL = f"{_AUTH_BASE}/oauth/authorize"
-_STRAVA_SCOPE = "read,activity:read_all"
+_STRAVA_SCOPE = "read,activity:read_all,profile:read_all"
 
 
 # Sport type passthrough — Strava already returns human-readable strings.
@@ -114,6 +115,31 @@ class StravaProviderClient(BaseProviderClient):
 
         return [_normalize_activity(raw) for raw in raw_list]
 
+    async def fetch_zones(self, access_token: str) -> ZoneData:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            r_athlete, r_zones = await asyncio.gather(
+                client.get(f"{_API_BASE}/athlete", headers=headers),
+                client.get(f"{_API_BASE}/athlete/zones", headers=headers),
+            )
+        r_athlete.raise_for_status()
+        r_zones.raise_for_status()
+
+        athlete_data = r_athlete.json()
+        zones_data = r_zones.json()
+
+        ftp_raw = athlete_data.get("ftp")
+        ftp = int(ftp_raw) if ftp_raw else None
+
+        hr_zones = _normalize_strava_zones(zones_data.get("heart_rate", {}).get("zones", []))
+        power_zones = _normalize_strava_zones(zones_data.get("power", {}).get("zones", []))
+
+        return ZoneData(
+            ftp=ftp,
+            hr_zones=hr_zones or None,
+            power_zones=power_zones or None,
+        )
+
     async def get_activity_streams(
         self, access_token: str, external_id: str
     ) -> dict[str, list[float]]:
@@ -137,6 +163,17 @@ class StravaProviderClient(BaseProviderClient):
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
+
+def _normalize_strava_zones(raw_zones: list[dict]) -> list[dict]:
+    """Convert Strava {min, max} zone list to internal {low, high, name} format."""
+    result = []
+    for i, z in enumerate(raw_zones):
+        low = z.get("min", 0)
+        high_raw = z.get("max", -1)
+        high = 9999 if high_raw == -1 else high_raw
+        result.append({"name": f"Z{i + 1}", "low": low, "high": high})
+    return result
+
 
 def _map(raw: dict, out: dict, src_key: str, dst_key: str) -> None:
     data = [float(v) for v in raw.get(src_key, {}).get("data", [])]

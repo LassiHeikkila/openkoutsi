@@ -14,6 +14,14 @@ from typing import ClassVar, Optional
 
 
 @dataclass
+class ZoneData:
+    """Provider-agnostic training zone data returned by fetch_zones."""
+    ftp: Optional[int] = None
+    hr_zones: Optional[list[dict]] = None    # [{low, high, name}, ...]
+    power_zones: Optional[list[dict]] = None  # [{low, high, name}, ...]
+
+
+@dataclass
 class NormalizedActivity:
     """Provider-agnostic representation of a single workout."""
 
@@ -91,5 +99,13 @@ class BaseProviderClient(ABC):
 
         Return None if the provider does not support FIT downloads.
         Providers that do support it should override this method.
+        """
+        return None
+
+    async def fetch_zones(self, access_token: str) -> "ZoneData | None":
+        """Fetch training zones and FTP from the provider.
+
+        Return None if the provider does not support zone fetching.
+        Providers that support it should override this method.
         """
         return None

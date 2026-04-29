@@ -92,6 +92,7 @@ export function StreamChart({ streams, intervals }: Props) {
           <ReferenceLine
             key={iv.interval_number}
             x={Math.round(iv.start_offset_s / 60)}
+            yAxisId={power ? 'power' : 'hr'}
             stroke="hsl(var(--muted-foreground))"
             strokeDasharray="3 3"
             strokeOpacity={0.4}

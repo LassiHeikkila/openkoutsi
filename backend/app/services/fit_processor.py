@@ -77,9 +77,17 @@ def _compute_interval_stats(
     stream_map: dict[str, list[float]],
     is_auto: bool,
 ) -> list[dict]:
+    # Strip tzinfo before subtraction so naive DB datetimes and tz-aware FIT
+    # datetimes can be compared without error.
+    if activity_start.tzinfo is not None:
+        activity_start = activity_start.replace(tzinfo=None)
+
     result = []
     for i, iv in enumerate(raw):
-        start_offset_s = int(round((iv["start_time"] - activity_start).total_seconds()))
+        iv_start = iv["start_time"]
+        if isinstance(iv_start, datetime) and iv_start.tzinfo is not None:
+            iv_start = iv_start.replace(tzinfo=None)
+        start_offset_s = int(round((iv_start - activity_start).total_seconds()))
         duration_s = int(round(iv["duration_s"]))
         start_offset_s = max(0, start_offset_s)
         end = start_offset_s + duration_s

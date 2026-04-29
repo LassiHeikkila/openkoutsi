@@ -18,6 +18,7 @@ fi
 ssh "${TARGET}" "sudo -S systemctl stop openkoutsi-backend@${USER}.service"
 
 ssh "${TARGET}" "cd projects/openkoutsi && git pull"
+ssh "${TARGET}" "cd projects/openkoutsi && ~/.local/bin/uv run alembic -c backend/alembic.ini upgrade head"
 
 ssh "${TARGET}" "sudo -S systemctl daemon-reload"
 ssh "${TARGET}" "sudo -S systemctl start openkoutsi-backend@${USER}.service"

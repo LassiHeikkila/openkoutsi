@@ -177,9 +177,12 @@ class WahooClient(BaseProviderClient):
         }
 
     @staticmethod
-    async def revoke_token(access_token: str) -> None:  # type: ignore[override]
-        # Wahoo doesn't expose a public token revocation endpoint; nothing to do.
-        pass
+    async def deauthorize(access_token: str) -> None:  # type: ignore[override]
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            await client.delete(
+                f"{_API_BASE}/permissions",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
 
     # ── Data ───────────────────────────────────────────────────────────────
 

@@ -306,7 +306,7 @@ class TestDisconnect:
         from backend.app.services.providers.strava import StravaProviderClient
 
         with patch.object(
-            StravaProviderClient, "revoke_token", new_callable=AsyncMock
+            StravaProviderClient, "deauthorize", new_callable=AsyncMock
         ):
             resp = await client.delete(
                 "/api/integrations/strava/disconnect", headers=auth_headers
@@ -333,7 +333,7 @@ class TestDisconnect:
         from backend.app.services.providers.strava import StravaProviderClient
 
         with patch.object(
-            StravaProviderClient, "revoke_token", new_callable=AsyncMock
+            StravaProviderClient, "deauthorize", new_callable=AsyncMock
         ):
             resp = await client.delete(
                 "/api/integrations/strava/disconnect", headers=auth_headers
@@ -355,7 +355,7 @@ class TestDisconnect:
         from backend.app.services.providers.strava import StravaProviderClient
 
         with patch.object(
-            StravaProviderClient, "revoke_token", new_callable=AsyncMock
+            StravaProviderClient, "deauthorize", new_callable=AsyncMock
         ):
             resp = await client.delete(
                 "/api/integrations/strava/disconnect?delete_data=true",
@@ -365,6 +365,29 @@ class TestDisconnect:
         assert resp.status_code == 204
 
         result = await session.execute(select(Activity).where(Activity.id == act_id))
+        assert result.scalar_one_or_none() is None
+
+    async def test_wahoo_disconnect_calls_deauthorize(self, client, session, auth_headers):
+        athlete = await _get_athlete(session, client, auth_headers)
+        await _add_connection(session, athlete, "wahoo")
+
+        from backend.app.services.providers.wahoo import WahooClient
+
+        deauth = AsyncMock()
+        with patch.object(WahooClient, "deauthorize", deauth):
+            resp = await client.delete(
+                "/api/integrations/wahoo/disconnect", headers=auth_headers
+            )
+
+        assert resp.status_code == 204
+        deauth.assert_called_once_with("test-access-token")
+
+        result = await session.execute(
+            select(ProviderConnection).where(
+                ProviderConnection.athlete_id == athlete.id,
+                ProviderConnection.provider == "wahoo",
+            )
+        )
         assert result.scalar_one_or_none() is None
 
     async def test_preserves_activities_from_other_providers(
@@ -380,7 +403,7 @@ class TestDisconnect:
         from backend.app.services.providers.strava import StravaProviderClient
 
         with patch.object(
-            StravaProviderClient, "revoke_token", new_callable=AsyncMock
+            StravaProviderClient, "deauthorize", new_callable=AsyncMock
         ):
             resp = await client.delete(
                 "/api/integrations/strava/disconnect?delete_data=true",

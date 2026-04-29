@@ -70,8 +70,8 @@ class BaseProviderClient(ABC):
         """
 
     @abstractmethod
-    async def revoke_token(self, access_token: str) -> None:
-        """Revoke the access token (best-effort; callers swallow errors)."""
+    async def deauthorize(self, access_token: str) -> None:
+        """Deauthorize the app (best-effort; callers swallow errors)."""
 
     # ── Data ───────────────────────────────────────────────────────────────
 

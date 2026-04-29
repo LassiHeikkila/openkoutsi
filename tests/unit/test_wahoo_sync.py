@@ -132,6 +132,27 @@ async def test_process_wahoo_webhook_missing_user_ignored(session):
 
 
 @pytest.mark.asyncio
+async def test_wahoo_deauthorize_sends_delete_to_permissions_endpoint():
+    """WahooClient.deauthorize must DELETE /v1/permissions with the Bearer token."""
+    from unittest.mock import MagicMock
+
+    from backend.app.services.providers.wahoo import WahooClient
+
+    mock_client = AsyncMock()
+    mock_client.delete = AsyncMock(return_value=MagicMock())
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        await WahooClient.deauthorize("my-test-token")
+
+    mock_client.delete.assert_called_once_with(
+        "https://api.wahooligan.com/v1/permissions",
+        headers={"Authorization": "Bearer my-test-token"},
+    )
+
+
+@pytest.mark.asyncio
 async def test_process_wahoo_webhook_missing_workout_ignored(session):
     """Payloads without any workout object (neither top-level nor nested) must be ignored."""
     summary_without_workout = {

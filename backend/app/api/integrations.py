@@ -324,7 +324,7 @@ async def disconnect(
     if conn.access_token:
         try:
             client_cls = PROVIDERS[provider]
-            await client_cls.revoke_token(conn.access_token)  # type: ignore[call-arg]
+            await client_cls.deauthorize(conn.access_token)  # type: ignore[call-arg]
         except Exception:
             pass  # best-effort
 

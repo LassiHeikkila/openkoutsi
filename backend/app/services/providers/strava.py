@@ -91,7 +91,7 @@ class StravaProviderClient(BaseProviderClient):
         }
 
     @staticmethod
-    async def revoke_token(access_token: str) -> None:  # type: ignore[override]
+    async def deauthorize(access_token: str) -> None:  # type: ignore[override]
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             await client.post(
                 f"{_AUTH_BASE}/oauth/deauthorize",

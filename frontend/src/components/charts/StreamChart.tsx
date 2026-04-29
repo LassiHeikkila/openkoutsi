@@ -42,12 +42,12 @@ export function StreamChart({ streams, intervals }: Props) {
   )
 
   const data = indices.map((i) => ({
-    time: Math.round(time[i] / 60), // minutes
+    time: time[i] / 60, // fractional minutes — keeps x values unique for numeric axis
     ...(power ? { power: power[i] } : {}),
     ...(hr ? { hr: hr[i] } : {}),
   }))
 
-  const maxMinutes = data[data.length - 1]?.time ?? 0
+  const maxMinutes = Math.ceil(data[data.length - 1]?.time ?? 0)
   const tickStep = niceTickStepMinutes(maxMinutes)
   const ticks = Array.from(
     { length: Math.floor(maxMinutes / tickStep) + 1 },
@@ -59,6 +59,8 @@ export function StreamChart({ streams, intervals }: Props) {
       <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <XAxis
           dataKey="time"
+          type="number"
+          domain={[0, maxMinutes]}
           ticks={ticks}
           tickFormatter={formatChartTime}
           tick={{ fontSize: 11 }}

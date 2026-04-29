@@ -203,8 +203,16 @@ async def process_fit_file(
     raw_intervals = extractIntervals(path)
     is_auto = len(raw_intervals) <= 1
     if is_auto:
-        interval_s = _auto_interval_s(profile.duration)
-        raw_intervals = _build_auto_intervals(profile.start_time, profile.duration, interval_s)
+        # Use stream length rather than timer duration — Wahoo (and other
+        # devices) pause the timer during stops, so total_timer_time can be
+        # significantly shorter than the elapsed wall-clock time recorded in
+        # the streams. Splitting by timer duration leaves the tail uncovered.
+        stream_length = max(
+            (len(v) for v in stream_map.values() if v), default=profile.duration
+        )
+        actual_duration = max(profile.duration, stream_length)
+        interval_s = _auto_interval_s(actual_duration)
+        raw_intervals = _build_auto_intervals(profile.start_time, actual_duration, interval_s)
 
     intervals = _compute_interval_stats(raw_intervals, profile.start_time, stream_map, is_auto)
     for iv in intervals:

@@ -544,10 +544,12 @@ async def reprocess_intervals(
 
     if is_auto:
         duration_s = activity.duration_s or 0
-        interval_s = _auto_interval_s(duration_s)
+        stream_length = max((len(v) for v in stream_map.values() if v), default=duration_s)
+        actual_duration = max(duration_s, stream_length)
+        interval_s = _auto_interval_s(actual_duration)
         start_time = activity.start_time
-        if start_time and duration_s:
-            raw = _build_auto_intervals(start_time, duration_s, interval_s)
+        if start_time and actual_duration:
+            raw = _build_auto_intervals(start_time, actual_duration, interval_s)
 
     intervals_data: list[dict] = []
     if raw and activity.start_time:

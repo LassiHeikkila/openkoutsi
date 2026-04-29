@@ -192,6 +192,11 @@ class Activity(Base):
     distance_bests: Mapped[list["ActivityDistanceBest"]] = relationship(
         "ActivityDistanceBest", back_populates="activity", cascade="all, delete-orphan"
     )
+    intervals: Mapped[list["ActivityInterval"]] = relationship(
+        "ActivityInterval", back_populates="activity",
+        cascade="all, delete-orphan", order_by="ActivityInterval.interval_number",
+        lazy="selectin",
+    )
 
     @property
     def has_fit_file(self) -> bool:
@@ -282,6 +287,26 @@ class ActivityDistanceBest(Base):
     )
 
     activity: Mapped["Activity"] = relationship("Activity", back_populates="distance_bests")
+
+
+class ActivityInterval(Base):
+    __tablename__ = "activity_intervals"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    activity_id: Mapped[str] = mapped_column(
+        String, ForeignKey("activities.id", ondelete="CASCADE")
+    )
+    interval_number: Mapped[int] = mapped_column(Integer)
+    start_offset_s: Mapped[int] = mapped_column(Integer)
+    duration_s: Mapped[int] = mapped_column(Integer)
+    distance_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    avg_hr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    avg_power: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    avg_speed_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    avg_cadence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_auto_split: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    activity: Mapped["Activity"] = relationship("Activity", back_populates="intervals")
 
 
 class DailyMetric(Base):

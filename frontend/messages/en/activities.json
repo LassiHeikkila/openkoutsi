@@ -21,6 +21,8 @@
     "notFound": "Activity not found",
     "clickToRename": "Click to rename",
     "downloadFit": "Download FIT file",
+    "reprocessIntervals": "Refresh intervals",
+    "reprocessFailed": "Failed to refresh intervals",
     "renameFailed": "Rename failed",
     "downloadFailed": "Download failed",
     "deleteFailed": "Delete failed",
@@ -48,6 +50,14 @@
     "speedElevation": "Speed & Elevation",
     "powerBests": "Power Bests",
     "distanceBests": "Distance Bests",
+    "intervals": {
+      "title": "Intervals",
+      "duration": "Duration",
+      "avgHr": "Avg HR",
+      "avgPower": "Avg Power",
+      "avgSpeed": "Avg Speed",
+      "auto": "Auto"
+    },
     "analysis": {
       "title": "AI Analysis",
       "analyse": "Analyse workout",

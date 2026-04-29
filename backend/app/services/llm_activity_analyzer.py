@@ -73,6 +73,21 @@ def _build_prompt(activity: Activity, athlete: Athlete) -> str:
     if athlete.max_hr:
         lines.append(f"  Athlete max HR: {athlete.max_hr} bpm")
 
+    if activity.intervals:
+        lines.append("\nInterval breakdown:")
+        for iv in activity.intervals:
+            mins, secs = divmod(iv.duration_s, 60)
+            line = f"  Interval {iv.interval_number}: {mins}m {secs}s"
+            if iv.avg_hr:
+                line += f", avg HR {iv.avg_hr:.0f} bpm"
+            if iv.avg_power:
+                line += f", avg power {iv.avg_power:.0f} W"
+            if iv.avg_speed_ms:
+                line += f", avg speed {iv.avg_speed_ms * 3.6:.1f} km/h"
+            if iv.is_auto_split:
+                line += " (auto-split)"
+            lines.append(line)
+
     return "\n".join(lines)
 
 

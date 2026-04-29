@@ -18,6 +18,7 @@ from backend.app.db.base import get_session, AsyncSessionLocal
 from backend.app.models.orm import (
     Activity,
     ActivityDistanceBest,
+    ActivityInterval,
     ActivityPowerBest,
     ActivitySource,
     ActivityStream,
@@ -30,6 +31,7 @@ from backend.app.schemas.activities import (
     ActivityResponse,
     ActivityUpdate,
     FrontendAnalysisBody,
+    IntervalResponse,
     ManualActivityCreate,
 )
 from backend.app.core.limiter import limiter
@@ -425,7 +427,19 @@ async def get_activity(
     )
     distance_bests = {b.distance_m: b.time_s for b in dbests_result.scalars()}
 
-    return ActivityDetailResponse.from_orm_and_streams(activity, streams, power_bests, distance_bests)
+    ivs_result = await session.execute(
+        select(ActivityInterval)
+        .where(ActivityInterval.activity_id == activity_id)
+        .order_by(ActivityInterval.interval_number)
+    )
+    intervals = [
+        IntervalResponse.model_validate(iv, from_attributes=True)
+        for iv in ivs_result.scalars()
+    ]
+
+    return ActivityDetailResponse.from_orm_and_streams(
+        activity, streams, power_bests, distance_bests, intervals
+    )
 
 
 @router.get("/{activity_id}/fit")
@@ -475,6 +489,98 @@ async def download_fit_file(
         path=str(fit_path),
         media_type="application/octet-stream",
         filename=filename,
+    )
+
+
+@router.post("/{activity_id}/reprocess-intervals", response_model=ActivityDetailResponse)
+async def reprocess_intervals(
+    activity_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Re-extract intervals from the FIT file (or auto-split if none).
+    Replaces any existing intervals for this activity.
+    """
+    import io
+    from sqlalchemy import delete as sa_delete
+    from backend.app.services.fit_processor import (
+        _auto_interval_s,
+        _build_auto_intervals,
+        _compute_interval_stats,
+    )
+
+    athlete = await _get_athlete(user, session)
+    result = await session.execute(
+        select(Activity).where(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.status != "processed":
+        raise HTTPException(status_code=400, detail="Activity has not been processed yet")
+
+    # Load streams needed for stat computation
+    streams_result = await session.execute(
+        select(ActivityStream).where(ActivityStream.activity_id == activity_id)
+    )
+    stream_map = {s.stream_type: s.data for s in streams_result.scalars()}
+
+    # Try to read the FIT file (handles encryption)
+    fileish = None
+    fit_sources = [s for s in (activity.sources or []) if s.fit_file_path]
+    if fit_sources:
+        best = min(fit_sources, key=lambda s: _source_priority(s.provider, True))
+        fit_path = Path(best.fit_file_path).resolve()
+        expected_dir = Path(settings.file_storage_path).resolve()
+        if fit_path.is_relative_to(expected_dir) and fit_path.exists():
+            if best.fit_file_encrypted:
+                fileish = io.BytesIO(decrypt_file(fit_path, athlete.user_id))
+            else:
+                fileish = str(fit_path)
+
+    from openkoutsi.fit import extractIntervals
+    raw = extractIntervals(fileish) if fileish is not None else []
+    is_auto = len(raw) == 0
+
+    if is_auto:
+        duration_s = activity.duration_s or 0
+        interval_s = _auto_interval_s(duration_s)
+        start_time = activity.start_time
+        if start_time and duration_s:
+            raw = _build_auto_intervals(start_time, duration_s, interval_s)
+
+    intervals_data: list[dict] = []
+    if raw and activity.start_time:
+        intervals_data = _compute_interval_stats(raw, activity.start_time, stream_map, is_auto)
+
+    # Replace existing intervals
+    await session.execute(
+        sa_delete(ActivityInterval).where(ActivityInterval.activity_id == activity_id)
+    )
+    for iv in intervals_data:
+        session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity_id, **iv))
+    await session.commit()
+
+    # Build response
+    bests_result = await session.execute(
+        select(ActivityPowerBest).where(ActivityPowerBest.activity_id == activity_id)
+    )
+    power_bests = {b.duration_s: b.power_w for b in bests_result.scalars()}
+    dbests_result = await session.execute(
+        select(ActivityDistanceBest).where(ActivityDistanceBest.activity_id == activity_id)
+    )
+    distance_bests = {b.distance_m: b.time_s for b in dbests_result.scalars()}
+    ivs_result = await session.execute(
+        select(ActivityInterval)
+        .where(ActivityInterval.activity_id == activity_id)
+        .order_by(ActivityInterval.interval_number)
+    )
+    intervals = [
+        IntervalResponse.model_validate(iv, from_attributes=True)
+        for iv in ivs_result.scalars()
+    ]
+    return ActivityDetailResponse.from_orm_and_streams(
+        activity, stream_map, power_bests, distance_bests, intervals
     )
 
 

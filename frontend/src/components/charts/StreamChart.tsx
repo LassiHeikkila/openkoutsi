@@ -4,15 +4,18 @@ import {
   ResponsiveContainer,
   ComposedChart,
   Line,
+  ReferenceLine,
   XAxis,
   YAxis,
   Tooltip,
   Legend,
 } from 'recharts'
 import { formatChartTime, niceTickStepMinutes } from '@/lib/utils'
+import { Interval } from '@/lib/types'
 
 interface Props {
   streams: Record<string, number[]>
+  intervals?: Interval[]
 }
 
 function downsample<T>(arr: T[], target: number): T[] {
@@ -21,7 +24,7 @@ function downsample<T>(arr: T[], target: number): T[] {
   return Array.from({ length: target }, (_, i) => arr[Math.round(i * step)])
 }
 
-export function StreamChart({ streams }: Props) {
+export function StreamChart({ streams, intervals }: Props) {
   const power = streams['power']
   const hr = streams['heartrate']
 
@@ -85,6 +88,15 @@ export function StreamChart({ streams }: Props) {
           labelFormatter={(v) => formatChartTime(Number(v))}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
+        {intervals?.filter((iv) => iv.start_offset_s > 0).map((iv) => (
+          <ReferenceLine
+            key={iv.interval_number}
+            x={Math.round(iv.start_offset_s / 60)}
+            stroke="hsl(var(--muted-foreground))"
+            strokeDasharray="3 3"
+            strokeOpacity={0.4}
+          />
+        ))}
         {power && (
           <Line
             yAxisId="power"

@@ -1,13 +1,14 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openkoutsi.fit import summarizeWorkout, getStartTime
+from openkoutsi.fit import summarizeWorkout, getStartTime, extractIntervals
 from backend.app.models.orm import (
     Activity,
     ActivityDistanceBest,
+    ActivityInterval,
     ActivityPowerBest,
     ActivityStream,
     Athlete,
@@ -39,6 +40,68 @@ def _resolve_sport_type(fit_sport: str | None) -> str:
         return mapped
     # Unknown sport: title-case the raw string rather than defaulting to Cycling.
     return fit_sport.title()
+
+
+def _auto_interval_s(duration_s: int) -> int:
+    minutes = duration_s / 60
+    if minutes <= 45:
+        return 5 * 60
+    elif minutes <= 90:
+        return 10 * 60
+    else:
+        return 15 * 60
+
+
+def _build_auto_intervals(activity_start: datetime, duration_s: int, interval_s: int) -> list[dict]:
+    intervals = []
+    offset = 0
+    while offset < duration_s:
+        length = min(interval_s, duration_s - offset)
+        intervals.append({
+            "start_time": activity_start + timedelta(seconds=offset),
+            "duration_s": float(length),
+            "distance_m": None,
+        })
+        offset += interval_s
+    return intervals
+
+
+def _mean_nonzero(values: list[float]) -> Optional[float]:
+    nonzero = [v for v in values if v > 0]
+    return sum(nonzero) / len(nonzero) if nonzero else None
+
+
+def _compute_interval_stats(
+    raw: list[dict],
+    activity_start: datetime,
+    stream_map: dict[str, list[float]],
+    is_auto: bool,
+) -> list[dict]:
+    result = []
+    for i, iv in enumerate(raw):
+        start_offset_s = int(round((iv["start_time"] - activity_start).total_seconds()))
+        duration_s = int(round(iv["duration_s"]))
+        start_offset_s = max(0, start_offset_s)
+        end = start_offset_s + duration_s
+
+        def _slice_mean(key: str) -> Optional[float]:
+            data = stream_map.get(key, [])
+            if not data:
+                return None
+            return _mean_nonzero(data[start_offset_s:end])
+
+        result.append({
+            "interval_number": i + 1,
+            "start_offset_s": start_offset_s,
+            "duration_s": duration_s,
+            "distance_m": iv.get("distance_m"),
+            "avg_hr": _slice_mean("heartrate"),
+            "avg_power": _slice_mean("power"),
+            "avg_speed_ms": _slice_mean("speed"),
+            "avg_cadence": _slice_mean("cadence"),
+            "is_auto_split": is_auto,
+        })
+    return result
 
 
 def read_fit_start_time(path: str) -> Optional[datetime]:
@@ -128,6 +191,16 @@ async def process_fit_file(
                     activity_start_time=activity.start_time,
                 )
             )
+
+    raw_intervals = extractIntervals(path)
+    is_auto = len(raw_intervals) == 0
+    if is_auto:
+        interval_s = _auto_interval_s(profile.duration)
+        raw_intervals = _build_auto_intervals(profile.start_time, profile.duration, interval_s)
+
+    intervals = _compute_interval_stats(raw_intervals, profile.start_time, stream_map, is_auto)
+    for iv in intervals:
+        session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity.id, **iv))
 
     await session.commit()
     await session.refresh(activity)

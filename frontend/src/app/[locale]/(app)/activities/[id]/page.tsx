@@ -24,10 +24,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { IntervalsTable } from '@/components/activities/IntervalsTable'
 import { SourceBadge } from '@/components/activities/SourceBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR, formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
-import { ArrowLeft, Download, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 interface Props {
@@ -54,6 +55,20 @@ export default function ActivityDetailPage({ params }: Props) {
     { shouldRetryOnError: false },
   )
   const { data: athlete } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+
+  const [reprocessing, setReprocessing] = useState(false)
+
+  async function handleReprocessIntervals() {
+    setReprocessing(true)
+    try {
+      const updated = await apiFetch(`/api/activities/${id}/reprocess-intervals`, { method: 'POST' }) as ActivityDetail
+      await mutate(updated, false)
+    } catch {
+      toast({ title: t('detail.reprocessFailed'), variant: 'destructive' })
+    } finally {
+      setReprocessing(false)
+    }
+  }
 
   // Frontend LLM streaming state
   const [streamingText, setStreamingText] = useState<string | null>(null)
@@ -228,6 +243,17 @@ export default function ActivityDetailPage({ params }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {activity.status === 'processed' && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleReprocessIntervals}
+              disabled={reprocessing}
+              title={t('detail.reprocessIntervals')}
+            >
+              <RefreshCw className={`h-4 w-4 ${reprocessing ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
           {activity.has_fit_file && (
             <Button variant="outline" size="icon" onClick={handleDownloadFit} title={t('detail.downloadFit')}>
               <Download className="h-4 w-4" />
@@ -272,6 +298,15 @@ export default function ActivityDetailPage({ params }: Props) {
         ))}
       </div>
 
+      {/* Intervals */}
+      {activity.intervals?.length > 0 && (
+        <Card>
+          <CardContent className="pt-4">
+            <IntervalsTable intervals={activity.intervals} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Zone breakdown — HR and power side by side */}
       {(zonesData?.hr || zonesData?.power) && (
         <Card>
@@ -298,7 +333,7 @@ export default function ActivityDetailPage({ params }: Props) {
             <CardTitle className="text-base">{t('detail.powerHr')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <StreamChart streams={activity.streams} />
+            <StreamChart streams={activity.streams} intervals={activity.intervals} />
           </CardContent>
         </Card>
       )}
@@ -310,7 +345,7 @@ export default function ActivityDetailPage({ params }: Props) {
             <CardTitle className="text-base">{t('detail.speedElevation')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <SpeedElevationChart streams={activity.streams} />
+            <SpeedElevationChart streams={activity.streams} intervals={activity.intervals} />
           </CardContent>
         </Card>
       )}

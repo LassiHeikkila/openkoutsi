@@ -76,10 +76,23 @@ export interface ZoneBreakdown {
   pct: number
 }
 
+export interface Interval {
+  interval_number: number
+  start_offset_s: number
+  duration_s: number
+  distance_m: number | null
+  avg_hr: number | null
+  avg_power: number | null
+  avg_speed_ms: number | null
+  avg_cadence: number | null
+  is_auto_split: boolean
+}
+
 export interface ActivityDetail extends Activity {
   streams: Record<string, number[]>
   power_bests: Record<number, number>
   distance_bests: Record<number, number>
+  intervals: Interval[]
   zone_breakdown?: ZoneBreakdown[]
   analysis_status?: string | null
   analysis?: string | null

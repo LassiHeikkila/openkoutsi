@@ -25,6 +25,20 @@ class ManualActivityCreate(BaseModel):
     elevation_m: Optional[float] = None
 
 
+class IntervalResponse(BaseModel):
+    interval_number: int
+    start_offset_s: int
+    duration_s: int
+    distance_m: Optional[float] = None
+    avg_hr: Optional[float] = None
+    avg_power: Optional[float] = None
+    avg_speed_ms: Optional[float] = None
+    avg_cadence: Optional[float] = None
+    is_auto_split: bool
+
+    model_config = {"from_attributes": True}
+
+
 class ActivityResponse(BaseModel):
     id: str
     athlete_id: str
@@ -88,6 +102,7 @@ class ActivityDetailResponse(ActivityResponse):
     streams: dict[str, list[Any]] = {}
     power_bests: dict[int, float] = {}
     distance_bests: dict[int, int] = {}
+    intervals: list[IntervalResponse] = []
     analysis_status: Optional[str] = None
     analysis: Optional[str] = None
 
@@ -98,6 +113,7 @@ class ActivityDetailResponse(ActivityResponse):
         streams: dict[str, list],
         power_bests: dict[int, float] | None = None,
         distance_bests: dict[int, int] | None = None,
+        intervals: list[IntervalResponse] | None = None,
     ) -> "ActivityDetailResponse":
         return cls(
             id=activity.id,
@@ -121,6 +137,7 @@ class ActivityDetailResponse(ActivityResponse):
             streams=streams,
             power_bests=power_bests or {},
             distance_bests=distance_bests or {},
+            intervals=intervals or [],
             analysis_status=activity.analysis_status,
             analysis=activity.analysis,
         )

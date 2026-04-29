@@ -21,6 +21,8 @@
     "notFound": "Harjoitusta ei löydy",
     "clickToRename": "Napsauta nimetäksesi uudelleen",
     "downloadFit": "Lataa FIT-tiedosto",
+    "reprocessIntervals": "Päivitä intervallit",
+    "reprocessFailed": "Intervallien päivitys epäonnistui",
     "renameFailed": "Uudelleennimeäminen epäonnistui",
     "downloadFailed": "Lataus ep\u00e4onnistui",
     "deleteFailed": "Poisto ep\u00e4onnistui",
@@ -48,6 +50,14 @@
     "speedElevation": "Nopeus ja korkeus",
     "powerBests": "Tehoparhaat",
     "distanceBests": "Matkaparhaat",
+    "intervals": {
+      "title": "Intervallit",
+      "duration": "Kesto",
+      "avgHr": "Keskim. sy",
+      "avgPower": "Keskim. teho",
+      "avgSpeed": "Keskim. nopeus",
+      "auto": "Automaattinen"
+    },
     "analysis": {
       "title": "Tekoälyanalyysi",
       "analyse": "Analysoi harjoitus",

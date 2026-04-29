@@ -5,6 +5,40 @@ import fitdecode
 
 from . import workout
 
+
+def extractIntervals(fileish) -> list[dict]:
+    """Extract interval (lap) data from a FIT file.
+
+    FIT files use 'lap' frames to record splits. Returns a list of dicts
+    with start_time, duration_s, and distance_m — one per lap frame.
+    Returns [] if no lap frames are present (caller should auto-split).
+    """
+    intervals: list[dict] = []
+    try:
+        with fitdecode.FitReader(fileish) as fr:
+            for frame in fr:
+                if frame.frame_type != fitdecode.FIT_FRAME_DATA:
+                    continue
+                frame = cast(fitdecode.records.FitDataMessage, frame)
+                if frame.name != "lap":
+                    continue
+                start_time = frame.get_value("start_time", fallback=None)
+                duration_s = frame.get_value("total_timer_time", fallback=None)
+                distance_m = frame.get_value("total_distance", fallback=None)
+                if start_time is None or duration_s is None:
+                    continue
+                if isinstance(start_time, datetime) and start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=timezone.utc)
+                intervals.append({
+                    "start_time": start_time,
+                    "duration_s": float(duration_s),
+                    "distance_m": float(distance_m) if distance_m is not None else None,
+                })
+    except Exception:
+        pass
+    intervals.sort(key=lambda x: x["start_time"])
+    return intervals
+
 def getStartTime(fileish) -> Optional[datetime]:
     try:
         with fitdecode.FitReader(fileish) as fr:

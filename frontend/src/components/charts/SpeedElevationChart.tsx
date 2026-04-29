@@ -5,15 +5,18 @@ import {
   ComposedChart,
   Line,
   Area,
+  ReferenceLine,
   XAxis,
   YAxis,
   Tooltip,
   Legend,
 } from 'recharts'
 import { formatChartTime, niceTickStepMinutes } from '@/lib/utils'
+import { Interval } from '@/lib/types'
 
 interface Props {
   streams: Record<string, number[]>
+  intervals?: Interval[]
 }
 
 function downsample<T>(arr: T[], target: number): T[] {
@@ -22,7 +25,7 @@ function downsample<T>(arr: T[], target: number): T[] {
   return Array.from({ length: target }, (_, i) => arr[Math.round(i * step)])
 }
 
-export function SpeedElevationChart({ streams }: Props) {
+export function SpeedElevationChart({ streams, intervals }: Props) {
   const speedMs = streams['speed']
   const altitude = streams['altitude']
 
@@ -87,6 +90,15 @@ export function SpeedElevationChart({ streams }: Props) {
           }
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
+        {intervals?.filter((iv) => iv.start_offset_s > 0).map((iv) => (
+          <ReferenceLine
+            key={iv.interval_number}
+            x={Math.round(iv.start_offset_s / 60)}
+            stroke="hsl(var(--muted-foreground))"
+            strokeDasharray="3 3"
+            strokeOpacity={0.4}
+          />
+        ))}
         {altitude && (
           <Area
             yAxisId="altitude"

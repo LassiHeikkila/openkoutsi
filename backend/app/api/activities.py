@@ -540,7 +540,7 @@ async def reprocess_intervals(
 
     from openkoutsi.fit import extractIntervals
     raw = extractIntervals(fileish) if fileish is not None else []
-    is_auto = len(raw) == 0
+    is_auto = len(raw) <= 1
 
     if is_auto:
         duration_s = activity.duration_s or 0

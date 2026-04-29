@@ -201,7 +201,7 @@ async def process_fit_file(
             )
 
     raw_intervals = extractIntervals(path)
-    is_auto = len(raw_intervals) == 0
+    is_auto = len(raw_intervals) <= 1
     if is_auto:
         interval_s = _auto_interval_s(profile.duration)
         raw_intervals = _build_auto_intervals(profile.start_time, profile.duration, interval_s)

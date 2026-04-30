@@ -45,6 +45,11 @@
       "num": "05 / VIENTI",
       "title": "Siirrett\u00e4v\u00e4 l\u00e4ht\u00f6kohtaisesti.",
       "body": "SQLite konepellin alla. Vie FIT-tiedostosi ja profiilitietosi JSON-muodossa \u2014 milloin tahansa."
+    },
+    "06": {
+      "num": "06 / LUOKITTELU",
+      "title": "Tied\u00e4 mit\u00e4 harjoittelit.",
+      "body": "Jokainen ajo luokitellaan automaattisesti \u2014 Palautuminen, Kest\u00e4vyys, Tempo, Kynnys, VO2max, Anaerobinen tai Sprintti \u2014 Cogganin tehomallilla. Muuta yhdell\u00e4 napsautuksella."
     }
   },
   "selfhost": {

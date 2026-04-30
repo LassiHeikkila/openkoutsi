@@ -1,18 +1,3 @@
-Features to implement:
-
-- [ ] team support
-- [ ] setting to sync FTP from wahoo/strava/...
-- [ ] setting to sync power zones from wahoo/strava/...
-- [ ] generating workouts
-  - for zwift
-  - for wahoo
-- [ ] weekly TSS vs planned
-- [ ] extract lap data from workouts
-
-Testing:
-
-- test Ollama connection (local)
-
 
 # Before Strava Integration Goes Live
 

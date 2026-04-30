@@ -5,6 +5,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openkoutsi.fit import summarizeWorkout, getStartTime, extractIntervals
+from openkoutsi.categorization import classify_workout
 from backend.app.models.orm import (
     Activity,
     ActivityDistanceBest,
@@ -217,6 +218,10 @@ async def process_fit_file(
     intervals = _compute_interval_stats(raw_intervals, profile.start_time, stream_map, is_auto)
     for iv in intervals:
         session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity.id, **iv))
+
+    vi = (np / activity.avg_power) if (np and activity.avg_power) else None
+    category = classify_workout(intensity_factor, vi)
+    activity.workout_category = category.value if category else None
 
     await session.commit()
     await session.refresh(activity)

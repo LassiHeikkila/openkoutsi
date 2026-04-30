@@ -45,6 +45,11 @@
       "num": "05 / EXPORT",
       "title": "Portable by design.",
       "body": "SQLite under the hood. Export your raw FIT files and profile data as JSON \u2014 anytime."
+    },
+    "06": {
+      "num": "06 / CLASSIFICATION",
+      "title": "Know what you trained.",
+      "body": "Every ride is automatically classified \u2014 Recovery, Endurance, Tempo, Threshold, VO2 Max, Anaerobic, or Sprint \u2014 using Coggan's power model. Override with one click."
     }
   },
   "selfhost": {

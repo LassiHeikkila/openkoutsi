@@ -60,7 +60,7 @@ _SCHEMA_EXAMPLE = """\
 
 Rules:
 - day_of_week: integer 1 (Monday) to 7 (Sunday)
-- workout_type: one of "easy", "tempo", "threshold", "vo2max", "endurance", "long", "strength", "yoga", "cross-training", "rest"
+- workout_type: one of "recovery", "tempo", "threshold", "vo2max", "endurance", "long", "strength", "yoga", "cross-training", "rest"
 - Every week must have exactly 7 workouts, one per day_of_week (1-7)
 - Days not scheduled as training should be "rest" with null duration and tss
 - TSS and duration_min must be null for rest days, integers otherwise

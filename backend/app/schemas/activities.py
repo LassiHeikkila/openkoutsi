@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ActivityUpdate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    workout_category: Optional[str] = None
 
 
 class FrontendAnalysisBody(BaseModel):
@@ -57,6 +58,7 @@ class ActivityResponse(BaseModel):
     max_hr: Optional[float] = None
     tss: Optional[float] = None
     intensity_factor: Optional[float] = None
+    workout_category: Optional[str] = None
     has_fit_file: bool = False
     status: str
     created_at: datetime
@@ -84,6 +86,7 @@ class ActivityResponse(BaseModel):
                 "max_hr": data.max_hr,
                 "tss": data.tss,
                 "intensity_factor": data.intensity_factor,
+                "workout_category": data.workout_category,
                 "has_fit_file": data.has_fit_file,
                 "status": data.status,
                 "created_at": data.created_at,
@@ -131,6 +134,7 @@ class ActivityDetailResponse(ActivityResponse):
             max_hr=activity.max_hr,
             tss=activity.tss,
             intensity_factor=activity.intensity_factor,
+            workout_category=activity.workout_category,
             has_fit_file=activity.has_fit_file,
             status=activity.status,
             created_at=activity.created_at,

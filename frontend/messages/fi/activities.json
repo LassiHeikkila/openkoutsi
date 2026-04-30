@@ -58,6 +58,20 @@
       "avgSpeed": "Keskim. nopeus",
       "auto": "Automaattinen"
     },
+    "category": {
+      "label": "Kategoria",
+      "none": "Ei mitään",
+      "recovery": "Palautuminen",
+      "endurance": "Kestävyys",
+      "tempo": "Tempo",
+      "threshold": "Kynnys",
+      "vo2max": "VO2max",
+      "anaerobic": "Anaerobinen",
+      "sprint": "Sprintti",
+      "strength": "Voimaharjoittelu",
+      "yoga": "Jooga",
+      "cross_training": "Muu liikunta"
+    },
     "analysis": {
       "title": "Tekoälyanalyysi",
       "analyse": "Analysoi harjoitus",

@@ -99,7 +99,7 @@
         "high": "High"
       },
       "workoutTypes": {
-        "easy": "Easy / Zone 2",
+        "recovery": "Recovery / Zone 2",
         "tempo": "Tempo",
         "threshold": "Threshold",
         "vo2max": "VO2max",

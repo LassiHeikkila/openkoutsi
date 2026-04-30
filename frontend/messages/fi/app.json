@@ -99,7 +99,7 @@
         "high": "Korkea"
       },
       "workoutTypes": {
-        "easy": "Helppo / Vyöhyke 2",
+        "recovery": "Palautuminen / Vyöhyke 2",
         "tempo": "Tempo",
         "threshold": "Kynnys",
         "vo2max": "VO2max",

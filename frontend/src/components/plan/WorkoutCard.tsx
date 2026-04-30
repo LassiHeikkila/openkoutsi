@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 const TYPE_COLORS: Record<string, string> = {
   rest: 'bg-gray-100 text-gray-600',
-  easy: 'bg-blue-50 text-blue-700',
+  recovery: 'bg-blue-50 text-blue-700',
   endurance: 'bg-sky-50 text-sky-700',
   tempo: 'bg-yellow-50 text-yellow-700',
   threshold: 'bg-orange-50 text-orange-700',
@@ -20,7 +20,7 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 const WORKOUT_TYPE_KEYS = [
-  'easy', 'tempo', 'threshold', 'vo2max', 'endurance',
+  'recovery', 'tempo', 'threshold', 'vo2max', 'endurance',
   'long', 'strength', 'yoga', 'cross-training',
 ] as const
 

@@ -138,6 +138,11 @@ export default function RootPage() {
               <h3>{t('features.05.title')}</h3>
               <p>{t('features.05.body')}</p>
             </div>
+            <div className="feat" style={{ gridColumn: 'span 3' }}>
+              <div className="feat-num">{t('features.06.num')}</div>
+              <h3>{t('features.06.title')}</h3>
+              <p>{t('features.06.body')}</p>
+            </div>
           </div>
         </div>
       </section>

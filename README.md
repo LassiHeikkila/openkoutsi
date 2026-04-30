@@ -13,6 +13,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 ## Features
 
 - **FIT file ingestion** — upload activity files directly; TSS, normalized power, and zone distributions are calculated automatically
+- **Workout categorization** — automatic classification into Recovery, Endurance, Tempo, Threshold, VO2 Max, Anaerobic, and Sprint based on Coggan's power zone model; manually overridable
 - **Strava sync** — OAuth2 connection with full activity history import and real-time webhook updates
 - **Zone sync** — one-click sync of HR zones, power zones, and FTP from Strava or Wahoo (manual editing still supported)
 - **Fitness metrics** — CTL (fitness), ATL (fatigue), TSB (form) calculated via exponentially weighted averages, displayed as interactive charts

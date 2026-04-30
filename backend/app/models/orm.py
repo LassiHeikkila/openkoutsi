@@ -173,6 +173,7 @@ class Activity(Base):
     avg_cadence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     tss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     intensity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    workout_category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
     analysis_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

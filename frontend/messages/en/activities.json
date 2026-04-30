@@ -58,6 +58,20 @@
       "avgSpeed": "Avg Speed",
       "auto": "Auto"
     },
+    "category": {
+      "label": "Category",
+      "none": "None",
+      "recovery": "Recovery",
+      "endurance": "Endurance",
+      "tempo": "Tempo",
+      "threshold": "Threshold",
+      "vo2max": "VO2 Max",
+      "anaerobic": "Anaerobic",
+      "sprint": "Sprint",
+      "strength": "Strength",
+      "yoga": "Yoga",
+      "cross_training": "Cross-training"
+    },
     "analysis": {
       "title": "AI Analysis",
       "analyse": "Analyse workout",

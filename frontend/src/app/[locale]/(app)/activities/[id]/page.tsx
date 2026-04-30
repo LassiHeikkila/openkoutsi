@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { IntervalsTable } from '@/components/activities/IntervalsTable'
 import { SourceBadge } from '@/components/activities/SourceBadge'
+import { WorkoutCategoryBadge } from '@/components/activities/WorkoutCategoryBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR, formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
 import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
@@ -62,11 +63,25 @@ export default function ActivityDetailPage({ params }: Props) {
     setReprocessing(true)
     try {
       const updated = await apiFetch(`/api/activities/${id}/reprocess-intervals`, { method: 'POST' }) as ActivityDetail
+      await apiFetch(`/api/activities/${id}/recalculate-category`, { method: 'POST' })
       await mutate(updated, false)
+      await mutate()
     } catch {
       toast({ title: t('detail.reprocessFailed'), variant: 'destructive' })
     } finally {
       setReprocessing(false)
+    }
+  }
+
+  async function handleCategoryChange(category: string | null) {
+    try {
+      await apiFetch(`/api/activities/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ workout_category: category }),
+      })
+      await mutate()
+    } catch {
+      // silently ignore; the select will revert on next render
     }
   }
 
@@ -238,6 +253,11 @@ export default function ActivityDetailPage({ params }: Props) {
             )}
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-sm text-muted-foreground capitalize">{activity.sport_type}</p>
+              <WorkoutCategoryBadge
+                category={activity.workout_category}
+                editable
+                onCategoryChange={handleCategoryChange}
+              />
               <SourceBadge sources={activity.sources} />
             </div>
           </div>

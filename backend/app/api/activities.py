@@ -39,6 +39,7 @@ from backend.app.services.fit_processor import process_fit_file, read_fit_start_
 from backend.app.services.metrics_engine import recalculate_from
 from backend.app.services.provider_sync import _source_priority
 from backend.app.services.training_math import calculate_tss
+from openkoutsi.categorization import WorkoutCategory, classify_workout
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _FIT_MAGIC = b".FIT"  # FIT file header signature at bytes 8–11
@@ -117,7 +118,8 @@ async def _bg_process_and_recalculate(
                     for attr in (
                         "name", "sport_type", "start_time", "duration_s", "distance_m",
                         "elevation_m", "avg_power", "normalized_power", "avg_hr", "max_hr",
-                        "avg_speed_ms", "avg_cadence", "tss", "intensity_factor", "status",
+                        "avg_speed_ms", "avg_cadence", "tss", "intensity_factor",
+                        "workout_category", "status",
                     ):
                         setattr(existing_act, attr, getattr(activity, attr))
 
@@ -586,6 +588,33 @@ async def reprocess_intervals(
     )
 
 
+@router.post("/{activity_id}/recalculate-category", response_model=ActivityResponse)
+async def recalculate_category(
+    activity_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Re-derive workout_category from stored power metrics and intervals."""
+    athlete = await _get_athlete(user, session)
+    result = await session.execute(
+        select(Activity).where(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    vi = (
+        (activity.normalized_power / activity.avg_power)
+        if (activity.normalized_power and activity.avg_power)
+        else None
+    )
+    category = classify_workout(activity.intensity_factor, vi)
+    activity.workout_category = category.value if category else None
+    await session.commit()
+    await session.refresh(activity)
+    return ActivityResponse.model_validate(activity)
+
+
 @router.patch("/{activity_id}", response_model=ActivityResponse)
 async def update_activity(
     activity_id: str,
@@ -604,7 +633,17 @@ async def update_activity(
     if activity is None:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    activity.name = payload.name.strip()
+    if payload.name is not None:
+        activity.name = payload.name.strip()
+    if "workout_category" in payload.model_fields_set:
+        if payload.workout_category is None:
+            activity.workout_category = None
+        else:
+            try:
+                activity.workout_category = WorkoutCategory(payload.workout_category).value
+            except ValueError:
+                raise HTTPException(status_code=422, detail=f"Unknown workout category: {payload.workout_category}")
+
     await session.commit()
     await session.refresh(activity)
     return ActivityResponse.model_validate(activity)

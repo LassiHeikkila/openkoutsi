@@ -199,6 +199,28 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.lp .team-slug-input {
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.95rem;
+  padding: 9px 14px;
+  outline: none;
+  min-width: 180px;
+  flex: 1;
+  max-width: 260px;
+}
+
+.lp .team-slug-input::placeholder {
+  color: var(--ink-3);
+}
+
+.lp .team-slug-input:focus {
+  border-color: var(--accent);
 }
 
 /* Hero viz */

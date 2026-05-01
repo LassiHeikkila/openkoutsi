@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Link, usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
@@ -18,16 +19,17 @@ function NavInner({ onClose }: NavInnerProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { athlete, logout } = useAuth()
+  const { slug } = useParams<{ slug: string }>()
 
   const navItems = [
-    { href: '/dashboard' as const, labelKey: 'nav.dashboard' as const, icon: BarChart2 },
-    { href: '/activities' as const, labelKey: 'nav.activities' as const, icon: Activity },
-    { href: '/power' as const, labelKey: 'nav.power' as const, icon: Zap },
-    { href: '/records' as const, labelKey: 'nav.records' as const, icon: Timer },
-    { href: '/goals' as const, labelKey: 'nav.goals' as const, icon: Target },
-    { href: '/plan' as const, labelKey: 'nav.plan' as const, icon: Calendar },
-    { href: '/profile' as const, labelKey: 'nav.profile' as const, icon: User },
-    { href: '/settings' as const, labelKey: 'nav.settings' as const, icon: Settings },
+    { href: `/t/${slug}/dashboard`, labelKey: 'nav.dashboard' as const, icon: BarChart2 },
+    { href: `/t/${slug}/activities`, labelKey: 'nav.activities' as const, icon: Activity },
+    { href: `/t/${slug}/power`, labelKey: 'nav.power' as const, icon: Zap },
+    { href: `/t/${slug}/records`, labelKey: 'nav.records' as const, icon: Timer },
+    { href: `/t/${slug}/goals`, labelKey: 'nav.goals' as const, icon: Target },
+    { href: `/t/${slug}/plan`, labelKey: 'nav.plan' as const, icon: Calendar },
+    { href: `/t/${slug}/profile`, labelKey: 'nav.profile' as const, icon: User },
+    { href: `/t/${slug}/settings`, labelKey: 'nav.settings' as const, icon: Settings },
   ]
 
   function handleLogout() {
@@ -85,7 +87,7 @@ function NavInner({ onClose }: NavInnerProps) {
             onClick={onClose}
             className={cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
-              pathname.startsWith(href)
+              pathname.includes(`/t/${slug}/${href.split('/').pop()}`)
                 ? 'bg-accent text-accent-foreground font-medium'
                 : 'text-muted-foreground',
             )}

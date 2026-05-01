@@ -5,6 +5,17 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000
 // In-memory access token (not persisted to storage)
 let _accessToken: string | null = null
 
+// Current team slug — set by AuthProvider on mount so attemptRefresh knows which endpoint to call
+let _teamSlug: string | null = null
+
+export function setTeamSlug(slug: string) {
+  _teamSlug = slug
+}
+
+export function getTeamSlug(): string | null {
+  return _teamSlug
+}
+
 export function setAccessToken(token: string | null) {
   _accessToken = token
 }
@@ -34,9 +45,9 @@ export function clearSessionCookie() {
 }
 
 async function attemptRefresh(): Promise<boolean> {
+  if (!_teamSlug) return false
   try {
-    // Refresh token is in an httpOnly cookie — sent automatically by the browser.
-    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+    const res = await fetch(`${API_URL}/api/teams/${_teamSlug}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     })
@@ -81,9 +92,9 @@ export async function apiFetch<T>(
     clearTokens()
     if (typeof window !== 'undefined') {
       const AUTH_PATHS = ['/login', '/register', '/reset-password']
-      const onAuthPage = AUTH_PATHS.some((p) => window.location.pathname.startsWith(p))
+      const onAuthPage = AUTH_PATHS.some((p) => window.location.pathname.includes(p))
       if (!onAuthPage) {
-        window.location.href = '/login'
+        window.location.href = _teamSlug ? `/t/${_teamSlug}/login` : '/'
       }
     }
     throw new Error('Unauthorized')
@@ -144,7 +155,7 @@ export async function apiDownload(
     }
     clearTokens()
     if (typeof window !== 'undefined') {
-      window.location.href = '/login'
+      window.location.href = _teamSlug ? `/t/${_teamSlug}/login` : '/'
     }
     throw new Error('Unauthorized')
   }

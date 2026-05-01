@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useParams } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Link, useRouter } from '@/navigation'
@@ -14,6 +15,7 @@ export function ResetPasswordForm() {
   const t = useTranslations('auth')
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { slug } = useParams<{ slug: string }>()
   const token = searchParams.get('token') ?? ''
 
   const [password, setPassword] = useState('')
@@ -36,7 +38,10 @@ export function ResetPasswordForm() {
           </CardContent>
         )}
         <CardFooter>
-          <Link href="/login" className="text-sm underline underline-offset-4 hover:text-primary">
+          <Link
+            href={`/t/${slug}/login`}
+            className="text-sm underline underline-offset-4 hover:text-primary"
+          >
             {t('resetPassword.backToSignIn')}
           </Link>
         </CardFooter>
@@ -53,11 +58,15 @@ export function ResetPasswordForm() {
     setError(null)
     setLoading(true)
     try {
-      await apiFetch('/api/auth/reset-password', {
-        method: 'POST',
-        body: JSON.stringify({ token, new_password: password }),
-      }, false)
-      router.replace('/login')
+      await apiFetch(
+        `/api/teams/${slug}/auth/reset-password`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ token, new_password: password }),
+        },
+        false,
+      )
+      router.replace(`/t/${slug}/login`)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('resetPassword.failed'))
     } finally {
@@ -106,7 +115,10 @@ export function ResetPasswordForm() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? t('resetPassword.submitting') : t('resetPassword.submit')}
           </Button>
-          <Link href="/login" className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary">
+          <Link
+            href={`/t/${slug}/login`}
+            className="text-sm text-muted-foreground underline underline-offset-4 hover:text-primary"
+          >
             {t('resetPassword.backToSignIn')}
           </Link>
         </CardFooter>

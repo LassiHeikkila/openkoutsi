@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
@@ -13,15 +14,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { athlete, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const { slug } = useParams<{ slug: string }>()
   const [navOpen, setNavOpen] = useState(false)
 
   useEffect(() => {
     if (!loading && !athlete) {
-      router.replace('/')
+      router.replace(`/t/${slug}/login`)
     }
-  }, [athlete, loading, router])
+  }, [athlete, loading, router, slug])
 
-  // Close mobile nav on route change
   useEffect(() => {
     setNavOpen(false)
   }, [pathname])
@@ -41,7 +42,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <Nav open={navOpen} onClose={() => setNavOpen(false)} />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Mobile top bar */}
         <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-card shrink-0">
           <button
             onClick={() => setNavOpen(true)}

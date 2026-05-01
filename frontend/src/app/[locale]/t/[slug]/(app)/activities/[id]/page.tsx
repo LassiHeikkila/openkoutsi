@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useRef, useState } from 'react'
+import { useParams } from 'next/navigation'
 import useSWR from 'swr'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from '@/navigation'
@@ -41,6 +42,7 @@ export default function ActivityDetailPage({ params }: Props) {
   const tCommon = useTranslations('common')
   const locale = useLocale()
   const { id } = use(params)
+  const { slug } = useParams<{ slug: string }>()
   const router = useRouter()
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -142,7 +144,7 @@ export default function ActivityDetailPage({ params }: Props) {
     try {
       await apiFetch(`/api/activities/${id}`, { method: 'DELETE' })
       toast({ title: t('detail.deleted') })
-      router.replace('/activities')
+      router.replace(`/t/${slug}/activities`)
     } catch (err) {
       toast({
         title: t('detail.deleteFailed'),

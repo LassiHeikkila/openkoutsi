@@ -6,6 +6,11 @@
     "login": "Log in",
     "signup": "Sign up"
   },
+  "teamEntry": {
+    "label": "Enter your team slug",
+    "placeholder": "my-team",
+    "submit": "Go \u2192"
+  },
   "hero": {
     "eyebrow": "open source \u00b7 Apache-2.0",
     "h1line1": "Every watt.",

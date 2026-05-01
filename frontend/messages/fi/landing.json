@@ -6,6 +6,11 @@
     "login": "Kirjaudu",
     "signup": "Rekister\u00f6idy"
   },
+  "teamEntry": {
+    "label": "Sy\u00f6t\u00e4 tiimin tunniste",
+    "placeholder": "oma-tiimi",
+    "submit": "Siirry \u2192"
+  },
   "hero": {
     "eyebrow": "avoimen l\u00e4hdekoodin \u00b7 Apache-2.0",
     "h1line1": "Jokainen watti.",

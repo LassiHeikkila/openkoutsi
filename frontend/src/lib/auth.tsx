@@ -15,21 +15,29 @@ import {
   getAccessToken,
   setSessionCookie,
   clearSessionCookie,
+  setTeamSlug,
 } from './api'
 import type { AthleteProfile, TokenPair } from './types'
 
 interface AuthState {
   athlete: AthleteProfile | null
   loading: boolean
+  teamSlug: string
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string) => Promise<void>
+  register: (username: string, password: string, inviteToken: string) => Promise<void>
   logout: () => void
   refreshAthlete: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | null>(null)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+  teamSlug,
+}: {
+  children: ReactNode
+  teamSlug: string
+}) {
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -42,17 +50,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // On mount, attempt to restore session via the httpOnly refresh cookie.
-  // If the cookie is present and valid the refresh endpoint returns a new
-  // access token; if not, we get a 401 and stay logged out.
   useEffect(() => {
+    setTeamSlug(teamSlug)
+
     const restore = async () => {
-      // Skip if we already have an access token in memory (e.g. hot reload)
       if (!getAccessToken()) {
         try {
-          const res = await apiFetch<TokenPair>('/api/auth/refresh', {
-            method: 'POST',
-          }, false)
+          const res = await apiFetch<TokenPair>(
+            `/api/teams/${teamSlug}/auth/refresh`,
+            { method: 'POST' },
+            false,
+          )
           setAccessToken(res.access_token)
           setSessionCookie()
         } catch {
@@ -65,39 +73,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
     restore()
-  }, [fetchAthlete])
+  }, [teamSlug, fetchAthlete])
 
   const login = useCallback(
     async (username: string, password: string) => {
-      const data = await apiFetch<TokenPair>('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username, password }),
-      }, false)
+      const data = await apiFetch<TokenPair>(
+        `/api/teams/${teamSlug}/auth/login`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ username, password }),
+        },
+        false,
+      )
       setAccessToken(data.access_token)
       setSessionCookie()
       await fetchAthlete()
     },
-    [fetchAthlete],
+    [teamSlug, fetchAthlete],
   )
 
   const register = useCallback(
-    async (username: string, password: string) => {
-      await apiFetch('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ username, password }),
-      }, false)
-      await login(username, password)
+    async (username: string, password: string, inviteToken: string) => {
+      const data = await apiFetch<TokenPair>(
+        `/api/teams/${teamSlug}/auth/register`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ username, password, invite_token: inviteToken }),
+        },
+        false,
+      )
+      setAccessToken(data.access_token)
+      setSessionCookie()
+      await fetchAthlete()
     },
-    [login],
+    [teamSlug, fetchAthlete],
   )
 
   const logout = useCallback(() => {
     clearTokens()
     clearSessionCookie()
     setAthlete(null)
-    // Clear the httpOnly refresh cookie server-side
-    apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
-  }, [])
+    apiFetch(`/api/teams/${teamSlug}/auth/logout`, { method: 'POST' }).catch(() => {})
+  }, [teamSlug])
 
   const refreshAthlete = useCallback(async () => {
     await fetchAthlete()
@@ -105,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ athlete, loading, login, register, logout, refreshAthlete }}
+      value={{ athlete, loading, teamSlug, login, register, logout, refreshAthlete }}
     >
       {children}
     </AuthContext.Provider>

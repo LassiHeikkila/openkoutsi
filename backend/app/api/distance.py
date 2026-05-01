@@ -4,9 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import get_current_user
-from backend.app.db.base import get_session
-from backend.app.models.orm import Activity, ActivityDistanceBest, Athlete, User
+from backend.app.core.deps import get_ctx_and_session
+from backend.app.models.team_orm import Activity, ActivityDistanceBest, Athlete
 from backend.app.schemas.distance import AllTimeDistanceBestsResponse, DistanceBestEntry
 from backend.app.services.training_math import DISTANCE_BEST_DISTANCES
 
@@ -15,8 +14,8 @@ router = APIRouter(prefix="/distance", tags=["distance"])
 TOP_N = 3
 
 
-async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
+    result = await session.execute(select(Athlete).where(Athlete.global_user_id == global_user_id))
     athlete = result.scalar_one_or_none()
     if athlete is None:
         raise HTTPException(status_code=404, detail="Athlete profile not found")
@@ -24,15 +23,13 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 
 
 @router.get("/bests", response_model=AllTimeDistanceBestsResponse)
-async def get_distance_bests(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
+async def get_distance_bests(ctx_session=Depends(get_ctx_and_session)):
     """
     Return the top-3 all-time best times for each standard distance,
     ordered by (distance_m asc, rank asc).  Distances with no data are omitted.
     """
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
 
     rows = await session.execute(
         select(ActivityDistanceBest, Activity.name)

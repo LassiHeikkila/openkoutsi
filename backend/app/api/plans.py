@@ -5,19 +5,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import get_current_user
-from ..core.config import settings
-from ..db.base import get_session
-from ..models.orm import User, Athlete, TrainingPlan, PlannedWorkout
-from ..schemas.plans import TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse
-from ..services.plan_generator import generate_plan
-from ..services.llm_plan_generator import generate_plan_llm
+from backend.app.core.deps import get_ctx_and_session
+from backend.app.core.config import settings
+from backend.app.models.team_orm import Athlete, TrainingPlan, PlannedWorkout
+from backend.app.schemas.plans import TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse
+from backend.app.services.plan_generator import generate_plan
+from backend.app.services.llm_plan_generator import generate_plan_llm
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
 
-async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
+    result = await session.execute(select(Athlete).where(Athlete.global_user_id == global_user_id))
     athlete = result.scalar_one_or_none()
     if not athlete:
         raise HTTPException(404, "Athlete profile not found")
@@ -25,11 +24,9 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 
 
 @router.get("/", response_model=list[TrainingPlanResponse])
-async def list_plans(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    athlete = await _get_athlete(user, session)
+async def list_plans(ctx_session=Depends(get_ctx_and_session)):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     result = await session.execute(
         select(TrainingPlan)
         .where(TrainingPlan.athlete_id == athlete.id)
@@ -43,13 +40,13 @@ async def list_plans(
 @router.post("/", response_model=TrainingPlanResponse, status_code=201)
 async def create_plan(
     body: TrainingPlanCreate,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
+    ctx, session = ctx_session
     if body.use_llm and not body.llm_weeks and not settings.llm_base_url:
         raise HTTPException(400, "LLM generation is not configured (LLM_BASE_URL is not set)")
 
-    athlete = await _get_athlete(user, session)
+    athlete = await _get_athlete(ctx.user_id, session)
 
     # Archive any existing active plans
     result = await session.execute(
@@ -129,10 +126,10 @@ async def create_plan(
 @router.get("/{plan_id}", response_model=TrainingPlanResponse)
 async def get_plan(
     plan_id: str,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     result = await session.execute(
         select(TrainingPlan)
         .where(TrainingPlan.id == plan_id, TrainingPlan.athlete_id == athlete.id)
@@ -148,10 +145,10 @@ async def get_plan(
 async def update_plan(
     plan_id: str,
     body: TrainingPlanUpdate,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     result = await session.execute(
         select(TrainingPlan)
         .where(TrainingPlan.id == plan_id, TrainingPlan.athlete_id == athlete.id)
@@ -174,10 +171,10 @@ async def update_plan(
 @router.delete("/{plan_id}", status_code=204)
 async def delete_plan(
     plan_id: str,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     result = await session.execute(
         select(TrainingPlan)
         .where(TrainingPlan.id == plan_id, TrainingPlan.athlete_id == athlete.id)

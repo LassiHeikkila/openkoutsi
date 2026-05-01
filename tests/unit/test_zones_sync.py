@@ -8,42 +8,33 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from backend.app.models.orm import Athlete, ProviderConnection
+from backend.app.models.registry_orm import ProviderConnection
+from backend.app.models.team_orm import Athlete
 from backend.app.services.providers.base import ZoneData
 from backend.app.services.providers.strava import StravaProviderClient, _normalize_strava_zones
 from backend.app.services.providers.wahoo import _normalize_wahoo_zones
+
+# IDs from conftest.py
+_TEST_USER_ID = "test-user-00000000"
+_TEST_ATHLETE_ID = "test-athlete-0000"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
-async def _register_and_auth(client) -> dict:
-    resp = await client.post(
-        "/api/auth/register",
-        json={"username": "zone_tester", "password": "Testpass1234"},
-    )
-    assert resp.status_code == 201
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
-
-
-async def _add_connection(session, athlete_id: str, provider: str) -> ProviderConnection:
+async def _add_connection(registry_session, provider: str) -> ProviderConnection:
+    """Seed a ProviderConnection in the registry for the test user."""
     conn = ProviderConnection(
-        athlete_id=athlete_id,
+        user_id=_TEST_USER_ID,
         provider=provider,
         access_token="access-tok",
         refresh_token="refresh-tok",
         token_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    session.add(conn)
-    await session.commit()
-    await session.refresh(conn)
+    registry_session.add(conn)
+    await registry_session.commit()
+    await registry_session.refresh(conn)
     return conn
-
-
-async def _get_athlete_id(client, headers: dict) -> str:
-    resp = await client.get("/api/athlete/", headers=headers)
-    assert resp.status_code == 200
-    return resp.json()["id"]
 
 
 def _mock_httpx_context(responses: list) -> MagicMock:
@@ -196,10 +187,8 @@ class TestStravaFetchZones:
 
 
 class TestSyncZonesEndpoint:
-    async def test_sync_zones_updates_athlete(self, client, session):
-        headers = await _register_and_auth(client)
-        athlete_id = await _get_athlete_id(client, headers)
-        await _add_connection(session, athlete_id, "strava")
+    async def test_sync_zones_updates_athlete(self, client, session, registry_session, auth_headers):
+        await _add_connection(registry_session, "strava")
 
         mock_zone_data = ZoneData(
             ftp=300,
@@ -208,7 +197,7 @@ class TestSyncZonesEndpoint:
         )
 
         with patch.object(StravaProviderClient, "fetch_zones", new_callable=AsyncMock, return_value=mock_zone_data):
-            resp = await client.post("/api/integrations/strava/sync-zones", headers=headers)
+            resp = await client.post("/api/integrations/strava/sync-zones", headers=auth_headers)
 
         assert resp.status_code == 200
         body = resp.json()
@@ -218,41 +207,36 @@ class TestSyncZonesEndpoint:
         assert body["ftp"] == 300
 
         from sqlalchemy import select
-        result = await session.execute(select(Athlete).where(Athlete.id == athlete_id))
+        result = await session.execute(select(Athlete).where(Athlete.id == _TEST_ATHLETE_ID))
         athlete = result.scalar_one()
         assert athlete.ftp == 300
         assert athlete.hr_zones == [{"name": "Z1", "low": 0, "high": 120}]
         assert athlete.power_zones == [{"name": "Z1", "low": 0, "high": 165}]
 
-    async def test_sync_zones_appends_ftp_history(self, client, session):
+    async def test_sync_zones_appends_ftp_history(self, client, session, registry_session, auth_headers):
         from backend.app.services.providers.wahoo import WahooClient
-        headers = await _register_and_auth(client)
-        athlete_id = await _get_athlete_id(client, headers)
-        await _add_connection(session, athlete_id, "wahoo")
+        await _add_connection(registry_session, "wahoo")
 
         mock_zone_data = ZoneData(ftp=250, power_zones=[{"name": "Z1", "low": 0, "high": 137}])
 
         with patch.object(WahooClient, "fetch_zones", new_callable=AsyncMock, return_value=mock_zone_data):
-            resp = await client.post("/api/integrations/wahoo/sync-zones", headers=headers)
+            resp = await client.post("/api/integrations/wahoo/sync-zones", headers=auth_headers)
 
         assert resp.status_code == 200
 
         from sqlalchemy import select
-        result = await session.execute(select(Athlete).where(Athlete.id == athlete_id))
+        result = await session.execute(select(Athlete).where(Athlete.id == _TEST_ATHLETE_ID))
         athlete = result.scalar_one()
         assert len(athlete.ftp_tests) == 1
         assert athlete.ftp_tests[0]["ftp"] == 250
         assert athlete.ftp_tests[0]["method"] == "wahoo"
 
-    async def test_sync_zones_not_connected_returns_400(self, client):
-        headers = await _register_and_auth(client)
-        resp = await client.post("/api/integrations/strava/sync-zones", headers=headers)
+    async def test_sync_zones_not_connected_returns_400(self, client, auth_headers):
+        resp = await client.post("/api/integrations/strava/sync-zones", headers=auth_headers)
         assert resp.status_code == 400
 
-    async def test_sync_zones_insufficient_scope_returns_403(self, client, session):
-        headers = await _register_and_auth(client)
-        athlete_id = await _get_athlete_id(client, headers)
-        await _add_connection(session, athlete_id, "strava")
+    async def test_sync_zones_insufficient_scope_returns_403(self, client, registry_session, auth_headers):
+        await _add_connection(registry_session, "strava")
 
         mock_request = MagicMock()
         mock_response = MagicMock()
@@ -264,12 +248,11 @@ class TestSyncZonesEndpoint:
             new_callable=AsyncMock,
             side_effect=httpx.HTTPStatusError("403 Forbidden", request=mock_request, response=mock_response),
         ):
-            resp = await client.post("/api/integrations/strava/sync-zones", headers=headers)
+            resp = await client.post("/api/integrations/strava/sync-zones", headers=auth_headers)
 
         assert resp.status_code == 403
         assert resp.json()["detail"] == "insufficient_scope"
 
-    async def test_sync_zones_unknown_provider_returns_404(self, client):
-        headers = await _register_and_auth(client)
-        resp = await client.post("/api/integrations/garmin/sync-zones", headers=headers)
+    async def test_sync_zones_unknown_provider_returns_404(self, client, auth_headers):
+        resp = await client.post("/api/integrations/garmin/sync-zones", headers=auth_headers)
         assert resp.status_code == 404

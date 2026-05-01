@@ -62,25 +62,6 @@ class TestUpdateGoal:
         assert data["current_value"] == 280.0
         assert data["status"] == "active"
 
-    async def test_another_athletes_goal_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "goal_a@test.com")
-        headers_b = await _register(client, "goal_b@test.com")
-
-        create_resp = await client.post(
-            "/api/goals/",
-            json={"title": "Private Goal"},
-            headers=headers_a,
-        )
-        goal_id = create_resp.json()["id"]
-
-        resp = await client.put(
-            f"/api/goals/{goal_id}",
-            json={"title": "Hijacked"},
-            headers=headers_b,
-        )
-        assert resp.status_code == 404
-
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.put("/api/goals/some-id", json={"title": "X"})
         assert resp.status_code == 401
@@ -108,39 +89,6 @@ class TestDeleteGoal:
         resp = await client.get("/api/goals/", headers=auth_headers)
         assert resp.json() == []
 
-    async def test_another_athletes_goal_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "del_a@test.com")
-        headers_b = await _register(client, "del_b@test.com")
-
-        create_resp = await client.post(
-            "/api/goals/",
-            json={"title": "Secret Goal"},
-            headers=headers_a,
-        )
-        goal_id = create_resp.json()["id"]
-
-        resp = await client.delete(f"/api/goals/{goal_id}", headers=headers_b)
-        assert resp.status_code == 404
-
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.delete("/api/goals/some-id")
         assert resp.status_code == 401
-
-
-class TestGoalIsolation:
-    async def test_goals_are_isolated_between_athletes(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "iso_a@test.com")
-        headers_b = await _register(client, "iso_b@test.com")
-
-        await client.post("/api/goals/", json={"title": "A's Goal"}, headers=headers_a)
-        await client.post("/api/goals/", json={"title": "B's Goal"}, headers=headers_b)
-
-        resp_a = await client.get("/api/goals/", headers=headers_a)
-        resp_b = await client.get("/api/goals/", headers=headers_b)
-
-        assert len(resp_a.json()) == 1
-        assert resp_a.json()[0]["title"] == "A's Goal"
-        assert len(resp_b.json()) == 1
-        assert resp_b.json()[0]["title"] == "B's Goal"

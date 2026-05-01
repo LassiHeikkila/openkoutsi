@@ -4,6 +4,9 @@ Generic provider integration routes.
 Handles OAuth connect/callback, sync, and disconnect for all registered
 providers (Strava, Wahoo, …). Adding a new provider requires only registering
 it in providers/registry.py — no new router code needed.
+
+ProviderConnection records live in the registry DB (global per-user, not per-team).
+Activity data is written to every team the user belongs to on sync.
 """
 
 import logging
@@ -13,13 +16,14 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from jose import JWTError, jwt
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import get_current_user
 from backend.app.core.config import settings
-from backend.app.db.base import AsyncSessionLocal, get_session
-from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection, User
+from backend.app.core.deps import get_ctx_and_session
+from backend.app.db.registry import get_registry_session
+from backend.app.models.registry_orm import ProviderConnection, Team, TeamMembership
+from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 from backend.app.services.provider_sync import ensure_fresh_token, sync_provider_activities
 from backend.app.services.providers.registry import PROVIDERS
 
@@ -37,8 +41,8 @@ def _require_provider(provider: str) -> type:
     return client_cls
 
 
-async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
+    result = await session.execute(select(Athlete).where(Athlete.global_user_id == global_user_id))
     athlete = result.scalar_one_or_none()
     if athlete is None:
         raise HTTPException(status_code=404, detail="Athlete not found")
@@ -46,11 +50,11 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 
 
 async def _get_connection(
-    athlete: Athlete, provider: str, session: AsyncSession
+    user_id: str, provider: str, session: AsyncSession
 ) -> ProviderConnection:
     result = await session.execute(
         select(ProviderConnection).where(
-            ProviderConnection.athlete_id == athlete.id,
+            ProviderConnection.user_id == user_id,
             ProviderConnection.provider == provider,
         )
     )
@@ -60,26 +64,26 @@ async def _get_connection(
     return conn
 
 
-def _encode_state(user_id: str, provider: str) -> str:
+def _encode_state(user_id: str, team_slug: str, provider: str) -> str:
     return jwt.encode(
-        {"sub": user_id, "purpose": f"{provider}_oauth"},
+        {"sub": user_id, "team_slug": team_slug, "purpose": f"{provider}_oauth"},
         settings.secret_key,
         algorithm="HS256",
     )
 
 
-def _decode_state(state: str, provider: str) -> str:
-    """Decode a state JWT and return the user_id. Raises JWTError on failure."""
+def _decode_state(state: str, provider: str) -> tuple[str, str]:
+    """Decode a state JWT and return (user_id, team_slug). Raises JWTError on failure."""
     payload = jwt.decode(state, settings.secret_key, algorithms=["HS256"])
     if payload.get("purpose") != f"{provider}_oauth":
         raise JWTError("wrong purpose")
-    return payload["sub"]
+    return payload["sub"], payload.get("team_slug", "")
 
 
 # ── Status ─────────────────────────────────────────────────────────────────
 
 @router.get("/available")
-async def available(_: User = Depends(get_current_user)):
+async def available(ctx_session=Depends(get_ctx_and_session)):
     """Return the list of provider names that have credentials configured on the server."""
     configured = []
     if settings.strava_client_id:
@@ -91,16 +95,13 @@ async def available(_: User = Depends(get_current_user)):
 
 @router.get("/status")
 async def status(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    """Return the list of provider names the current athlete has connected."""
-    result = await session.execute(
-        select(ProviderConnection).where(
-            ProviderConnection.athlete_id == (
-                select(Athlete.id).where(Athlete.user_id == user.id).scalar_subquery()
-            )
-        )
+    """Return the list of provider names the current user has connected."""
+    ctx, _ = ctx_session
+    result = await registry_session.execute(
+        select(ProviderConnection).where(ProviderConnection.user_id == ctx.user_id)
     )
     connections = result.scalars().all()
     return {"connected": [c.provider for c in connections]}
@@ -111,18 +112,25 @@ async def status(
 @router.get("/{provider}/connect")
 async def connect(
     provider: str,
-    user: User = Depends(get_current_user),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
     """Return the OAuth authorization URL for the given provider."""
+    ctx, _ = ctx_session
     client_cls = _require_provider(provider)
 
-    # Check provider-specific configuration
     if provider == "strava" and not settings.strava_client_id:
         raise HTTPException(status_code=501, detail="Strava is not configured")
     if provider == "wahoo" and not settings.wahoo_client_id:
         raise HTTPException(status_code=501, detail="Wahoo is not configured")
 
-    state = _encode_state(str(user.id), provider)
+    # Look up team slug so the callback can redirect back to the right team
+    team_result = await registry_session.execute(
+        select(Team).where(Team.id == ctx.team_id)
+    )
+    team = team_result.scalar_one()
+
+    state = _encode_state(ctx.user_id, team.slug, provider)
     redirect_uri = f"{settings.api_url}/api/integrations/{provider}/callback"
     client = client_cls()
     url = client.get_oauth_url(state, redirect_uri)
@@ -134,7 +142,7 @@ async def callback(
     provider: str,
     code: str,
     state: str,
-    session: AsyncSession = Depends(get_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
     """Exchange OAuth code for tokens and persist the connection.
 
@@ -144,40 +152,34 @@ async def callback(
     client_cls = _require_provider(provider)
 
     try:
-        user_id = _decode_state(state, provider)
+        user_id, team_slug = _decode_state(state, provider)
     except (JWTError, KeyError, ValueError):
         return RedirectResponse(
-            url=f"{settings.frontend_url}/profile?{provider}=error"
+            url=f"{settings.frontend_url}?{provider}=error"
         )
+
+    redirect_base = (
+        f"{settings.frontend_url}/t/{team_slug}" if team_slug else settings.frontend_url
+    )
 
     redirect_uri = f"{settings.api_url}/api/integrations/{provider}/callback"
     try:
         tokens = await client_cls.exchange_code(code, redirect_uri)  # type: ignore[call-arg]
     except httpx.HTTPStatusError:
         log.exception("%s code exchange failed", provider)
-        return RedirectResponse(
-            url=f"{settings.frontend_url}/profile?{provider}=error"
-        )
+        return RedirectResponse(url=f"{redirect_base}/profile?{provider}=error")
 
-    # Resolve athlete
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user_id))
-    athlete = result.scalar_one_or_none()
-    if athlete is None:
-        return RedirectResponse(
-            url=f"{settings.frontend_url}/profile?{provider}=error"
-        )
-
-    # Upsert ProviderConnection
-    conn_result = await session.execute(
+    # Upsert ProviderConnection in registry (keyed by user_id + provider)
+    conn_result = await registry_session.execute(
         select(ProviderConnection).where(
-            ProviderConnection.athlete_id == athlete.id,
+            ProviderConnection.user_id == user_id,
             ProviderConnection.provider == provider,
         )
     )
     conn = conn_result.scalar_one_or_none()
     if conn is None:
-        conn = ProviderConnection(athlete_id=athlete.id, provider=provider)
-        session.add(conn)
+        conn = ProviderConnection(user_id=user_id, provider=provider)
+        registry_session.add(conn)
 
     conn.provider_athlete_id = tokens.get("provider_athlete_id") or conn.provider_athlete_id
     conn.access_token = tokens["access_token"]
@@ -185,11 +187,9 @@ async def callback(
     conn.token_expires_at = datetime.fromtimestamp(
         tokens["expires_at"], tz=timezone.utc
     )
-    await session.commit()
+    await registry_session.commit()
 
-    return RedirectResponse(
-        url=f"{settings.frontend_url}/profile?{provider}=connected"
-    )
+    return RedirectResponse(url=f"{redirect_base}/profile?{provider}=connected")
 
 
 # ── Sync ───────────────────────────────────────────────────────────────────
@@ -198,48 +198,72 @@ async def callback(
 async def sync(
     provider: str,
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    """Trigger a full history import from the given provider in the background."""
+    """Trigger a full history import from the given provider in the background.
+
+    Syncs to all teams the user belongs to.
+    """
+    ctx, _ = ctx_session
     _require_provider(provider)
-    athlete = await _get_athlete(user, session)
-    await _get_connection(athlete, provider, session)  # ensure connected
-    background_tasks.add_task(_bg_provider_sync, athlete.id, provider)
+    await _get_connection(ctx.user_id, provider, registry_session)  # ensure connected
+    background_tasks.add_task(_bg_provider_sync, ctx.user_id, provider)
     return {"status": "sync started"}
 
 
-async def _bg_provider_sync(athlete_id: str, provider: str) -> None:
+async def _bg_provider_sync(user_id: str, provider: str) -> None:
+    from backend.app.db.registry import _RegistrySessionLocal
+    from backend.app.db.team_session import get_team_session_factory
     from backend.app.services.metrics_engine import recalculate_from
 
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Athlete).where(Athlete.id == athlete_id))
-        athlete = result.scalar_one()
-
-        conn_result = await session.execute(
+    # Step 1: Refresh token once from registry, collect team membership list
+    async with _RegistrySessionLocal() as reg_session:
+        conn_result = await reg_session.execute(
             select(ProviderConnection).where(
-                ProviderConnection.athlete_id == athlete_id,
+                ProviderConnection.user_id == user_id,
                 ProviderConnection.provider == provider,
             )
         )
         conn = conn_result.scalar_one_or_none()
         if conn is None:
-            log.warning("No connection for athlete %s / provider %s", athlete_id, provider)
+            log.warning("No connection for user %s / provider %s", user_id, provider)
             return
 
-        try:
-            count, earliest = await sync_provider_activities(athlete, conn, session)
-        except Exception:
-            log.exception("%s sync failed for athlete %s", provider, athlete_id)
-            return
+        access_token = await ensure_fresh_token(conn, reg_session)
 
-        if count > 0 and earliest is not None:
-            await recalculate_from(athlete_id, earliest, session)
-
-        log.info(
-            "%s sync complete: %d new activities for athlete %s",
-            provider, count, athlete_id,
+        mb_result = await reg_session.execute(
+            select(TeamMembership).where(TeamMembership.user_id == user_id)
         )
+        team_ids = [m.team_id for m in mb_result.scalars().all()]
+
+    if not team_ids:
+        log.warning("User %s has no team memberships — sync dropped", user_id)
+        return
+
+    # Step 2: Sync to each team
+    for team_id in team_ids:
+        try:
+            async with get_team_session_factory(team_id)() as team_session:
+                athlete_result = await team_session.execute(
+                    select(Athlete).where(Athlete.global_user_id == user_id)
+                )
+                athlete = athlete_result.scalar_one_or_none()
+                if athlete is None:
+                    continue
+
+                count, earliest = await sync_provider_activities(
+                    athlete, conn, team_session, team_id=team_id, access_token=access_token
+                )
+                if count > 0 and earliest is not None:
+                    await recalculate_from(athlete.id, earliest, team_session)
+
+                log.info(
+                    "%s sync complete: %d new activities for user %s in team %s",
+                    provider, count, user_id, team_id,
+                )
+        except Exception:
+            log.exception("%s sync failed for user %s in team %s", provider, user_id, team_id)
 
 
 # ── Zone sync ──────────────────────────────────────────────────────────────
@@ -247,15 +271,16 @@ async def _bg_provider_sync(athlete_id: str, provider: str) -> None:
 @router.post("/{provider}/sync-zones")
 async def sync_zones(
     provider: str,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
     """Fetch training zones (HR, power) and FTP from the provider and save to the athlete profile."""
+    ctx, session = ctx_session
     client_cls = _require_provider(provider)
-    athlete = await _get_athlete(user, session)
-    conn = await _get_connection(athlete, provider, session)
+    athlete = await _get_athlete(ctx.user_id, session)
+    conn = await _get_connection(ctx.user_id, provider, registry_session)
 
-    access_token = await ensure_fresh_token(conn, session)
+    access_token = await ensure_fresh_token(conn, registry_session)
 
     client = client_cls()
     try:
@@ -309,17 +334,17 @@ async def sync_zones(
 async def disconnect(
     provider: str,
     delete_data: bool = Query(False, description="Also delete all activities imported from this provider"),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
     """Revoke the provider token and remove the stored connection.
 
     Pass ``delete_data=true`` to also permanently delete all activities that
-    were imported from this provider.
+    were imported from this provider across all teams the user belongs to.
     """
+    ctx, _ = ctx_session
     _require_provider(provider)
-    athlete = await _get_athlete(user, session)
-    conn = await _get_connection(athlete, provider, session)
+    conn = await _get_connection(ctx.user_id, provider, registry_session)
 
     if conn.access_token:
         try:
@@ -330,48 +355,65 @@ async def disconnect(
 
     if delete_data:
         from pathlib import Path
+        from backend.app.db.team_session import get_team_session_factory
         from backend.app.services.metrics_engine import recalculate_from
 
-        # Find all ActivitySource rows for this provider + athlete.
-        src_result = await session.execute(
-            select(ActivitySource)
-            .join(Activity, ActivitySource.activity_id == Activity.id)
-            .where(
-                Activity.athlete_id == athlete.id,
-                ActivitySource.provider == provider,
-            )
+        mb_result = await registry_session.execute(
+            select(TeamMembership).where(TeamMembership.user_id == ctx.user_id)
         )
-        sources = src_result.scalars().all()
+        team_ids = [m.team_id for m in mb_result.scalars().all()]
 
-        earliest_date = None
-        for src in sources:
-            act = src.activity
-            # Delete the FIT file if this source contributed one.
-            if src.fit_file_path:
-                p = Path(src.fit_file_path)
-                if p.exists():
-                    p.unlink(missing_ok=True)
-            await session.delete(src)
-            await session.flush()
-
-            # If the activity has no remaining sources, delete it.
-            remaining = await session.execute(
-                select(ActivitySource).where(ActivitySource.activity_id == act.id)
-            )
-            if remaining.scalar_one_or_none() is None:
-                if act.start_time:
-                    day = (
-                        act.start_time.date()
-                        if hasattr(act.start_time, "date")
-                        else act.start_time
+        for team_id in team_ids:
+            try:
+                async with get_team_session_factory(team_id)() as team_session:
+                    athlete_result = await team_session.execute(
+                        select(Athlete).where(Athlete.global_user_id == ctx.user_id)
                     )
-                    if earliest_date is None or day < earliest_date:
-                        earliest_date = day
-                await session.delete(act)
-                await session.flush()
+                    athlete = athlete_result.scalar_one_or_none()
+                    if athlete is None:
+                        continue
 
-        if earliest_date is not None:
-            await recalculate_from(athlete.id, earliest_date, session)
+                    src_result = await team_session.execute(
+                        select(ActivitySource)
+                        .join(Activity, ActivitySource.activity_id == Activity.id)
+                        .where(
+                            Activity.athlete_id == athlete.id,
+                            ActivitySource.provider == provider,
+                        )
+                    )
+                    sources = src_result.scalars().all()
 
-    await session.delete(conn)
-    await session.commit()
+                    earliest_date = None
+                    for src in sources:
+                        act = src.activity
+                        if src.fit_file_path:
+                            p = Path(src.fit_file_path)
+                            if p.exists():
+                                p.unlink(missing_ok=True)
+                        await team_session.delete(src)
+                        await team_session.flush()
+
+                        remaining = await team_session.execute(
+                            select(ActivitySource).where(ActivitySource.activity_id == act.id)
+                        )
+                        if remaining.scalar_one_or_none() is None:
+                            if act.start_time:
+                                day = (
+                                    act.start_time.date()
+                                    if hasattr(act.start_time, "date")
+                                    else act.start_time
+                                )
+                                if earliest_date is None or day < earliest_date:
+                                    earliest_date = day
+                            await team_session.delete(act)
+                            await team_session.flush()
+
+                    if earliest_date is not None:
+                        await recalculate_from(athlete.id, earliest_date, team_session)
+
+                    await team_session.commit()
+            except Exception:
+                log.exception("Failed to delete %s data for user %s in team %s", provider, ctx.user_id, team_id)
+
+    await registry_session.delete(conn)
+    await registry_session.commit()

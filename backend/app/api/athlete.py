@@ -9,22 +9,25 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import get_current_user
+from backend.app.core.auth import TeamContext, get_current_user
 from backend.app.core.config import settings
+from backend.app.core.deps import get_ctx_and_session
 from backend.app.core.file_encryption import decrypt_file
-from backend.app.db.base import get_session
-from backend.app.models.orm import Activity, Athlete, ProviderConnection, User, WeightLog
+from backend.app.db.registry import get_registry_session
+from backend.app.models.registry_orm import ProviderConnection, User
+from backend.app.models.team_orm import Activity, Athlete, WeightLog
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
 
 _ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 _MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
-_AVATAR_DIR = Path(settings.file_storage_path) / "avatars"
 
 router = APIRouter(prefix="/athlete", tags=["athlete"])
 
 
-async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
+    result = await session.execute(
+        select(Athlete).where(Athlete.global_user_id == global_user_id)
+    )
     athlete = result.scalar_one_or_none()
     if athlete is None:
         raise HTTPException(status_code=404, detail="Athlete profile not found")
@@ -32,12 +35,6 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 
 
 def _safe_app_settings(athlete: Athlete) -> dict:
-    """Return app_settings safe to send to the frontend.
-
-    * Strips ``llm_api_key_enc`` (never send the ciphertext to the browser).
-    * Adds the derived ``llm_api_key_set: bool`` so the UI can show a
-      "key is configured" indicator without ever seeing the key itself.
-    """
     raw: dict = dict(athlete.app_settings or {})
     safe = {k: v for k, v in raw.items() if k != "llm_api_key_enc"}
     safe["llm_api_key_set"] = bool(raw.get("llm_api_key_enc"))
@@ -45,12 +42,14 @@ def _safe_app_settings(athlete: Athlete) -> dict:
 
 
 def _athlete_response(
-    athlete: Athlete, connected_providers: list[str]
+    athlete: Athlete, connected_providers: list[str], team_id: str
 ) -> AthleteResponse:
-    avatar_url = f"{settings.api_url}/api/athlete/{athlete.id}/avatar" if athlete.avatar_path else None
+    avatar_url = (
+        f"{settings.api_url}/api/athlete/{athlete.id}/avatar" if athlete.avatar_path else None
+    )
     return AthleteResponse(
         id=athlete.id,
-        user_id=athlete.user_id,
+        user_id=athlete.global_user_id,
         name=athlete.name,
         date_of_birth=athlete.date_of_birth,
         weight_kg=athlete.weight_kg,
@@ -68,30 +67,34 @@ def _athlete_response(
     )
 
 
-async def _get_connected_providers(athlete: Athlete, session: AsyncSession) -> list[str]:
-    result = await session.execute(
-        select(ProviderConnection).where(ProviderConnection.athlete_id == athlete.id)
+async def _get_connected_providers(
+    global_user_id: str, registry_session: AsyncSession
+) -> list[str]:
+    result = await registry_session.execute(
+        select(ProviderConnection).where(ProviderConnection.user_id == global_user_id)
     )
     return [c.provider for c in result.scalars().all()]
 
 
 @router.get("/", response_model=AthleteResponse)
 async def get_athlete(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    athlete = await _get_athlete(user, session)
-    providers = await _get_connected_providers(athlete, session)
-    return _athlete_response(athlete, providers)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+    providers = await _get_connected_providers(ctx.user_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id)
 
 
 @router.put("/", response_model=AthleteResponse)
 async def update_athlete(
     body: AthleteUpdate,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
 
     if body.name is not None:
         athlete.name = body.name
@@ -99,7 +102,6 @@ async def update_athlete(
         athlete.date_of_birth = body.date_of_birth
     if body.weight_kg is not None:
         athlete.weight_kg = body.weight_kg
-        # Upsert today's weight log entry
         today = datetime.now(timezone.utc).date()
         wl_result = await session.execute(
             select(WeightLog).where(
@@ -118,9 +120,12 @@ async def update_athlete(
             ))
     if body.ftp is not None:
         athlete.ftp = body.ftp
-        # Record FTP test
         tests = list(athlete.ftp_tests or [])
-        tests.append({"date": datetime.now(timezone.utc).date().isoformat(), "ftp": body.ftp, "method": "manual"})
+        tests.append({
+            "date": datetime.now(timezone.utc).date().isoformat(),
+            "ftp": body.ftp,
+            "method": "manual",
+        })
         athlete.ftp_tests = tests
     if body.max_hr is not None:
         athlete.max_hr = body.max_hr
@@ -131,38 +136,31 @@ async def update_athlete(
     if body.power_zones is not None:
         athlete.power_zones = [z.model_dump() for z in body.power_zones]
     if body.app_settings is not None:
-        # Start from the submitted dict, then handle special fields.
         new_settings: dict = dict(body.app_settings)
-
-        # Strip the derived read-only indicator so it is never persisted.
         new_settings.pop("llm_api_key_set", None)
 
-        # When LLM_ALLOWED_SERVERS is configured, reject base URLs not in the list.
         if "llm_base_url" in new_settings and new_settings["llm_base_url"]:
-            from backend.app.core.config import settings as app_settings
-            allowed = app_settings.llm_allowed_servers_list
+            allowed = settings.llm_allowed_servers_list
             if allowed and new_settings["llm_base_url"].strip() not in allowed:
                 raise HTTPException(
                     status_code=400,
                     detail="That LLM server is not in the server's allowed list.",
                 )
 
-        # Encrypt llm_api_key before storage so the plaintext never touches
-        # the database.  The ciphertext is stored under a different key
-        # (llm_api_key_enc) and is never returned to the frontend.
         if "llm_api_key" in new_settings:
             raw_key = new_settings.pop("llm_api_key")
             if raw_key:
                 try:
                     from backend.app.core.file_encryption import encrypt_secret
-                    new_settings["llm_api_key_enc"] = encrypt_secret(str(raw_key), user.id)
+                    new_settings["llm_api_key_enc"] = encrypt_secret(
+                        str(raw_key), ctx.team_id, ctx.user_id
+                    )
                 except RuntimeError as exc:
                     raise HTTPException(
                         status_code=503,
-                        detail=f"Cannot encrypt API key — ENCRYPTION_KEY not set on this server: {exc}",
+                        detail=f"Cannot encrypt API key — ENCRYPTION_KEY not set: {exc}",
                     )
             else:
-                # Explicit null / empty string → clear the stored key.
                 new_settings["llm_api_key_enc"] = None
 
         athlete.app_settings = new_settings
@@ -170,30 +168,38 @@ async def update_athlete(
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(athlete)
-    providers = await _get_connected_providers(athlete, session)
-    return _athlete_response(athlete, providers)
+    providers = await _get_connected_providers(ctx.user_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id)
 
 
 @router.post("/avatar", response_model=AthleteResponse)
 async def upload_avatar(
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
+    ctx, session = ctx_session
     if file.content_type not in _ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.")
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+        )
 
     data = await file.read(_MAX_AVATAR_BYTES + 1)
     if len(data) > _MAX_AVATAR_BYTES:
         raise HTTPException(status_code=400, detail="Image too large (max 5 MB).")
 
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
-    athlete = await _get_athlete(user, session)
+    ext = (
+        file.filename.rsplit(".", 1)[-1].lower()
+        if file.filename and "." in file.filename
+        else "jpg"
+    )
+    athlete = await _get_athlete(ctx.user_id, session)
 
-    _AVATAR_DIR.mkdir(parents=True, exist_ok=True)
-    dest = _AVATAR_DIR / f"{athlete.id}.{ext}"
+    avatar_dir = settings.team_avatar_dir(ctx.team_id)
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+    dest = avatar_dir / f"{ctx.user_id}.{ext}"
 
-    # Remove old avatar file if a different extension was used
     if athlete.avatar_path:
         old = Path(athlete.avatar_path)
         if old.exists() and old != dest:
@@ -204,31 +210,33 @@ async def upload_avatar(
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(athlete)
-    providers = await _get_connected_providers(athlete, session)
-    return _athlete_response(athlete, providers)
+    providers = await _get_connected_providers(ctx.user_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id)
 
 
 @router.delete("/avatar", response_model=AthleteResponse)
 async def delete_avatar(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     if athlete.avatar_path:
         Path(athlete.avatar_path).unlink(missing_ok=True)
         athlete.avatar_path = None
         athlete.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(athlete)
-    providers = await _get_connected_providers(athlete, session)
-    return _athlete_response(athlete, providers)
+    providers = await _get_connected_providers(ctx.user_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id)
 
 
 @router.get("/{athlete_id}/avatar")
 async def get_avatar(
     athlete_id: str,
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
+    ctx, session = ctx_session
     result = await session.execute(select(Athlete).where(Athlete.id == athlete_id))
     athlete = result.scalar_one_or_none()
     if athlete is None or not athlete.avatar_path:
@@ -240,11 +248,9 @@ async def get_avatar(
 
 
 @router.get("/weight-log")
-async def get_weight_log(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    athlete = await _get_athlete(user, session)
+async def get_weight_log(ctx_session=Depends(get_ctx_and_session)):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     result = await session.execute(
         select(WeightLog)
         .where(WeightLog.athlete_id == athlete.id)
@@ -256,14 +262,21 @@ async def get_weight_log(
 
 @router.get("/export")
 async def export_athlete(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    user_result = await registry_session.execute(
+        select(User).where(User.id == ctx.user_id)
+    )
+    user = user_result.scalar_one_or_none()
+    username = user.username if user else ctx.user_id
 
     profile_data = {
         "id": athlete.id,
-        "username": user.username,
+        "username": username,
         "name": athlete.name,
         "date_of_birth": athlete.date_of_birth.isoformat() if athlete.date_of_birth else None,
         "weight_kg": athlete.weight_kg,
@@ -317,10 +330,13 @@ async def export_athlete(
                 fit_path = Path(src.fit_file_path)
                 if fit_path.exists():
                     if src.fit_file_encrypted:
-                        zf.writestr(f"fit_files/{a.id}.fit", decrypt_file(fit_path, athlete.user_id))
+                        zf.writestr(
+                            f"fit_files/{a.id}.fit",
+                            decrypt_file(fit_path, ctx.team_id, ctx.user_id),
+                        )
                     else:
                         zf.write(fit_path, f"fit_files/{a.id}.fit")
-                    break  # only include the first (best) FIT per activity
+                    break
     buf.seek(0)
 
     return StreamingResponse(

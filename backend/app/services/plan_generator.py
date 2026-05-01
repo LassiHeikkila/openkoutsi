@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.orm import TrainingPlan, PlannedWorkout
+from ..models.team_orm import TrainingPlan, PlannedWorkout
 from ..schemas.plans import PlanConfig
 
 

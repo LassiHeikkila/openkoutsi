@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from sqlalchemy import select
 
-from backend.app.models.orm import DailyMetric, Athlete
+from backend.app.models.team_orm import DailyMetric, Athlete
 
 
 class TestGetFitness:

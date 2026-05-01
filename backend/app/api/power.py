@@ -6,9 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import get_current_user
-from backend.app.db.base import get_session
-from backend.app.models.orm import Activity, ActivityPowerBest, Athlete, User, WeightLog
+from backend.app.core.deps import get_ctx_and_session
+from backend.app.models.team_orm import Activity, ActivityPowerBest, Athlete, WeightLog
 from backend.app.schemas.power import AllTimePowerBestsResponse, PowerBestEntry
 from backend.app.services.training_math import POWER_BEST_DURATIONS
 
@@ -17,8 +16,8 @@ router = APIRouter(prefix="/power", tags=["power"])
 TOP_N = 3
 
 
-async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
+    result = await session.execute(select(Athlete).where(Athlete.global_user_id == global_user_id))
     athlete = result.scalar_one_or_none()
     if athlete is None:
         raise HTTPException(status_code=404, detail="Athlete profile not found")
@@ -28,15 +27,15 @@ async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
 @router.get("/bests", response_model=AllTimePowerBestsResponse)
 async def get_power_bests(
     days: Optional[int] = Query(None, ge=1, description="Restrict to bests from the past N days. Omit for all-time."),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
     """
     Return the top-3 best average power for each standard duration,
     ordered by (duration_s asc, rank asc).  Durations with no data are omitted.
     Pass ?days=90/180/365 to restrict to a rolling window; omit for all-time.
     """
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
 
     # Load weight log (sorted ascending by date for the lookup below)
     wl_rows = await session.execute(

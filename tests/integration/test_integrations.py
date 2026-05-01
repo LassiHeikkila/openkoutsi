@@ -2,7 +2,10 @@
 Integration tests for /api/integrations endpoints.
 
 Tests the full OAuth lifecycle (status, connect, callback, sync, disconnect)
-via the HTTP test client wired to an in-memory SQLite database.
+via the HTTP test client wired to in-memory SQLite databases.
+
+ProviderConnection records live in the registry DB (registry_session).
+Activity data lives in the team DB (session).
 """
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
@@ -12,36 +15,38 @@ from jose import jwt
 from sqlalchemy import select
 
 from backend.app.core.config import settings
-from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection
+from backend.app.models.team_orm import Activity, ActivitySource, Athlete
+from backend.app.models.registry_orm import ProviderConnection
+
+# Fixed IDs from conftest.py
+_TEST_USER_ID = "test-user-00000000"
+_TEST_ATHLETE_ID = "test-athlete-0000"
+_TEST_TEAM_SLUG = "test-team"
 
 
 # ── Test helpers ───────────────────────────────────────────────────────────────
 
 
-async def _get_athlete(session, client, auth_headers) -> Athlete:
-    data = (await client.get("/api/athlete/", headers=auth_headers)).json()
-    result = await session.execute(select(Athlete).where(Athlete.id == data["id"]))
-    return result.scalar_one()
-
-
-async def _add_connection(session, athlete: Athlete, provider: str) -> ProviderConnection:
+async def _add_connection(
+    registry_session, user_id: str, provider: str
+) -> ProviderConnection:
     conn = ProviderConnection(
-        athlete_id=athlete.id,
+        user_id=user_id,
         provider=provider,
         access_token="test-access-token",
         refresh_token="test-refresh-token",
         token_expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
     )
-    session.add(conn)
-    await session.commit()
+    registry_session.add(conn)
+    await registry_session.commit()
     return conn
 
 
 async def _add_activity(
-    session, athlete: Athlete, source: str, external_id: str
+    session, athlete_id: str, source: str, external_id: str
 ) -> Activity:
     act = Activity(
-        athlete_id=athlete.id,
+        athlete_id=athlete_id,
         start_time=datetime(2024, 1, 15, tzinfo=timezone.utc),
         duration_s=3600,
         status="processed",
@@ -53,9 +58,24 @@ async def _add_activity(
     return act
 
 
-def _encode_state(user_id: str, provider: str) -> str:
+def _make_session_cm(session):
+    """Return a team_id → session factory mock for get_team_session_factory patches."""
+    class _CM:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, *args):
+            pass
+
+    return lambda team_id: _CM()
+
+
+def _encode_state(user_id: str, provider: str, team_slug: str = _TEST_TEAM_SLUG) -> str:
     return jwt.encode(
-        {"sub": user_id, "purpose": f"{provider}_oauth"},
+        {"sub": user_id, "team_slug": team_slug, "purpose": f"{provider}_oauth"},
         settings.secret_key,
         algorithm="HS256",
     )
@@ -66,7 +86,6 @@ def _encode_state(user_id: str, provider: str) -> str:
 
 class TestAvailable:
     async def test_empty_when_no_providers_configured(self, client, auth_headers):
-        # Default test settings have empty strava_client_id and wahoo_client_id
         resp = await client.get("/api/integrations/available", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json() == {"available": []}
@@ -106,18 +125,16 @@ class TestStatus:
         assert resp.status_code == 200
         assert resp.json() == {"connected": []}
 
-    async def test_lists_connected_providers(self, client, session, auth_headers):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
+    async def test_lists_connected_providers(self, client, registry_session, auth_headers):
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
 
         resp = await client.get("/api/integrations/status", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json() == {"connected": ["strava"]}
 
-    async def test_lists_multiple_providers(self, client, session, auth_headers):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
-        await _add_connection(session, athlete, "wahoo")
+    async def test_lists_multiple_providers(self, client, registry_session, auth_headers):
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
+        await _add_connection(registry_session, _TEST_USER_ID, "wahoo")
 
         resp = await client.get("/api/integrations/status", headers=auth_headers)
         assert resp.status_code == 200
@@ -137,7 +154,6 @@ class TestConnect:
         assert resp.status_code == 404
 
     async def test_unconfigured_strava_returns_501(self, client, auth_headers):
-        # In the test environment strava_client_id defaults to "" → 501
         resp = await client.get("/api/integrations/strava/connect", headers=auth_headers)
         assert resp.status_code == 501
 
@@ -179,10 +195,9 @@ class TestCallback:
         assert "strava=error" in resp.headers["location"]
 
     async def test_valid_state_creates_connection_and_redirects(
-        self, client, session, auth_headers
+        self, client, registry_session, auth_headers
     ):
-        athlete = await _get_athlete(session, client, auth_headers)
-        state = _encode_state(athlete.user_id, "strava")
+        state = _encode_state(_TEST_USER_ID, "strava")
 
         from backend.app.services.providers.strava import StravaProviderClient
 
@@ -205,10 +220,9 @@ class TestCallback:
         assert resp.status_code in (302, 307)
         assert "strava=connected" in resp.headers["location"]
 
-        # The ProviderConnection row must be persisted
-        result = await session.execute(
+        result = await registry_session.execute(
             select(ProviderConnection).where(
-                ProviderConnection.athlete_id == athlete.id,
+                ProviderConnection.user_id == _TEST_USER_ID,
                 ProviderConnection.provider == "strava",
             )
         )
@@ -217,12 +231,11 @@ class TestCallback:
         assert conn.provider_athlete_id == "strava-athlete-42"
 
     async def test_callback_idempotent_for_existing_connection(
-        self, client, session, auth_headers
+        self, client, registry_session, auth_headers
     ):
         """A second OAuth callback updates the existing connection instead of creating a duplicate."""
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
-        state = _encode_state(athlete.user_id, "strava")
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
+        state = _encode_state(_TEST_USER_ID, "strava")
 
         from backend.app.services.providers.strava import StravaProviderClient
 
@@ -244,9 +257,9 @@ class TestCallback:
 
         assert resp.status_code in (302, 307)
 
-        result = await session.execute(
+        result = await registry_session.execute(
             select(ProviderConnection).where(
-                ProviderConnection.athlete_id == athlete.id,
+                ProviderConnection.user_id == _TEST_USER_ID,
                 ProviderConnection.provider == "strava",
             )
         )
@@ -270,9 +283,8 @@ class TestSync:
         )
         assert resp.status_code == 400
 
-    async def test_connected_accepts_sync_request(self, client, session, auth_headers):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
+    async def test_connected_accepts_sync_request(self, client, registry_session, auth_headers):
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
 
         resp = await client.post(
             "/api/integrations/strava/sync", headers=auth_headers
@@ -299,9 +311,10 @@ class TestDisconnect:
         )
         assert resp.status_code == 400
 
-    async def test_disconnects_removes_connection(self, client, session, auth_headers):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
+    async def test_disconnects_removes_connection(
+        self, client, registry_session, auth_headers
+    ):
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
 
         from backend.app.services.providers.strava import StravaProviderClient
 
@@ -314,21 +327,20 @@ class TestDisconnect:
 
         assert resp.status_code == 204
 
-        result = await session.execute(
+        result = await registry_session.execute(
             select(ProviderConnection).where(
-                ProviderConnection.athlete_id == athlete.id,
+                ProviderConnection.user_id == _TEST_USER_ID,
                 ProviderConnection.provider == "strava",
             )
         )
         assert result.scalar_one_or_none() is None
 
     async def test_keeps_activities_when_delete_data_not_set(
-        self, client, session, auth_headers
+        self, client, session, registry_session, auth_headers
     ):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
-        act = await _add_activity(session, athlete, "strava", "strava-act-1")
-        act_id = act.id  # capture before request — bulk DELETE expunges ORM object
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
+        act = await _add_activity(session, _TEST_ATHLETE_ID, "strava", "strava-act-1")
+        act_id = act.id
 
         from backend.app.services.providers.strava import StravaProviderClient
 
@@ -345,17 +357,17 @@ class TestDisconnect:
         assert result.scalar_one_or_none() is not None
 
     async def test_deletes_provider_activities_when_requested(
-        self, client, session, auth_headers
+        self, client, session, registry_session, auth_headers
     ):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
-        act = await _add_activity(session, athlete, "strava", "strava-act-2")
-        act_id = act.id  # capture before request
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
+        act = await _add_activity(session, _TEST_ATHLETE_ID, "strava", "strava-act-2")
+        act_id = act.id
 
         from backend.app.services.providers.strava import StravaProviderClient
 
-        with patch.object(
-            StravaProviderClient, "deauthorize", new_callable=AsyncMock
+        with (
+            patch.object(StravaProviderClient, "deauthorize", new_callable=AsyncMock),
+            patch("backend.app.db.team_session.get_team_session_factory", _make_session_cm(session)),
         ):
             resp = await client.delete(
                 "/api/integrations/strava/disconnect?delete_data=true",
@@ -364,12 +376,14 @@ class TestDisconnect:
 
         assert resp.status_code == 204
 
+        session.expire_all()
         result = await session.execute(select(Activity).where(Activity.id == act_id))
         assert result.scalar_one_or_none() is None
 
-    async def test_wahoo_disconnect_calls_deauthorize(self, client, session, auth_headers):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "wahoo")
+    async def test_wahoo_disconnect_calls_deauthorize(
+        self, client, registry_session, auth_headers
+    ):
+        await _add_connection(registry_session, _TEST_USER_ID, "wahoo")
 
         from backend.app.services.providers.wahoo import WahooClient
 
@@ -382,28 +396,28 @@ class TestDisconnect:
         assert resp.status_code == 204
         deauth.assert_called_once_with("test-access-token")
 
-        result = await session.execute(
+        result = await registry_session.execute(
             select(ProviderConnection).where(
-                ProviderConnection.athlete_id == athlete.id,
+                ProviderConnection.user_id == _TEST_USER_ID,
                 ProviderConnection.provider == "wahoo",
             )
         )
         assert result.scalar_one_or_none() is None
 
     async def test_preserves_activities_from_other_providers(
-        self, client, session, auth_headers
+        self, client, session, registry_session, auth_headers
     ):
-        athlete = await _get_athlete(session, client, auth_headers)
-        await _add_connection(session, athlete, "strava")
-        strava_act = await _add_activity(session, athlete, "strava", "strava-123")
-        wahoo_act = await _add_activity(session, athlete, "wahoo", "wahoo-456")
-        strava_id = strava_act.id  # capture before request
+        await _add_connection(registry_session, _TEST_USER_ID, "strava")
+        strava_act = await _add_activity(session, _TEST_ATHLETE_ID, "strava", "strava-123")
+        wahoo_act = await _add_activity(session, _TEST_ATHLETE_ID, "wahoo", "wahoo-456")
+        strava_id = strava_act.id
         wahoo_id = wahoo_act.id
 
         from backend.app.services.providers.strava import StravaProviderClient
 
-        with patch.object(
-            StravaProviderClient, "deauthorize", new_callable=AsyncMock
+        with (
+            patch.object(StravaProviderClient, "deauthorize", new_callable=AsyncMock),
+            patch("backend.app.db.team_session.get_team_session_factory", _make_session_cm(session)),
         ):
             resp = await client.delete(
                 "/api/integrations/strava/disconnect?delete_data=true",
@@ -412,6 +426,7 @@ class TestDisconnect:
 
         assert resp.status_code == 204
 
+        session.expire_all()
         strava_result = await session.execute(
             select(Activity).where(Activity.id == strava_id)
         )

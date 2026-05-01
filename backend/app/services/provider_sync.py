@@ -27,14 +27,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
 from backend.app.core.file_encryption import encrypt_file
-from backend.app.models.orm import (
+from backend.app.models.registry_orm import ProviderConnection
+from backend.app.models.team_orm import (
     Activity,
     ActivityDistanceBest,
     ActivityPowerBest,
     ActivitySource,
     ActivityStream,
     Athlete,
-    ProviderConnection,
 )
 from backend.app.services.fit_processor import _resolve_sport_type
 from backend.app.services.providers.registry import PROVIDERS
@@ -111,6 +111,9 @@ async def sync_provider_activities(
     athlete: Athlete,
     connection: ProviderConnection,
     session: AsyncSession,
+    *,
+    team_id: str,
+    access_token: str | None = None,
 ) -> tuple[int, date | None]:
     """
     Import all activities from a provider that aren't already in the database.
@@ -129,7 +132,8 @@ async def sync_provider_activities(
         log.error("No client registered for provider %s", provider_name)
         return 0, None
 
-    access_token = await ensure_fresh_token(connection, session)
+    if access_token is None:
+        access_token = await ensure_fresh_token(connection, session)
     client = client_cls()
 
     count = 0
@@ -254,6 +258,7 @@ async def sync_provider_activities(
                         access_token,
                         athlete,
                         session,
+                        team_id=team_id,
                         prefetched_fit=prefetched_fit,
                     )
                     count += 1
@@ -298,7 +303,7 @@ async def sync_provider_activities(
             await session.flush()
 
             await _populate_activity(
-                activity, src, norm, client, access_token, athlete, session
+                activity, src, norm, client, access_token, athlete, session, team_id=team_id
             )
             count += 1
 
@@ -319,7 +324,7 @@ async def sync_provider_activities(
 
                 activity.analysis_status = "pending"
                 await session.commit()
-                asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))
+                asyncio.create_task(analyze_activity_bg(activity.id, athlete.id, team_id))
 
         page += 1
 
@@ -337,9 +342,11 @@ async def _populate_activity(
     access_token: str,
     athlete: Athlete,
     session: AsyncSession,
+    *,
+    team_id: str,
 ) -> None:
     """Populate a new Activity's metrics, streams and bests from src's data."""
-    await _fill_from_source(activity, src, norm, client, access_token, athlete, session)
+    await _fill_from_source(activity, src, norm, client, access_token, athlete, session, team_id=team_id)
 
 
 async def _repopulate_activity(
@@ -351,6 +358,7 @@ async def _repopulate_activity(
     athlete: Athlete,
     session: AsyncSession,
     *,
+    team_id: str,
     prefetched_fit=_NOTFETCHED,
 ) -> None:
     """Re-populate an existing Activity's metrics with data from a higher-priority source.
@@ -379,6 +387,7 @@ async def _repopulate_activity(
         access_token,
         athlete,
         session,
+        team_id=team_id,
         prefetched_fit=prefetched_fit,
     )
 
@@ -392,6 +401,7 @@ async def _fill_from_source(
     athlete: Athlete,
     session: AsyncSession,
     *,
+    team_id: str,
     prefetched_fit=_NOTFETCHED,
 ) -> None:
     """Core import logic: try FIT first, fall back to stream API.
@@ -411,7 +421,7 @@ async def _fill_from_source(
         fit_bytes = prefetched_fit  # type: ignore[assignment]
 
     if fit_bytes is not None:
-        storage_dir = Path(settings.file_storage_path) / athlete.id
+        storage_dir = settings.team_fit_dir(team_id, athlete.global_user_id)
         storage_dir.mkdir(parents=True, exist_ok=True)
         fit_path = storage_dir / f"{activity.id}.fit"
         fit_path.write_bytes(fit_bytes)
@@ -424,7 +434,7 @@ async def _fill_from_source(
 
         encrypted = False
         try:
-            encrypt_file(fit_path, athlete.user_id)
+            encrypt_file(fit_path, team_id, athlete.global_user_id)
             encrypted = True
         except Exception:
             log.warning("FIT encryption failed for activity %s", activity.id)

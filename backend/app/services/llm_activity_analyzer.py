@@ -22,8 +22,8 @@ from typing import TYPE_CHECKING, AsyncIterator
 import httpx
 from sqlalchemy import select
 
-from ..db.base import AsyncSessionLocal
-from ..models.orm import Activity, Athlete
+from ..db.team_session import get_team_session_factory
+from ..models.team_orm import Activity, Athlete
 
 if TYPE_CHECKING:
     pass
@@ -104,15 +104,11 @@ async def _stream_analysis(activity: Activity, athlete: Athlete) -> AsyncIterato
     headers: dict[str, str] = {"Content-Type": "application/json"}
 
     enc_key = app_settings.get("llm_api_key_enc")
-    if enc_key:
+    team_id = getattr(athlete, "_team_id", None)
+    if enc_key and team_id:
         try:
             from backend.app.core.file_encryption import decrypt_secret
-            from backend.app.db.base import AsyncSessionLocal
-            from backend.app.models.orm import User
-            from sqlalchemy import select as sa_select
-            async with AsyncSessionLocal() as s:
-                user = (await s.execute(sa_select(User).where(User.id == athlete.user_id))).scalar_one()
-            api_key = decrypt_secret(str(enc_key), user.id)
+            api_key = decrypt_secret(str(enc_key), team_id, athlete.global_user_id)
             headers["Authorization"] = f"Bearer {api_key}"
         except Exception:
             log.warning("Could not decrypt LLM API key for athlete %s — proceeding without auth", athlete.id)
@@ -148,7 +144,7 @@ async def _stream_analysis(activity: Activity, athlete: Athlete) -> AsyncIterato
                     continue
 
 
-async def analyze_activity_bg(activity_id: str, athlete_id: str) -> None:
+async def analyze_activity_bg(activity_id: str, athlete_id: str, team_id: str) -> None:
     """
     Background task: stream LLM analysis → write chunks to DB every 500 ms
     → set final analysis_status to 'done' or 'error'.
@@ -156,7 +152,7 @@ async def analyze_activity_bg(activity_id: str, athlete_id: str) -> None:
     Lives in the service layer so it can be imported from both api/activities.py
     and services/strava_sync.py without circular dependencies.
     """
-    async with AsyncSessionLocal() as session:
+    async with get_team_session_factory(team_id)() as session:
         activity_result = await session.execute(
             select(Activity).where(Activity.id == activity_id)
         )
@@ -166,6 +162,7 @@ async def analyze_activity_bg(activity_id: str, athlete_id: str) -> None:
             select(Athlete).where(Athlete.id == athlete_id)
         )
         athlete = athlete_result.scalar_one()
+        athlete._team_id = team_id  # pass team_id for decrypt_secret in _stream_analysis
 
         buffer: list[str] = []
         last_flush = time.monotonic()

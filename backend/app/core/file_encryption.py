@@ -1,15 +1,19 @@
-"""
-Per-user file encryption for FIT files stored on disk.
+"""Per-team, per-user file encryption for FIT files stored on disk.
 
-Each user gets a unique Fernet key derived deterministically from the master
-ENCRYPTION_KEY and their user ID via HKDF-SHA256. This means no per-user key
-needs to be stored in the database — the key is always recoverable from the
-master key + user ID.
+Key hierarchy:
+    master_key (ENCRYPTION_KEY env var)
+        └─ HKDF(info="team-key:{team_id}") → team_key
+               └─ HKDF(info="fit-file:{global_user_id}") → FIT file key
 
-ENCRYPTION_KEY must be set in the environment. Unlike the DB field encryption
-(which silently skips when the key is absent), file encryption raises a hard
-error if the key is missing so callers know clearly that the file was NOT
-encrypted.
+Each user's FIT files are encrypted with a key derived from both the team and
+the user, so:
+- A compromised team key cannot decrypt another team's files.
+- A compromised user key cannot decrypt another user's files.
+- No per-user or per-team keys are stored; they are always re-derivable from
+  the master key.
+
+ENCRYPTION_KEY must be set. Unlike DB field encryption, file encryption raises
+a hard error if the key is missing.
 """
 
 from __future__ import annotations
@@ -21,89 +25,106 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
-def _derive_user_fernet(user_id: str):
-    """Return a Fernet instance keyed to this specific user."""
-    from cryptography.fernet import Fernet
-    from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
+def _derive_master_raw() -> bytes:
     from backend.app.core.config import settings
-
     if not settings.encryption_key:
         raise RuntimeError(
             "ENCRYPTION_KEY is not set — cannot encrypt/decrypt FIT files"
         )
+    return base64.urlsafe_b64decode(settings.encryption_key.encode())
 
-    raw_master = base64.urlsafe_b64decode(settings.encryption_key.encode())
+
+def _derive_team_key(team_id: str) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=f"fit-file-encryption:{user_id}".encode(),
+        info=f"team-key:{team_id}".encode(),
     )
-    derived = hkdf.derive(raw_master)
+    return hkdf.derive(_derive_master_raw())
+
+
+def _derive_fit_fernet(team_id: str, global_user_id: str):
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    team_key = _derive_team_key(team_id)
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=f"fit-file:{global_user_id}".encode(),
+    )
+    derived = hkdf.derive(team_key)
     return Fernet(base64.urlsafe_b64encode(derived))
 
 
-def encrypt_file(path: Path, user_id: str) -> None:
-    """Encrypt the file at *path* in-place using the user's derived key."""
-    fernet = _derive_user_fernet(user_id)
+def encrypt_file(path: Path, team_id: str, global_user_id: str) -> None:
+    """Encrypt the file at *path* in-place."""
+    fernet = _derive_fit_fernet(team_id, global_user_id)
     data = path.read_bytes()
     path.write_bytes(fernet.encrypt(data))
-    log.debug("Encrypted %s for user %s", path, user_id)
+    log.debug("Encrypted %s (team=%s user=%s)", path, team_id, global_user_id)
 
 
-def decrypt_file(path: Path, user_id: str) -> bytes:
-    """Read and decrypt the file at *path*, returning the plaintext bytes."""
-    fernet = _derive_user_fernet(user_id)
+def decrypt_file(path: Path, team_id: str, global_user_id: str) -> bytes:
+    """Read and decrypt the file at *path*, returning plaintext bytes."""
+    fernet = _derive_fit_fernet(team_id, global_user_id)
     return fernet.decrypt(path.read_bytes())
 
 
 # ── Small-secret encryption (LLM API keys etc.) ───────────────────────────
-#
-# Uses the same master ENCRYPTION_KEY but a different HKDF info string so
-# that the derived key is completely independent from the FIT-file key.
-# This means a compromised FIT-file key cannot be used to decrypt secrets
-# and vice-versa.
 
-def _derive_user_fernet_secrets(user_id: str):
-    """Return a Fernet instance keyed to this user's secrets (distinct from FIT key)."""
+def _derive_secret_fernet(team_id: str, global_user_id: str):
+    """Distinct key for user secrets — independent of the FIT key."""
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-    from backend.app.core.config import settings
-
-    if not settings.encryption_key:
-        raise RuntimeError(
-            "ENCRYPTION_KEY is not set — cannot encrypt/decrypt secrets"
-        )
-
-    raw_master = base64.urlsafe_b64decode(settings.encryption_key.encode())
+    team_key = _derive_team_key(team_id)
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=f"llm-api-key:{user_id}".encode(),
+        info=f"user-secret:{global_user_id}".encode(),
     )
-    derived = hkdf.derive(raw_master)
+    derived = hkdf.derive(team_key)
     return Fernet(base64.urlsafe_b64encode(derived))
 
 
-def encrypt_secret(plaintext: str, user_id: str) -> str:
-    """Encrypt a short secret string using the user's derived secrets key.
-
-    Returns a URL-safe base-64 Fernet token (str).  The result can be stored
-    in the database; only the server can decrypt it.
-    """
-    fernet = _derive_user_fernet_secrets(user_id)
+def encrypt_secret(plaintext: str, team_id: str, global_user_id: str) -> str:
+    """Encrypt a short secret string. Returns a URL-safe Fernet token."""
+    fernet = _derive_secret_fernet(team_id, global_user_id)
     return fernet.encrypt(plaintext.encode()).decode()
 
 
-def decrypt_secret(token: str, user_id: str) -> str:
-    """Decrypt a Fernet token previously produced by *encrypt_secret*.
-
-    Returns the original plaintext string.
-    """
-    fernet = _derive_user_fernet_secrets(user_id)
+def decrypt_secret(token: str, team_id: str, global_user_id: str) -> str:
+    """Decrypt a Fernet token produced by encrypt_secret."""
+    fernet = _derive_secret_fernet(team_id, global_user_id)
     return fernet.decrypt(token.encode()).decode()
+
+
+# ── Team-level secret encryption (admin LLM API key) ─────────────────────
+
+def _derive_team_secret_fernet(team_id: str):
+    """Key for team-level secrets (e.g. admin-configured LLM API key)."""
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=f"team-secret:{team_id}".encode(),
+    )
+    derived = hkdf.derive(_derive_master_raw())
+    return Fernet(base64.urlsafe_b64encode(derived))
+
+
+def encrypt_team_secret(plaintext: str, team_id: str) -> str:
+    return _derive_team_secret_fernet(team_id).encrypt(plaintext.encode()).decode()
+
+
+def decrypt_team_secret(token: str, team_id: str) -> str:
+    return _derive_team_secret_fernet(team_id).decrypt(token.encode()).decode()

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,10 +9,12 @@ _INSECURE_DEFAULT = "changeme-set-a-real-secret-in-env"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # Root data directory — contains registry.db and teams/
+    data_dir: str = "data"
+
+    # Deprecated single-DB path kept for any transitional code during migration
     database_path: str = "openkoutsi.db"
-    # Set INIT_DB=true (env var) to run create_all on startup.
-    # Safe for fresh installs. For existing databases use Alembic migrations instead.
-    init_db: bool = False
+
     secret_key: str = _INSECURE_DEFAULT
 
     @model_validator(mode="after")
@@ -51,7 +55,6 @@ class Settings(BaseSettings):
 
     @property
     def llm_allowed_servers_list(self) -> list[str]:
-        """Parsed list of allowed LLM server base URLs (stripped, non-empty entries only)."""
         if not self.llm_allowed_servers:
             return []
         return [s.strip() for s in self.llm_allowed_servers.split(",") if s.strip()]
@@ -61,9 +64,24 @@ class Settings(BaseSettings):
     # Leave empty in development to disable encryption (tokens stored as plaintext).
     encryption_key: str = ""
 
-    # Admin secret for privileged endpoints (e.g. generating password reset links).
-    # If unset, admin endpoints return 403.
+    # Admin secret for privileged endpoints — replaced by JWT role checks in new arch,
+    # kept for backward compatibility during transition.
     admin_secret: str | None = None
+
+    # ── Path helpers ──────────────────────────────────────────────────────────
+
+    @property
+    def registry_db_path(self) -> str:
+        return str(Path(self.data_dir) / "registry.db")
+
+    def team_db_path(self, team_id: str) -> str:
+        return str(Path(self.data_dir) / "teams" / team_id / "team.db")
+
+    def team_fit_dir(self, team_id: str, global_user_id: str) -> Path:
+        return Path(self.data_dir) / "teams" / team_id / "uploads" / global_user_id
+
+    def team_avatar_dir(self, team_id: str) -> Path:
+        return Path(self.data_dir) / "teams" / team_id / "avatars"
 
 
 settings = Settings()

@@ -5,17 +5,17 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import get_current_user
-from backend.app.db.base import AsyncSessionLocal, get_session
-from backend.app.models.orm import Activity, ActivityStream, Athlete, DailyMetric, User
+from backend.app.core.deps import get_ctx_and_session
+from backend.app.db.team_session import get_team_session_factory
+from backend.app.models.team_orm import Activity, ActivityStream, Athlete, DailyMetric
 from backend.app.schemas.metrics import FitnessCurrentResponse, FitnessMetricResponse
 from openkoutsi.zones import Zones
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
-async def _get_athlete(user: User, session: AsyncSession) -> Athlete:
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
+    result = await session.execute(select(Athlete).where(Athlete.global_user_id == global_user_id))
     athlete = result.scalar_one_or_none()
     if athlete is None:
         raise HTTPException(status_code=404, detail="Athlete profile not found")
@@ -27,10 +27,10 @@ async def get_fitness(
     start: Optional[date] = Query(None),
     end: Optional[date] = Query(None),
     days: Optional[int] = Query(None, ge=1, le=3650),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
 
     query = select(DailyMetric).where(DailyMetric.athlete_id == athlete.id)
 
@@ -47,11 +47,9 @@ async def get_fitness(
 
 
 @router.get("/fitness/current", response_model=FitnessCurrentResponse)
-async def get_fitness_current(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    athlete = await _get_athlete(user, session)
+async def get_fitness_current(ctx_session=Depends(get_ctx_and_session)):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     today = date.today()
 
     result = await session.execute(
@@ -62,7 +60,6 @@ async def get_fitness_current(
     )
     metric = result.scalar_one_or_none()
     if metric is None:
-        # Today's row hasn't been calculated yet — return the most recent available row.
         fallback = await session.execute(
             select(DailyMetric)
             .where(DailyMetric.athlete_id == athlete.id)
@@ -80,10 +77,10 @@ async def get_fitness_current(
 @router.get("/zones/{activity_id}")
 async def get_zones(
     activity_id: str,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
-    athlete = await _get_athlete(user, session)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
 
     activity_result = await session.execute(
         select(Activity).where(
@@ -126,19 +123,16 @@ async def get_zones(
 
 
 @router.get("/ftp-history")
-async def get_ftp_history(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    athlete = await _get_athlete(user, session)
+async def get_ftp_history(ctx_session=Depends(get_ctx_and_session)):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
     return athlete.ftp_tests or []
 
 
 @router.post("/recalculate", status_code=202)
 async def recalculate_all(
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
 ):
     """
     Recompute TSS for every processed activity using the athlete's current FTP/max_hr,
@@ -146,18 +140,19 @@ async def recalculate_all(
 
     Returns immediately (202); work happens in the background.
     """
-    athlete = await _get_athlete(user, session)
-    background_tasks.add_task(_bg_full_recalculate, athlete.id)
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+    background_tasks.add_task(_bg_full_recalculate, ctx.team_id, athlete.id)
     return {"status": "recalculation started"}
 
 
-async def _bg_full_recalculate(athlete_id: str) -> None:
+async def _bg_full_recalculate(team_id: str, athlete_id: str) -> None:
     from sqlalchemy import delete
     from backend.app.services.training_math import normalized_power, calculate_tss, compute_power_bests, compute_distance_bests
     from backend.app.services.metrics_engine import recalculate_from
-    from backend.app.models.orm import ActivityDistanceBest, ActivityPowerBest
+    from backend.app.models.team_orm import ActivityDistanceBest, ActivityPowerBest
 
-    async with AsyncSessionLocal() as session:
+    async with get_team_session_factory(team_id)() as session:
         athlete_result = await session.execute(
             select(Athlete).where(Athlete.id == athlete_id)
         )
@@ -193,7 +188,7 @@ async def _bg_full_recalculate(athlete_id: str) -> None:
             np = (
                 normalized_power(power_data)
                 if len(power_data) >= 30
-                else (activity.avg_power)  # fallback: use stored avg_power as proxy NP
+                else (activity.avg_power)
             )
 
             tss, intensity_factor = calculate_tss(

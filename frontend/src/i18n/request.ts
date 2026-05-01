@@ -17,6 +17,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
       dashboard:  (await import(`../../messages/${locale}/dashboard.json`)).default,
       activities: (await import(`../../messages/${locale}/activities.json`)).default,
       app:        (await import(`../../messages/${locale}/app.json`)).default,
+      admin:      (await import(`../../messages/${locale}/admin.json`)).default,
     },
   }
 })

@@ -3,6 +3,30 @@ export interface TokenPair {
   token_type: string
 }
 
+export interface MemberResponse {
+  user_id: string
+  username: string
+  roles: string[]
+  joined_at: string
+}
+
+export interface InvitationResponse {
+  id: string
+  roles: string[]
+  created_by_username: string
+  used_by_username: string | null
+  expires_at: string | null
+  used_at: string | null
+  created_at: string
+  url?: string | null
+}
+
+export interface TeamSettingsResponse {
+  llm_base_url: string | null
+  llm_model: string | null
+  llm_api_key_set: boolean
+}
+
 export interface User {
   id: string
   email: string

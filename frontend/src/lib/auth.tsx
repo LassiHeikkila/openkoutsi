@@ -19,10 +19,24 @@ import {
 } from './api'
 import type { AthleteProfile, TokenPair } from './types'
 
+function parseJwtRoles(token: string): string[] {
+  try {
+    const payload = token.split('.')[1]
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    const data = JSON.parse(decoded)
+    return Array.isArray(data.roles) ? data.roles : []
+  } catch {
+    return []
+  }
+}
+
 interface AuthState {
   athlete: AthleteProfile | null
   loading: boolean
   teamSlug: string
+  roles: string[]
+  isAdmin: boolean
+  isCoach: boolean
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, inviteToken: string) => Promise<void>
   logout: () => void
@@ -40,6 +54,7 @@ export function AuthProvider({
 }) {
   const [athlete, setAthlete] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [roles, setRoles] = useState<string[]>([])
 
   const fetchAthlete = useCallback(async () => {
     try {
@@ -62,12 +77,16 @@ export function AuthProvider({
             false,
           )
           setAccessToken(res.access_token)
+          setRoles(parseJwtRoles(res.access_token))
           setSessionCookie()
         } catch {
           clearTokens()
           setLoading(false)
           return
         }
+      } else {
+        const existing = getAccessToken()!
+        setRoles(parseJwtRoles(existing))
       }
       await fetchAthlete()
       setLoading(false)
@@ -86,6 +105,7 @@ export function AuthProvider({
         false,
       )
       setAccessToken(data.access_token)
+      setRoles(parseJwtRoles(data.access_token))
       setSessionCookie()
       await fetchAthlete()
     },
@@ -103,6 +123,7 @@ export function AuthProvider({
         false,
       )
       setAccessToken(data.access_token)
+      setRoles(parseJwtRoles(data.access_token))
       setSessionCookie()
       await fetchAthlete()
     },
@@ -113,6 +134,7 @@ export function AuthProvider({
     clearTokens()
     clearSessionCookie()
     setAthlete(null)
+    setRoles([])
     apiFetch(`/api/teams/${teamSlug}/auth/logout`, { method: 'POST' }).catch(() => {})
   }, [teamSlug])
 
@@ -120,9 +142,12 @@ export function AuthProvider({
     await fetchAthlete()
   }, [fetchAthlete])
 
+  const isAdmin = roles.includes('administrator')
+  const isCoach = roles.includes('coach')
+
   return (
     <AuthContext.Provider
-      value={{ athlete, loading, teamSlug, login, register, logout, refreshAthlete }}
+      value={{ athlete, loading, teamSlug, roles, isAdmin, isCoach, login, register, logout, refreshAthlete }}
     >
       {children}
     </AuthContext.Provider>

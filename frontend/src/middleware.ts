@@ -8,7 +8,7 @@ const intlMiddleware = createMiddleware(routing)
 // App-page suffixes that require auth (relative to /t/{slug}/)
 const PROTECTED_SUFFIXES = [
   '/dashboard', '/activities', '/power', '/records',
-  '/goals', '/plan', '/profile', '/settings',
+  '/goals', '/plan', '/profile', '/settings', '/admin',
 ]
 
 // Auth-page suffixes that are public

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Link, usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
-import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X } from 'lucide-react'
+import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LocaleSwitcher } from './LocaleSwitcher'
 
@@ -18,7 +18,7 @@ function NavInner({ onClose }: NavInnerProps) {
   const t = useTranslations('common')
   const pathname = usePathname()
   const router = useRouter()
-  const { athlete, logout } = useAuth()
+  const { athlete, logout, isAdmin } = useAuth()
   const { slug } = useParams<{ slug: string }>()
 
   const navItems = [
@@ -96,6 +96,21 @@ function NavInner({ onClose }: NavInnerProps) {
             {t(labelKey)}
           </Link>
         ))}
+        {isAdmin && (
+          <Link
+            href={`/t/${slug}/admin`}
+            onClick={onClose}
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
+              pathname.includes(`/t/${slug}/admin`)
+                ? 'bg-accent text-accent-foreground font-medium'
+                : 'text-muted-foreground',
+            )}
+          >
+            <Shield className="h-4 w-4 shrink-0" />
+            {t('nav.admin')}
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center justify-between px-1 pt-1">

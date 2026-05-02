@@ -38,6 +38,8 @@
     "revokeConfirmDesc": "This invitation link will no longer work.",
     "revokeConfirmAction": "Revoke",
     "revokeFailed": "Revoke failed",
+    "note": "Note",
+    "notePlaceholder": "e.g. John Smith, expires after camp",
     "generate": "Generate invite",
     "generateTitle": "Generate invite link",
     "generateRoles": "Roles",

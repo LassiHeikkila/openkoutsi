@@ -45,7 +45,9 @@ def _athlete_response(
     athlete: Athlete, connected_providers: list[str], team_id: str
 ) -> AthleteResponse:
     avatar_url = (
-        f"{settings.api_url}/api/athlete/{athlete.id}/avatar" if athlete.avatar_path else None
+        f"{settings.api_url}/api/public/teams/{team_id}/avatar/{athlete.id}"
+        if athlete.avatar_path
+        else None
     )
     return AthleteResponse(
         id=athlete.id,

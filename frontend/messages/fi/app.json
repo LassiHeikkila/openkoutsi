@@ -239,7 +239,7 @@
     "analysis": {
       "title": "Analyysi",
       "autoAnalyze": "Analysoi harjoitukset automaattisesti",
-      "autoAnalyzeDesc": "Luo automaattisesti tekoälyvalmennusanalyysi, kun harjoitus ladataan tai synkronoidaan. Vaatii LLM:n määritettyä yllä tai palvelimella.",
+      "autoAnalyzeDesc": "Luo automaattisesti tekoälyvalmennusanalyysi, kun harjoitus ladataan tai synkronoidaan. Vaatii tiimin ylläpitäjän määrittämän LLM:n.",
       "saveFailed": "Asetuksen tallennus epäonnistui"
     }
   }

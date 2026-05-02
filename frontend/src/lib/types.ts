@@ -13,6 +13,7 @@ export interface MemberResponse {
 export interface InvitationResponse {
   id: string
   roles: string[]
+  note: string | null
   created_by_username: string
   used_by_username: string | null
   expires_at: string | null

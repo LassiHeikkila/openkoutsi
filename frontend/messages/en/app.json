@@ -232,7 +232,7 @@
     "analysis": {
       "title": "Analysis",
       "autoAnalyze": "Auto-analyse workouts",
-      "autoAnalyzeDesc": "Automatically generate AI coaching analysis when a workout is uploaded or synced. Requires an LLM configured above or on the server.",
+      "autoAnalyzeDesc": "Automatically generate AI coaching analysis when a workout is uploaded or synced. Requires an LLM configured by your team administrator.",
       "saveFailed": "Failed to save setting"
     }
   }

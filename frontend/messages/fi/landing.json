@@ -64,6 +64,25 @@
     "copy": "KOPIOI",
     "copied": "KOPIOITU"
   },
+  "setup": {
+    "title": "Tervetuloa openkoutsiin",
+    "subtitle": "Luo ensimmäinen tiimisi ja ylläpitäjätili aloittaaksesi.",
+    "teamName": "Tiimin nimi",
+    "teamNamePlaceholder": "Pyöräilyseura",
+    "slug": "Tiimin tunniste",
+    "slugPlaceholder": "pyorailyseura",
+    "slugHint": "Käytetään URL-osoitteissa — vain pienet kirjaimet, numerot ja väliviivoat.",
+    "adminUsername": "Ylläpitäjän käyttäjätunnus",
+    "adminUsernamePlaceholder": "admin",
+    "adminDisplayName": "Näyttönimi",
+    "adminDisplayNamePlaceholder": "Nimesi (valinnainen)",
+    "password": "Salasana",
+    "passwordPlaceholder": "Vähintään 8 merkkiä",
+    "submit": "Luo tiimi",
+    "submitting": "Luodaan…",
+    "success": "Tiimi luotu! Voit nyt kirjautua sisään.",
+    "failed": "Asennus epäonnistui"
+  },
   "footer": {
     "license": "Apache-2.0",
     "copyright": "\u00a9 2026 osallistujat",

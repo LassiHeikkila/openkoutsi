@@ -47,7 +47,7 @@ const DEFAULT_DAY_TYPES: Record<number, string> = {
   2: 'threshold',
   4: 'endurance',
   6: 'long',
-  7: 'easy',
+  7: 'recovery',
 }
 
 function GeneratePlanDialog({
@@ -81,7 +81,7 @@ function GeneratePlanDialog({
   const [generating, setGenerating] = useState(false)
 
   const dayNames = t.raw('plan.generate.dayNames') as string[]
-  const workoutTypeKeys = ['easy', 'tempo', 'threshold', 'vo2max', 'endurance', 'long', 'strength', 'yoga', 'cross-training'] as const
+  const workoutTypeKeys = ['recovery', 'tempo', 'threshold', 'vo2max', 'endurance', 'long', 'strength', 'yoga', 'cross-training'] as const
 
   function resetDialog() {
     setStep(1)
@@ -105,7 +105,7 @@ function GeneratePlanDialog({
       } else {
         next.add(day)
         if (!dayTypes[day]) {
-          setDayTypes((t) => ({ ...t, [day]: 'easy' }))
+          setDayTypes((t) => ({ ...t, [day]: 'recovery' }))
         }
       }
       return next
@@ -117,7 +117,7 @@ function GeneratePlanDialog({
     try {
       const dayConfigs = [...selectedDays].map((d) => ({
         day_of_week: d,
-        workout_type: dayTypes[d] ?? 'easy',
+        workout_type: dayTypes[d] ?? 'recovery',
       }))
 
       const config = {
@@ -318,7 +318,7 @@ function GeneratePlanDialog({
                         {dayNames[day - 1]}
                       </span>
                       <Select
-                        value={dayTypes[day] ?? 'easy'}
+                        value={dayTypes[day] ?? 'recovery'}
                         onValueChange={(v) => setDayTypes((t) => ({ ...t, [day]: v }))}
                       >
                         <SelectTrigger className="h-8 text-sm flex-1">

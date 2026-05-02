@@ -100,6 +100,7 @@ class Invitation(RegistryBase):
     used_by_user_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    note: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -25,14 +25,13 @@ Create `.env` in the project root:
 SECRET_KEY=<hex-64-chars>          # python -c "import secrets; print(secrets.token_hex(32))"
 
 # Optional – defaults shown
-DATABASE_PATH=openkoutsi.db
-FILE_STORAGE_PATH=uploads
+DATA_DIR=data                      # root directory; holds registry.db and teams/
 FRONTEND_URL=https://your-domain
 API_URL=https://api.your-domain
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 REFRESH_TOKEN_EXPIRE_DAYS=30
 
-# Encryption for stored OAuth tokens and per-user LLM API keys (required for AI features)
+# Encryption for stored OAuth tokens and team LLM API keys (required for AI features)
 ENCRYPTION_KEY=<fernet-key>        # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
 # Strava (see "Strava Bridge" section)
@@ -45,31 +44,27 @@ BRIDGE_SECRET=
 WAHOO_CLIENT_ID=
 WAHOO_CLIENT_SECRET=
 
-# Server-side LLM (OpenAI-compatible) — used when no per-user LLM is configured
+# Server-side LLM (OpenAI-compatible) — fallback when no team LLM is configured
 LLM_BASE_URL=                      # e.g. http://localhost:11434/v1 or https://api.openai.com/v1
 LLM_API_KEY=
 LLM_MODEL=                         # e.g. llama3.2, gpt-4o-mini
 
-# Optional: comma-separated list of allowed LLM base URLs users may choose from.
-# When set, users must pick one of these servers instead of entering an arbitrary URL.
-# Leave blank to allow users to enter any URL (subject to SSRF guards).
+# Optional: comma-separated list of allowed LLM base URLs teams may choose from.
+# When set, teams must pick from this list. Leave blank to allow any URL.
 LLM_ALLOWED_SERVERS=               # e.g. http://localhost:11434/v1,https://api.openai.com/v1
 ```
 
 ### Initialize the database
 
-**Fresh install** — let SQLAlchemy create all tables:
+Tables are created automatically on first startup — no manual step required:
 
 ```bash
-INIT_DB=true uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
-# Stop after it starts; tables are now created.
+uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-**Existing database** — use Alembic:
+### First-run setup
 
-```bash
-uv run alembic upgrade head
-```
+On a fresh deployment, navigate to the frontend URL. The setup wizard will appear and guide you through creating the first team and administrator account. No teams can be created any other way until setup is complete.
 
 ### Run
 
@@ -207,11 +202,12 @@ Check logs with `journalctl -u openkoutsi-backend@$(whoami) -f` (replace the uni
 ## Checklist
 
 - [ ] `SECRET_KEY` set to a strong random value
-- [ ] `ENCRYPTION_KEY` set (required for per-user LLM API key storage; recommended for all prod deployments)
-- [ ] Database initialized (`INIT_DB=true` or `alembic upgrade head`)
+- [ ] `ENCRYPTION_KEY` set (required for team LLM API key storage; recommended for all prod deployments)
+- [ ] `DATA_DIR` points to a persistent directory (survives restarts/upgrades)
 - [ ] `FRONTEND_URL` and `API_URL` point to real domains
 - [ ] `NEXT_PUBLIC_API_URL` in `frontend/.env.local` points to the API
 - [ ] TLS termination in place for both frontend and API
+- [ ] Completed first-run setup wizard (creates first team + admin account)
 - [ ] Strava app callback domain updated to production domain (if using Strava)
 
 ### Upgrading: zone sync (added in this release)

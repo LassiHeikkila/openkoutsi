@@ -21,11 +21,13 @@ class MemberResponse(BaseModel):
 class InvitationCreate(BaseModel):
     roles: list[str] = ["user"]
     expires_in_days: Optional[int] = 7
+    note: Optional[str] = None
 
 
 class InvitationResponse(BaseModel):
     id: str
     roles: list[str]
+    note: Optional[str]
     created_by_username: str
     used_by_username: Optional[str]
     expires_at: Optional[datetime]

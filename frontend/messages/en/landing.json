@@ -64,6 +64,25 @@
     "copy": "COPY",
     "copied": "COPIED"
   },
+  "setup": {
+    "title": "Welcome to openkoutsi",
+    "subtitle": "Create your first team and administrator account to get started.",
+    "teamName": "Team name",
+    "teamNamePlaceholder": "Cycling Club",
+    "slug": "Team slug",
+    "slugPlaceholder": "cycling-club",
+    "slugHint": "Used in URLs — lowercase letters, numbers, and hyphens only.",
+    "adminUsername": "Admin username",
+    "adminUsernamePlaceholder": "admin",
+    "adminDisplayName": "Display name",
+    "adminDisplayNamePlaceholder": "Your name (optional)",
+    "password": "Password",
+    "passwordPlaceholder": "At least 8 characters",
+    "submit": "Create team",
+    "submitting": "Creating…",
+    "success": "Team created! You can now log in.",
+    "failed": "Setup failed"
+  },
   "footer": {
     "license": "Apache-2.0",
     "copyright": "\u00a9 2026 contributors",

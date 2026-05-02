@@ -222,6 +222,7 @@ async def create_invitation(
         team_id=team.id,
         token_hash=token_hash,
         roles=json.dumps(body.roles),
+        note=body.note or None,
         created_by_user_id=ctx.user_id,
         expires_at=expires_at,
     )
@@ -232,6 +233,7 @@ async def create_invitation(
     return InvitationResponse(
         id=invitation.id,
         roles=body.roles,
+        note=invitation.note,
         created_by_username=creator.username,
         used_by_username=None,
         expires_at=expires_at,
@@ -269,6 +271,7 @@ async def list_invitations(
         InvitationResponse(
             id=inv.id,
             roles=json.loads(inv.roles),
+            note=inv.note,
             created_by_username=users_by_id[inv.created_by_user_id].username,
             used_by_username=(
                 users_by_id[inv.used_by_user_id].username if inv.used_by_user_id else None

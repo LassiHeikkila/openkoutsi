@@ -12,6 +12,7 @@ wheels/
 # My own FIT files
 testdata/
 test.json
+data/
 
 # Database files
 *.db*

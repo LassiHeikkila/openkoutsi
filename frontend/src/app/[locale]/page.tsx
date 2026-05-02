@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 import { Link, useRouter } from '@/navigation'
@@ -14,6 +14,13 @@ export default function RootPage() {
   const [slug, setSlug] = useState('')
   const [copied, setCopied] = useState(false)
   const { data: versionData } = useSWR<{ version: string }>('/api/version', fetcher)
+  const { data: setupData } = useSWR<{ needs_setup: boolean }>('/api/setup/status', fetcher)
+
+  useEffect(() => {
+    if (setupData?.needs_setup) {
+      router.replace('/setup')
+    }
+  }, [setupData, router])
 
   function handleTeamSubmit(e: React.FormEvent) {
     e.preventDefault()

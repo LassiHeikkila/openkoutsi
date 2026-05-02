@@ -38,6 +38,8 @@
     "revokeConfirmDesc": "Tämä kutsulink ki ei enää toimi.",
     "revokeConfirmAction": "Peruuta",
     "revokeFailed": "Peruutus epäonnistui",
+    "note": "Muistiinpano",
+    "notePlaceholder": "esim. Matti Meikäläinen, voimassa leirin jälkeen",
     "generate": "Luo kutsu",
     "generateTitle": "Luo kutsulink ki",
     "generateRoles": "Roolit",

@@ -197,6 +197,24 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAutoAnalyzeToggle(checked: boolean) {
+    try {
+      await apiFetch('/api/athlete/', {
+        method: 'PUT',
+        body: JSON.stringify({
+          app_settings: { ...(profile?.app_settings ?? {}), auto_analyze: checked },
+        }),
+      })
+      mutateProfile()
+    } catch (err) {
+      toast({
+        title: t('settings.analysis.saveFailed'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    }
+  }
+
   async function handleExport() {
     try {
       await apiDownload('/api/athlete/export', 'openkoutsi_export.zip')
@@ -604,6 +622,28 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Auto-analyse */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t('settings.analysis.title')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">{t('settings.analysis.autoAnalyze')}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('settings.analysis.autoAnalyzeDesc')}
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(profile?.app_settings?.auto_analyze)}
+              onCheckedChange={handleAutoAnalyzeToggle}
+              disabled={!profile}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Data export */}
       <Card>

@@ -4,6 +4,7 @@ import {
   clearTokens,
   getAccessToken,
   setAccessToken,
+  setTeamSlug,
 } from '@/lib/api'
 
 // Helper to build a minimal Response mock
@@ -108,6 +109,10 @@ describe('apiFetch happy path', () => {
 })
 
 describe('apiFetch 401 handling', () => {
+  beforeEach(() => {
+    setTeamSlug('test-team')
+  })
+
   it('attempts refresh via cookie and retries on 401', async () => {
     // Refresh token is in an httpOnly cookie — the browser sends it automatically.
     // The mock simulates a successful refresh returning a new access_token.
@@ -138,7 +143,7 @@ describe('apiFetch 401 handling', () => {
 
     // The second call is the refresh — it should have no body
     const refreshCall = fetchMock.mock.calls[1]
-    expect(refreshCall[0]).toContain('/api/auth/refresh')
+    expect(refreshCall[0]).toContain('/api/teams/test-team/auth/refresh')
     expect(refreshCall[1].body).toBeUndefined()
     expect(refreshCall[1].credentials).toBe('include')
   })

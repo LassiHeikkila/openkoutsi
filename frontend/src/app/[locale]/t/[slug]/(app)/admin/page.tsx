@@ -234,6 +234,7 @@ function GenerateInviteDialog({ slug, onCreated }: { slug: string; onCreated: ()
   const [open, setOpen] = useState(false)
   const [selectedRoles, setSelectedRoles] = useState<string[]>(['user'])
   const [expiryDays, setExpiryDays] = useState<string>('7')
+  const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -247,9 +248,10 @@ function GenerateInviteDialog({ slug, onCreated }: { slug: string; onCreated: ()
   async function handleGenerate() {
     setLoading(true)
     try {
-      const body: { roles: string[]; expires_in_days?: number | null } = {
+      const body: { roles: string[]; expires_in_days?: number | null; note?: string } = {
         roles: selectedRoles,
         expires_in_days: expiryDays === 'never' ? null : parseInt(expiryDays),
+        note: note.trim() || undefined,
       }
       const res = await apiFetch<InvitationResponse>(`/api/teams/${slug}/invitations`, {
         method: 'POST',
@@ -281,6 +283,7 @@ function GenerateInviteDialog({ slug, onCreated }: { slug: string; onCreated: ()
     setCopied(false)
     setSelectedRoles(['user'])
     setExpiryDays('7')
+    setNote('')
   }
 
   return (
@@ -346,6 +349,16 @@ function GenerateInviteDialog({ slug, onCreated }: { slug: string; onCreated: ()
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-note">{t('invitations.note')}</Label>
+              <Input
+                id="invite-note"
+                placeholder={t('invitations.notePlaceholder')}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                maxLength={120}
+              />
             </div>
           </div>
         )}
@@ -417,6 +430,9 @@ function InvitationsTab({ slug }: { slug: string }) {
                   <RoleBadge key={r} role={r} />
                 ))}
               </div>
+              {inv.note && (
+                <span className="font-medium">{inv.note}</span>
+              )}
               <span className="text-muted-foreground">
                 {t('invitations.createdBy')} {inv.created_by_username}
               </span>
@@ -476,6 +492,9 @@ function InvitationsTab({ slug }: { slug: string }) {
                   <RoleBadge key={r} role={r} />
                 ))}
               </div>
+              {inv.note && (
+                <span className="font-medium text-foreground">{inv.note}</span>
+              )}
               <span>
                 {t('invitations.usedBy')} {inv.used_by_username}
               </span>

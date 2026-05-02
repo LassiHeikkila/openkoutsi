@@ -56,6 +56,8 @@ class Team(RegistryBase):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     slug: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # "pending" → awaiting superadmin approval; "active" → normal; "rejected" → blocked
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     # Optional team-level LLM overrides (override global env vars)

@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # kept for backward compatibility during transition.
     admin_secret: str | None = None
 
+    # Secret for the superadmin panel (team approval). Set this in production.
+    # Leave empty to disable the superadmin endpoints.
+    superadmin_secret: str = ""
+
     # ── Path helpers ──────────────────────────────────────────────────────────
 
     @property

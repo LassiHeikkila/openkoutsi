@@ -538,7 +538,7 @@ export default function PlanPage() {
                             )}
                           </div>
                           <span className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
-                            {t('plan.weeks', { count: plan.weeks })}
+                            {t('plan.weeks', { count: plan.weeks ?? 0 })}
                             {isOpen
                               ? <ChevronUp className="h-3.5 w-3.5" />
                               : <ChevronDown className="h-3.5 w-3.5" />

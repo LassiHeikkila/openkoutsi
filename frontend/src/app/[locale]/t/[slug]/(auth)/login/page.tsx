@@ -35,7 +35,14 @@ export default function LoginPage() {
         router.replace(`/t/${slug}/dashboard`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('login.failed'))
+      const msg = err instanceof Error ? err.message : ''
+      if (msg === 'Team pending approval') {
+        setError(t('login.pendingApproval'))
+      } else if (msg === 'Team access revoked') {
+        setError(t('login.teamRevoked'))
+      } else {
+        setError(msg || t('login.failed'))
+      }
     } finally {
       setLoading(false)
     }

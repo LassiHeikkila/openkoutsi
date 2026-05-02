@@ -64,6 +64,28 @@
     "copy": "KOPIOI",
     "copied": "KOPIOITU"
   },
+  "createTeam": {
+    "tabSignIn": "Kirjaudu",
+    "tabCreate": "Luo tiimi",
+    "title": "Luo tiimi",
+    "subtitle": "Luo tiimitili. Tiimisi tarkastetaan ennen kuin voit kirjautua.",
+    "teamName": "Tiimin nimi",
+    "teamNamePlaceholder": "Pyöräilyseura",
+    "slug": "Tiimin tunniste",
+    "slugPlaceholder": "pyorailyseura",
+    "slugHint": "Käytetään URL-osoitteissa — vain pienet kirjaimet, numerot ja väliviivat.",
+    "adminUsername": "Käyttäjätunnuksesi",
+    "adminUsernamePlaceholder": "käyttäjätunnus",
+    "adminDisplayName": "Näyttönimi",
+    "adminDisplayNamePlaceholder": "Nimesi (valinnainen)",
+    "password": "Salasana",
+    "passwordPlaceholder": "Väh. 12 merkkiä, 1 iso kirjain, 1 numero",
+    "submit": "Pyydä tiimiä",
+    "submitting": "Luodaan…",
+    "successTitle": "Pyyntö lähetetty!",
+    "successBody": "Tiimisi odottaa hyväksyntää. Voit kirjautua, kun ylläpitäjä on hyväksynyt sen.",
+    "failed": "Tiimin luominen epäonnistui"
+  },
   "setup": {
     "title": "Tervetuloa openkoutsiin",
     "subtitle": "Luo ensimmäinen tiimisi ja ylläpitäjätili aloittaaksesi.",

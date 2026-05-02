@@ -57,6 +57,55 @@ class TeamSettingsPatch(BaseModel):
     clear_llm_api_key: bool = False
 
 
+class TeamSignupRequest(BaseModel):
+    team_name: str
+    slug: str
+    admin_username: str
+    admin_password: str
+    admin_display_name: Optional[str] = None
+
+    from pydantic import field_validator
+
+    @field_validator("admin_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 12:
+            raise ValueError("Password must be at least 12 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one digit")
+        return v
+
+    @field_validator("slug")
+    @classmethod
+    def slug_format(cls, v: str) -> str:
+        import re
+        if not re.match(r"^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$", v):
+            raise ValueError(
+                "Slug must be lowercase letters, digits, and hyphens; "
+                "2-63 characters; cannot start or end with a hyphen"
+            )
+        return v
+
+
+class TeamSignupResponse(BaseModel):
+    id: str
+    slug: str
+    name: str
+    status: str
+    created_at: datetime
+
+
+class SuperadminTeamResponse(BaseModel):
+    id: str
+    slug: str
+    name: str
+    status: str
+    created_at: datetime
+    member_count: int
+
+
 class SetupStatusResponse(BaseModel):
     needs_setup: bool
 

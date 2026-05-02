@@ -34,6 +34,8 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     from backend.app.api.auth import router as auth_router
     from backend.app.api.setup import router as setup_router
+    from backend.app.api.signup import router as signup_router
+    from backend.app.api.superadmin import router as superadmin_router
     from backend.app.api.teams import router as teams_router
     from backend.app.api.athlete import router as athlete_router
     from backend.app.api.activities import router as activities_router
@@ -59,11 +61,13 @@ def create_app() -> FastAPI:
         allow_origins=[settings.frontend_url],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", "X-Superadmin-Secret"],
     )
 
     app.include_router(auth_router, prefix="/api")
     app.include_router(setup_router, prefix="/api")
+    app.include_router(signup_router, prefix="/api")
+    app.include_router(superadmin_router, prefix="/api")
     app.include_router(teams_router, prefix="/api")
     app.include_router(athlete_router, prefix="/api")
     app.include_router(activities_router, prefix="/api")

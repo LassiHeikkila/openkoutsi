@@ -56,7 +56,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npx --yes npm@11 ci
+        run: npm install --prefer-offline
 
       - name: Run tests
         run: npm run test:coverage

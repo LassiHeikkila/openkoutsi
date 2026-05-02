@@ -1,26 +1,34 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 import { Link, useRouter } from '@/navigation'
-import { useAuth } from '@/lib/auth'
 import { fetcher } from '@/lib/api'
 import { LocaleSwitcher } from '@/components/LocaleSwitcher'
 import './landing.css'
 
 export default function RootPage() {
   const t = useTranslations('landing')
-  const { athlete, loading } = useAuth()
   const router = useRouter()
+  const [slug, setSlug] = useState('')
   const [copied, setCopied] = useState(false)
   const { data: versionData } = useSWR<{ version: string }>('/api/version', fetcher)
+  const { data: setupData } = useSWR<{ needs_setup: boolean }>('/api/setup/status', fetcher)
 
   useEffect(() => {
-    if (!loading && athlete) {
-      router.replace('/dashboard')
+    if (setupData?.needs_setup) {
+      router.replace('/setup')
     }
-  }, [athlete, loading, router])
+  }, [setupData, router])
+
+  function handleTeamSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = slug.trim()
+    if (trimmed) {
+      router.push(`/t/${trimmed}/login`)
+    }
+  }
 
   function handleCopy() {
     navigator.clipboard.writeText(
@@ -29,11 +37,6 @@ export default function RootPage() {
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-
-  // Still checking auth — render nothing to avoid flash
-  if (loading) return null
-  // Authenticated — redirect is in progress
-  if (athlete) return null
 
   return (
     <div className="lp">
@@ -48,8 +51,6 @@ export default function RootPage() {
             <a href="#selfhost">{t('nav.selfhost')}</a>
             <a href="https://github.com/lassiheikkila/openkoutsi" target="_blank" rel="noopener noreferrer">{t('nav.github')}</a>
             <LocaleSwitcher />
-            <Link href="/login" className="btn">{t('nav.login')}</Link>
-            <Link href="/register" className="btn btn-primary">{t('nav.signup')}</Link>
           </div>
         </div>
       </nav>
@@ -77,10 +78,19 @@ export default function RootPage() {
               <span className="italic">{t('hero.h1line3')}</span>
             </h1>
             <p className="hero-sub">{t('hero.sub')}</p>
-            <div className="hero-actions">
-              <Link href="/register" className="btn btn-primary">{t('hero.cta')}</Link>
-              <a href="https://github.com/lassiheikkila/openkoutsi" target="_blank" rel="noopener noreferrer" className="btn">{t('hero.github')}</a>
-            </div>
+            <form onSubmit={handleTeamSubmit} className="hero-actions">
+              <input
+                type="text"
+                className="team-slug-input"
+                placeholder={t('teamEntry.placeholder')}
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                aria-label={t('teamEntry.label')}
+              />
+              <button type="submit" className="btn btn-primary" disabled={!slug.trim()}>
+                {t('teamEntry.submit')}
+              </button>
+            </form>
           </div>
 
           <div className="hero-viz">

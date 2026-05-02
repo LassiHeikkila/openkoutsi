@@ -1,38 +1,23 @@
-from collections.abc import AsyncGenerator
-
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from backend.app.core.config import settings
 
-
-class Base(DeclarativeBase):
+class RegistryBase(DeclarativeBase):
+    """Base for the global registry DB (users, teams, memberships, provider connections)."""
     pass
 
 
-def _set_wal_mode(dbapi_conn, _connection_record):
+class TeamBase(DeclarativeBase):
+    """Base for per-team DBs (athletes, activities, training data)."""
+    pass
+
+
+# Keep the legacy alias so any remaining references to `Base` import still resolve
+# during the transition. Remove once all callers are updated.
+Base = RegistryBase
+
+
+def _set_wal_mode(dbapi_conn, _connection_record) -> None:
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
-    # Wait up to 5 s for a write lock before raising "database is locked".
-    # The default is 0 ms, which causes spurious errors when background sync
-    # tasks are writing at the same time as a foreground request (e.g. the
-    # OAuth callback that writes a ProviderConnection row).
     cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
-
-
-engine = create_async_engine(
-    f"sqlite+aiosqlite:///{settings.database_path}",
-    echo=False,
-)
-
-from sqlalchemy import event  # noqa: E402
-
-event.listen(engine.sync_engine, "connect", _set_wal_mode)
-
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
-
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal() as session:
-        yield session

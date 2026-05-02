@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, ActivityPowerBest, ActivitySource, ActivityStream, Athlete
+from backend.app.models.team_orm import Activity, ActivityPowerBest, ActivitySource, ActivityStream, Athlete
 
 TESTDATA = Path(__file__).parent.parent.parent / "testdata"
 SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"

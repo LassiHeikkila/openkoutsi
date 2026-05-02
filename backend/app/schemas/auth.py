@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    invite_token: str
     display_name: Optional[str] = None
 
     @field_validator("password")

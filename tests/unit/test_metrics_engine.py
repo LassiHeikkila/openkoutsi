@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, Athlete, DailyMetric, User
+from backend.app.models.team_orm import Activity, ActivitySource, Athlete, DailyMetric
 from backend.app.services.metrics_engine import recalculate_from
 
 # EMA decay constants (same as production)
@@ -21,16 +21,12 @@ TODAY = date.today()
 
 
 async def _make_athlete(session) -> Athlete:
-    """Create a minimal User + Athlete in the test DB and return the Athlete."""
-    user = User(
+    """Create a minimal Athlete in the team test DB and return it."""
+    athlete = Athlete(
         id=str(uuid.uuid4()),
-        username=f"u{uuid.uuid4().hex[:6]}",
-        password_hash="x",
+        global_user_id=str(uuid.uuid4()),
+        ftp_tests=[],
     )
-    session.add(user)
-    await session.flush()
-
-    athlete = Athlete(id=str(uuid.uuid4()), user_id=user.id, ftp_tests=[])
     session.add(athlete)
     await session.flush()
     return athlete
@@ -38,7 +34,6 @@ async def _make_athlete(session) -> Athlete:
 
 async def _make_activity(session, athlete_id: str, tss: float, day: date) -> Activity:
     """Insert a processed Activity with the given TSS on the given date."""
-    from backend.app.models.orm import ActivitySource
     activity = Activity(
         id=str(uuid.uuid4()),
         athlete_id=athlete_id,

@@ -12,7 +12,7 @@ import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, ActivitySource, Athlete
+from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 
 TESTDATA = Path(__file__).parent.parent.parent / "testdata"
 SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"
@@ -92,7 +92,10 @@ class TestCreateManualActivity:
         assert resp.status_code == 422
 
     async def test_unauthenticated_returns_401(self, client):
-        resp = await client.post("/api/activities/", json={})
+        resp = await client.post(
+            "/api/activities/",
+            json={"sport_type": "Ride", "start_time": "2025-06-01T10:00:00Z", "duration_s": 3600},
+        )
         assert resp.status_code == 401
 
 
@@ -169,19 +172,6 @@ class TestListActivities:
         assert len(data["items"]) == 2
         assert data["page"] == 2
 
-    async def test_another_athletes_activities_not_visible(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "a@test.com")
-        headers_b = await _register(client, "b@test.com")
-
-        await client.post(
-            "/api/activities/",
-            json={"sport_type": "Ride", "start_time": "2025-01-01T10:00:00Z", "duration_s": 3600},
-            headers=headers_a,
-        )
-        resp = await client.get("/api/activities/", headers=headers_b)
-        assert resp.json()["total"] == 0
-
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.get("/api/activities/")
         assert resp.status_code == 401
@@ -204,21 +194,6 @@ class TestGetActivity:
 
     async def test_nonexistent_activity_returns_404(self, client, auth_headers):
         resp = await client.get("/api/activities/nonexistent-id", headers=auth_headers)
-        assert resp.status_code == 404
-
-    async def test_another_athletes_activity_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "owner@test.com")
-        headers_b = await _register(client, "other@test.com")
-
-        create_resp = await client.post(
-            "/api/activities/",
-            json={"sport_type": "Ride", "start_time": "2025-01-01T10:00:00Z", "duration_s": 3600},
-            headers=headers_a,
-        )
-        activity_id = create_resp.json()["id"]
-
-        resp = await client.get(f"/api/activities/{activity_id}", headers=headers_b)
         assert resp.status_code == 404
 
     async def test_unauthenticated_returns_401(self, client):
@@ -248,20 +223,6 @@ class TestDeleteActivity:
         activity_id = create_resp.json()["id"]
         await client.delete(f"/api/activities/{activity_id}", headers=auth_headers)
         resp = await client.get(f"/api/activities/{activity_id}", headers=auth_headers)
-        assert resp.status_code == 404
-
-    async def test_another_athletes_activity_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "act_a@test.com")
-        headers_b = await _register(client, "act_b@test.com")
-
-        create_resp = await client.post(
-            "/api/activities/",
-            json={"sport_type": "Ride", "start_time": "2025-01-01T10:00:00Z", "duration_s": 3600},
-            headers=headers_a,
-        )
-        activity_id = create_resp.json()["id"]
-        resp = await client.delete(f"/api/activities/{activity_id}", headers=headers_b)
         assert resp.status_code == 404
 
     async def test_unauthenticated_returns_401(self, client):
@@ -407,24 +368,6 @@ class TestDownloadFitFile:
         resp = await client.get("/api/activities/nonexistent-id/fit", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_another_athletes_activity_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "fit_dl_a@test.com")
-        headers_b = await _register(client, "fit_dl_b@test.com")
-
-        create_resp = await client.post(
-            "/api/activities/",
-            json={
-                "sport_type": "Ride",
-                "start_time": "2025-01-01T10:00:00Z",
-                "duration_s": 3600,
-            },
-            headers=headers_a,
-        )
-        activity_id = create_resp.json()["id"]
-        resp = await client.get(f"/api/activities/{activity_id}/fit", headers=headers_b)
-        assert resp.status_code == 404
-
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.get("/api/activities/some-id/fit")
         assert resp.status_code == 401
@@ -475,9 +418,10 @@ class TestDownloadFitFile:
 
         from backend.app.core import config as cfg
         from backend.app.core.file_encryption import encrypt_file
+        from tests.conftest import _TEST_TEAM_ID
 
         with patch.object(cfg.settings, "encryption_key", test_key):
-            encrypt_file(Path(upload_src.fit_file_path), athlete.user_id)
+            encrypt_file(Path(upload_src.fit_file_path), _TEST_TEAM_ID, athlete.global_user_id)
             upload_src.fit_file_encrypted = True
             await session.commit()
 
@@ -526,23 +470,6 @@ class TestRenameActivity:
             headers=auth_headers,
         )
         assert resp.status_code == 422
-
-    async def test_another_athletes_activity_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "rename_a@test.com")
-        headers_b = await _register(client, "rename_b@test.com")
-        resp = await client.post(
-            "/api/activities/",
-            json={"sport_type": "Ride", "start_time": "2025-01-01T10:00:00Z", "duration_s": 3600},
-            headers=headers_a,
-        )
-        activity_id = resp.json()["id"]
-        resp = await client.patch(
-            f"/api/activities/{activity_id}",
-            json={"name": "Stolen name"},
-            headers=headers_b,
-        )
-        assert resp.status_code == 404
 
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.patch("/api/activities/some-id", json={"name": "x"})

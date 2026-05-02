@@ -16,7 +16,6 @@ import httpx
 from fastapi import APIRouter
 
 from backend.app.core.config import settings
-from backend.app.db.base import AsyncSessionLocal
 from backend.app.services.strava_sync import process_webhook_event
 
 log = logging.getLogger(__name__)
@@ -64,12 +63,11 @@ async def _poll_bridge_once() -> None:
         for event in events:
             event_id = event.get("id", "")
 
-            # Process in its own session so one bad event doesn't block others
-            async with AsyncSessionLocal() as session:
-                try:
-                    await process_webhook_event(event, session)
-                except Exception:
-                    log.exception("Failed to process bridge event %s", event_id)
+            # process_webhook_event opens its own sessions internally
+            try:
+                await process_webhook_event(event)
+            except Exception:
+                log.exception("Failed to process bridge event %s", event_id)
 
             # Claim regardless of processing outcome (avoid infinite retry loops)
             try:

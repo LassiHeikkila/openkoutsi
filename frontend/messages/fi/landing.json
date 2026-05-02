@@ -6,6 +6,11 @@
     "login": "Kirjaudu",
     "signup": "Rekister\u00f6idy"
   },
+  "teamEntry": {
+    "label": "Sy\u00f6t\u00e4 tiimin tunniste",
+    "placeholder": "oma-tiimi",
+    "submit": "Siirry \u2192"
+  },
   "hero": {
     "eyebrow": "avoimen l\u00e4hdekoodin \u00b7 Apache-2.0",
     "h1line1": "Jokainen watti.",
@@ -58,6 +63,25 @@
     "body": "Aja openkoutsit miss\u00e4 tahansa \u2014 Pi kaapissasi, 4\u00a0\u20ac:n VPS tai kotisi NAS. Docker compose yhdell\u00e4 komennolla tai k\u00e4\u00e4nn\u00e4 itse. Ei rekister\u00f6itymisi\u00e4, ei Pro-tasoa.",
     "copy": "KOPIOI",
     "copied": "KOPIOITU"
+  },
+  "setup": {
+    "title": "Tervetuloa openkoutsiin",
+    "subtitle": "Luo ensimmäinen tiimisi ja ylläpitäjätili aloittaaksesi.",
+    "teamName": "Tiimin nimi",
+    "teamNamePlaceholder": "Pyöräilyseura",
+    "slug": "Tiimin tunniste",
+    "slugPlaceholder": "pyorailyseura",
+    "slugHint": "Käytetään URL-osoitteissa — vain pienet kirjaimet, numerot ja väliviivoat.",
+    "adminUsername": "Ylläpitäjän käyttäjätunnus",
+    "adminUsernamePlaceholder": "admin",
+    "adminDisplayName": "Näyttönimi",
+    "adminDisplayNamePlaceholder": "Nimesi (valinnainen)",
+    "password": "Salasana",
+    "passwordPlaceholder": "Vähintään 8 merkkiä",
+    "submit": "Luo tiimi",
+    "submitting": "Luodaan…",
+    "success": "Tiimi luotu! Voit nyt kirjautua sisään.",
+    "failed": "Asennus epäonnistui"
   },
   "footer": {
     "license": "Apache-2.0",

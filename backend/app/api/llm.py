@@ -57,29 +57,24 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import get_current_user
+from backend.app.core.auth import TeamContext
 from backend.app.core.config import settings
-from backend.app.db.base import get_session
-from backend.app.models.orm import Athlete, User
+from backend.app.core.deps import get_ctx_and_session
+from backend.app.db.registry import get_registry_session
+from backend.app.models.registry_orm import Team
+from backend.app.models.team_orm import Athlete
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
 # Maximum bytes accepted from an upstream LLM response.
-# This prevents a malicious or misconfigured server from exhausting server
-# memory.  32 MB is generous for any realistic chat completion response.
 _MAX_RESPONSE_BYTES = 32 * 1024 * 1024  # 32 MB
 
 # ── SSRF guard ─────────────────────────────────────────────────────────────
 
 _ALLOWED_SCHEMES = {"http", "https"}
 
-# Link-local ranges used by cloud-provider metadata services.
-# We block these specifically because they are nearly always unintentional and
-# high-impact (IAM credentials, user-data scripts, etc.).
-# We do NOT block all private/RFC-1918 ranges so that Ollama on localhost or a
-# LAN address continues to work.
 _BLOCKED_NETWORKS = [
     ipaddress.ip_network("169.254.0.0/16"),    # IPv4 link-local (AWS/GCP/Azure metadata)
     ipaddress.ip_network("fe80::/10"),          # IPv6 link-local
@@ -109,10 +104,7 @@ def _check_url_safe(url: str) -> tuple[str, int]:
 
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-    # Resolve hostname → IP.
     try:
-        # getaddrinfo returns a list of (family, type, proto, canonname, sockaddr).
-        # Take the first result's address.
         addr_info = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
         raise HTTPException(
@@ -155,7 +147,6 @@ class LlmChatRequest(BaseModel):
     messages: list[ChatMessage]
     temperature: float = 0.7
     stream: bool = False
-    # Optional model override; if omitted, the athlete's configured model is used.
     model: Optional[str] = None
 
 
@@ -163,24 +154,29 @@ class LlmChatRequest(BaseModel):
 
 
 @router.get("/servers")
-async def get_allowed_servers(user: User = Depends(get_current_user)):
-    """Return the list of LLM base URLs the admin has allow-listed.
-
-    An empty list means no restriction is configured — users may enter any URL.
-    """
+async def get_allowed_servers(ctx_session=Depends(get_ctx_and_session)):
+    """Return the list of LLM base URLs the admin has allow-listed."""
     return {"servers": settings.llm_allowed_servers_list}
 
 
-async def _get_llm_config(athlete: Athlete, user_id: str) -> tuple[str, str, str | None]:
+async def _get_llm_config(
+    athlete: Athlete,
+    team_id: str,
+    user_id: str,
+    team: Team | None,
+) -> tuple[str, str, str | None]:
     """Return *(base_url, model, api_key)* for this athlete.
 
-    * *api_key* is None when no key has been configured (valid for local models).
-    * Raises ``HTTPException(400)`` when no base URL is configured.
-    * Raises ``HTTPException(500)`` when the stored key cannot be decrypted.
+    Priority: athlete app_settings → team settings → global env vars.
     """
-    settings_dict = athlete.app_settings or {}
-    base_url = (settings_dict.get("llm_base_url") or "").strip()
-    model = (settings_dict.get("llm_model") or "llama3.2").strip()
+    athlete_settings = athlete.app_settings or {}
+
+    # Determine base_url: athlete > team > global
+    base_url = (athlete_settings.get("llm_base_url") or "").strip()
+    if not base_url and team and team.llm_base_url:
+        base_url = team.llm_base_url.strip()
+    if not base_url:
+        base_url = (settings.llm_base_url or "").strip()
 
     if not base_url:
         raise HTTPException(
@@ -188,9 +184,14 @@ async def _get_llm_config(athlete: Athlete, user_id: str) -> tuple[str, str, str
             detail="LLM not configured. Set a base URL in Settings → AI / LLM.",
         )
 
+    # Determine model: athlete > team > global
+    model = (athlete_settings.get("llm_model") or "").strip()
+    if not model and team and team.llm_model:
+        model = team.llm_model.strip()
+    if not model:
+        model = (settings.llm_model or "llama3.2").strip()
+
     # Defense-in-depth: re-check against the allow-list at use time.
-    # This catches any URL that bypassed the save-time check (e.g. stored before
-    # the allow-list was configured, or inserted directly into the database).
     allowed = settings.llm_allowed_servers_list
     if allowed and base_url not in allowed:
         raise HTTPException(
@@ -200,19 +201,28 @@ async def _get_llm_config(athlete: Athlete, user_id: str) -> tuple[str, str, str
         )
 
     api_key: str | None = None
-    enc_key = settings_dict.get("llm_api_key_enc")
+
+    # Check athlete's personal API key first
+    enc_key = athlete_settings.get("llm_api_key_enc")
     if enc_key:
         try:
             from backend.app.core.file_encryption import decrypt_secret
-
-            api_key = decrypt_secret(str(enc_key), user_id)
+            api_key = decrypt_secret(str(enc_key), team_id, user_id)
         except Exception as exc:
-            log.error("Failed to decrypt LLM API key for user %s: %s", user_id, exc)
+            log.error("Failed to decrypt athlete LLM API key for user %s: %s", user_id, exc)
             raise HTTPException(
                 status_code=500,
                 detail="Failed to decrypt the stored LLM API key. "
                 "Try re-entering your key in Settings → AI / LLM.",
             )
+
+    # Fall back to team API key
+    if api_key is None and team and team.llm_api_key_enc:
+        try:
+            from backend.app.core.file_encryption import decrypt_team_secret
+            api_key = decrypt_team_secret(str(team.llm_api_key_enc), team_id)
+        except Exception as exc:
+            log.error("Failed to decrypt team LLM API key for team %s: %s", team_id, exc)
 
     return base_url, model, api_key
 
@@ -223,23 +233,23 @@ async def _get_llm_config(athlete: Athlete, user_id: str) -> tuple[str, str, str
 @router.post("/chat")
 async def llm_chat(
     body: LlmChatRequest,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    """Proxy an OpenAI-compatible chat completion to the user's LLM endpoint.
+    """Proxy an OpenAI-compatible chat completion to the user's LLM endpoint."""
+    ctx, session = ctx_session
 
-    The API key is decrypted server-side and injected into the upstream
-    request — it never passes through the browser.
-    """
-    result = await session.execute(select(Athlete).where(Athlete.user_id == user.id))
+    result = await session.execute(select(Athlete).where(Athlete.global_user_id == ctx.user_id))
     athlete = result.scalar_one_or_none()
     if athlete is None:
         raise HTTPException(status_code=404, detail="Athlete profile not found")
 
-    base_url, model, api_key = await _get_llm_config(athlete, user.id)
+    team_result = await registry_session.execute(select(Team).where(Team.id == ctx.team_id))
+    team = team_result.scalar_one_or_none()
+
+    base_url, model, api_key = await _get_llm_config(athlete, ctx.team_id, ctx.user_id, team)
     upstream_url = f"{base_url.rstrip('/')}/chat/completions"
 
-    # SSRF check — raises HTTPException on blocked addresses.
     _check_url_safe(upstream_url)
 
     headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -253,15 +263,9 @@ async def llm_chat(
         "stream": body.stream,
     }
 
-    # Redirects are disabled to prevent a redirect from a safe public URL to
-    # an internal address (a common SSRF bypass technique).
     transport = httpx.AsyncHTTPTransport(retries=0)
 
     if body.stream:
-        # --- Streaming path ---
-        # Inspect the upstream HTTP status after headers arrive but before
-        # reading the body, so we can surface errors as proper HTTP errors
-        # rather than embedding them in an already-200 SSE stream.
         client = httpx.AsyncClient(
             transport=transport,
             follow_redirects=False,
@@ -303,7 +307,6 @@ async def llm_chat(
         return StreamingResponse(_iter_upstream(), media_type="text/event-stream")
 
     else:
-        # --- Non-streaming path ---
         async with httpx.AsyncClient(
             transport=transport,
             follow_redirects=False,

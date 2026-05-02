@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from openkoutsi.fit import summarizeWorkout, getStartTime, extractIntervals
 from openkoutsi.categorization import classify_workout
-from backend.app.models.orm import (
+from backend.app.models.team_orm import (
     Activity,
     ActivityDistanceBest,
     ActivityInterval,

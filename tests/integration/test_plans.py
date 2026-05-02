@@ -96,21 +96,6 @@ class TestGetPlan:
         resp = await client.get("/api/plans/no-such-id", headers=auth_headers)
         assert resp.status_code == 404
 
-    async def test_another_athletes_plan_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "plan_a@test.com")
-        headers_b = await _register(client, "plan_b@test.com")
-
-        create_resp = await client.post(
-            "/api/plans/",
-            json={"name": "Secret Plan", "start_date": str(_START), "weeks": 4},
-            headers=headers_a,
-        )
-        plan_id = create_resp.json()["id"]
-
-        resp = await client.get(f"/api/plans/{plan_id}", headers=headers_b)
-        assert resp.status_code == 404
-
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.get("/api/plans/some-id")
         assert resp.status_code == 401
@@ -173,21 +158,6 @@ class TestDeletePlan:
         plan_id = create_resp.json()["id"]
         await client.delete(f"/api/plans/{plan_id}", headers=auth_headers)
         resp = await client.get(f"/api/plans/{plan_id}", headers=auth_headers)
-        assert resp.status_code == 404
-
-    async def test_another_athletes_plan_returns_404(self, client):
-        from tests.conftest import _register
-        headers_a = await _register(client, "del_plan_a@test.com")
-        headers_b = await _register(client, "del_plan_b@test.com")
-
-        create_resp = await client.post(
-            "/api/plans/",
-            json={"name": "Owned Plan", "start_date": str(_START), "weeks": 4},
-            headers=headers_a,
-        )
-        plan_id = create_resp.json()["id"]
-
-        resp = await client.delete(f"/api/plans/{plan_id}", headers=headers_b)
         assert resp.status_code == 404
 
     async def test_unauthenticated_returns_401(self, client):

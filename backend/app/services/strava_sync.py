@@ -4,6 +4,9 @@ Strava webhook event processing.
 Full activity sync is now handled by the generic provider_sync.py pipeline.
 This module handles only the Strava Bridge webhook events (create / update /
 delete) which require Strava-specific knowledge about the bridge event schema.
+
+process_webhook_event opens its own registry + team sessions so it can be
+called directly from the bridge poller without a pre-existing session.
 """
 
 import logging
@@ -11,9 +14,9 @@ from datetime import timedelta, timezone
 from datetime import datetime
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection
+from backend.app.models.registry_orm import ProviderConnection, TeamMembership
+from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 from backend.app.services.provider_sync import (
     _DUPLICATE_WINDOW,
     _populate_activity,
@@ -32,9 +35,11 @@ _strava_client = StravaProviderClient()
 
 # ── Webhook event processing ──────────────────────────────────────────────
 
-async def process_webhook_event(event: dict, session: AsyncSession) -> None:
+async def process_webhook_event(event: dict) -> None:
     """
-    Handle a single bridge event. Event structure (from bridge GET /events/pending):
+    Handle a single bridge event, fanning out to all teams the owner belongs to.
+
+    Event structure (from bridge GET /events/pending):
     {
         "id": "<bridge-uuid>",
         "strava_event_type": "create" | "update" | "delete",
@@ -48,6 +53,9 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         }
     }
     """
+    from backend.app.db.registry import _RegistrySessionLocal
+    from backend.app.db.team_session import get_team_session_factory
+
     if event.get("strava_event_type") not in ("create", "update", "delete"):
         return
 
@@ -59,23 +67,58 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
     strava_activity_id = str(payload.get("object_id", ""))
     strava_owner_id = str(event["strava_owner_id"])
 
-    # Resolve the local athlete via provider_connections
-    conn_result = await session.execute(
-        select(ProviderConnection).where(
-            ProviderConnection.provider == "strava",
-            ProviderConnection.provider_athlete_id == strava_owner_id,
+    # Resolve user and team memberships from registry
+    async with _RegistrySessionLocal() as reg_session:
+        conn_result = await reg_session.execute(
+            select(ProviderConnection).where(
+                ProviderConnection.provider == "strava",
+                ProviderConnection.provider_athlete_id == strava_owner_id,
+            )
         )
-    )
-    conn = conn_result.scalar_one_or_none()
-    if conn is None:
-        return  # unknown owner — ignore
+        conn = conn_result.scalar_one_or_none()
+        if conn is None:
+            return  # unknown owner — ignore
 
-    athlete_result = await session.execute(
-        select(Athlete).where(Athlete.id == conn.athlete_id)
-    )
-    athlete = athlete_result.scalar_one_or_none()
-    if athlete is None:
-        return
+        user_id = conn.user_id
+        access_token = await ensure_fresh_token(conn, reg_session)
+
+        mb_result = await reg_session.execute(
+            select(TeamMembership).where(TeamMembership.user_id == user_id)
+        )
+        team_ids = [m.team_id for m in mb_result.scalars().all()]
+
+    for team_id in team_ids:
+        try:
+            async with get_team_session_factory(team_id)() as session:
+                athlete_result = await session.execute(
+                    select(Athlete).where(Athlete.global_user_id == user_id)
+                )
+                athlete = athlete_result.scalar_one_or_none()
+                if athlete is None:
+                    continue
+
+                await _process_event_for_team(
+                    aspect_type, strava_activity_id, payload,
+                    athlete, conn, access_token, team_id, session,
+                )
+        except Exception:
+            log.exception(
+                "Failed to process Strava event %s for user %s in team %s",
+                strava_activity_id, user_id, team_id,
+            )
+
+
+async def _process_event_for_team(
+    aspect_type: str,
+    strava_activity_id: str,
+    payload: dict,
+    athlete: Athlete,
+    conn: ProviderConnection,
+    access_token: str,
+    team_id: str,
+    session,
+) -> None:
+    from backend.app.services.metrics_engine import recalculate_from
 
     if aspect_type == "create":
         # Skip if already imported for this athlete (idempotent)
@@ -90,8 +133,6 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         )
         if dupe.scalar_one_or_none() is not None:
             return
-
-        access_token = await ensure_fresh_token(conn, session)
 
         # Fetch full activity from Strava
         import httpx as _httpx
@@ -133,7 +174,6 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         existing_act = existing_result.scalar_one_or_none()
 
         if existing_act is not None:
-            # Same real-world workout — attach a Strava source.
             new_src = ActivitySource(
                 activity_id=existing_act.id,
                 provider="strava",
@@ -142,14 +182,13 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
             session.add(new_src)
             await session.flush()
 
-            # Strava has no FIT download, so priority is always 3.
             strava_priority = _source_priority("strava", False)
             if strava_priority < _winning_priority(existing_act):
                 await _repopulate_activity(
-                    existing_act, new_src, norm, _strava_client, access_token, athlete, session
+                    existing_act, new_src, norm, _strava_client, access_token,
+                    athlete, session, team_id=team_id,
                 )
                 if existing_act.start_time:
-                    from backend.app.services.metrics_engine import recalculate_from
                     start_date = (
                         existing_act.start_time.date()
                         if hasattr(existing_act.start_time, "date")
@@ -159,7 +198,6 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
             else:
                 await session.commit()
         else:
-            # New workout — create Activity + ActivitySource
             activity = Activity(
                 athlete_id=athlete.id,
                 name=norm.name,
@@ -186,10 +224,12 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
             session.add(src)
             await session.flush()
 
-            await _populate_activity(activity, src, norm, _strava_client, access_token, athlete, session)
+            await _populate_activity(
+                activity, src, norm, _strava_client, access_token,
+                athlete, session, team_id=team_id,
+            )
 
             if activity.start_time:
-                from backend.app.services.metrics_engine import recalculate_from
                 start_date = (
                     activity.start_time.date()
                     if hasattr(activity.start_time, "date")
@@ -203,10 +243,9 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
                 from backend.app.services.llm_activity_analyzer import analyze_activity_bg
                 activity.analysis_status = "pending"
                 await session.commit()
-                asyncio.create_task(analyze_activity_bg(activity.id, athlete.id))
+                asyncio.create_task(analyze_activity_bg(activity.id, athlete.id, team_id))
 
     elif aspect_type == "delete":
-        # Find the ActivitySource for this Strava activity
         src_result = await session.execute(
             select(ActivitySource)
             .join(Activity, ActivitySource.activity_id == Activity.id)
@@ -230,7 +269,6 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         await session.delete(src)
         await session.flush()
 
-        # If the activity has no remaining sources, delete it entirely.
         remaining = await session.execute(
             select(ActivitySource).where(ActivitySource.activity_id == act.id)
         )
@@ -248,7 +286,6 @@ async def process_webhook_event(event: dict, session: AsyncSession) -> None:
         if not updates:
             return
 
-        # Find the Activity via its Strava ActivitySource
         src_result = await session.execute(
             select(ActivitySource)
             .join(Activity, ActivitySource.activity_id == Activity.id)

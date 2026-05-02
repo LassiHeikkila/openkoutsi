@@ -204,7 +204,7 @@ class TestExportAthlete:
         """Exported zip contains valid (decrypted) FIT bytes even when files are encrypted at rest."""
         from backend.app.core import config as cfg
         from backend.app.core.file_encryption import encrypt_file
-        from backend.app.models.orm import Activity, Athlete
+        from backend.app.models.team_orm import Activity, Athlete
 
         test_key = Fernet.generate_key().decode()
 
@@ -217,7 +217,7 @@ class TestExportAthlete:
         assert upload_resp.status_code == 201
         activity_id = upload_resp.json()["id"]
 
-        from backend.app.models.orm import ActivitySource
+        from backend.app.models.team_orm import ActivitySource
         act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
         activity = act_result.scalar_one()
         src_result = await session.execute(
@@ -232,8 +232,9 @@ class TestExportAthlete:
 
         original_bytes = SAMPLE_FIT.read_bytes()
 
+        from tests.conftest import _TEST_TEAM_ID
         with patch.object(cfg.settings, "encryption_key", test_key):
-            encrypt_file(Path(upload_src.fit_file_path), athlete.user_id)
+            encrypt_file(Path(upload_src.fit_file_path), _TEST_TEAM_ID, athlete.global_user_id)
             upload_src.fit_file_encrypted = True
             await session.commit()
 
@@ -254,7 +255,9 @@ class TestExportAthlete:
 def avatar_dir(tmp_path):
     """Redirect avatar storage to a temp directory for the duration of the test."""
     d = tmp_path / "avatars"
-    with patch("backend.app.api.athlete._AVATAR_DIR", d):
+    with patch("backend.app.api.athlete.settings") as mock_settings:
+        mock_settings.team_avatar_dir.return_value = d
+        mock_settings.frontend_url = ""
         yield d
 
 
@@ -320,14 +323,14 @@ class TestAvatar:
         )
         assert resp.status_code == 401
 
-    async def test_get_avatar_requires_no_auth(self, client, auth_headers, avatar_dir):
+    async def test_get_avatar_requires_auth(self, client, auth_headers, avatar_dir):
         await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
             files={"file": ("photo.jpg", b"image-data", "image/jpeg")},
         )
         athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
-        resp = await client.get(f"/api/athlete/{athlete_id}/avatar")
+        resp = await client.get(f"/api/athlete/{athlete_id}/avatar", headers=auth_headers)
         assert resp.status_code == 200
 
     async def test_get_avatar_returns_exact_uploaded_bytes(self, client, auth_headers, avatar_dir):
@@ -338,17 +341,17 @@ class TestAvatar:
             files={"file": ("photo.jpg", image_bytes, "image/jpeg")},
         )
         athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
-        resp = await client.get(f"/api/athlete/{athlete_id}/avatar")
+        resp = await client.get(f"/api/athlete/{athlete_id}/avatar", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.content == image_bytes
 
-    async def test_get_avatar_unknown_athlete_returns_404(self, client):
-        resp = await client.get("/api/athlete/does-not-exist/avatar")
+    async def test_get_avatar_unknown_athlete_returns_404(self, client, auth_headers):
+        resp = await client.get("/api/athlete/does-not-exist/avatar", headers=auth_headers)
         assert resp.status_code == 404
 
     async def test_get_avatar_when_none_set_returns_404(self, client, auth_headers):
         athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
-        resp = await client.get(f"/api/athlete/{athlete_id}/avatar")
+        resp = await client.get(f"/api/athlete/{athlete_id}/avatar", headers=auth_headers)
         assert resp.status_code == 404
 
     async def test_delete_avatar_clears_avatar_url(self, client, auth_headers, avatar_dir):

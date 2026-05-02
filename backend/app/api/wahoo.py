@@ -13,7 +13,6 @@ import secrets
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.app.core.config import settings
-from backend.app.db.base import AsyncSessionLocal
 from backend.app.services.wahoo_sync import process_wahoo_webhook
 
 log = logging.getLogger(__name__)
@@ -39,13 +38,13 @@ async def wahoo_webhook(request: Request):
         return {"status": "ignored"}
 
     # Process asynchronously so we return 200 quickly — Wahoo retries on non-200.
+    # process_wahoo_webhook opens its own sessions internally.
     asyncio.create_task(_handle_event(payload))
     return {"status": "ok"}
 
 
 async def _handle_event(payload: dict) -> None:
-    async with AsyncSessionLocal() as session:
-        try:
-            await process_wahoo_webhook(payload, session)
-        except Exception:
-            log.exception("Failed to process Wahoo webhook event")
+    try:
+        await process_wahoo_webhook(payload)
+    except Exception:
+        log.exception("Failed to process Wahoo webhook event")

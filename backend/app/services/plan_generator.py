@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.orm import TrainingPlan, PlannedWorkout
+from ..models.team_orm import TrainingPlan, PlannedWorkout
 from ..schemas.plans import PlanConfig
 
 
@@ -21,27 +21,27 @@ from ..schemas.plans import PlanConfig
 _BASE_WEEK: list[dict] = [
     {"day_of_week": 1, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
     {"day_of_week": 2, "workout_type": "threshold", "duration_min": 60, "target_tss": 80, "description": "2×20 min at threshold power"},
-    {"day_of_week": 3, "workout_type": "easy", "duration_min": 60, "target_tss": 40, "description": "Zone 2 aerobic"},
+    {"day_of_week": 3, "workout_type": "recovery", "duration_min": 60, "target_tss": 40, "description": "Zone 2 aerobic"},
     {"day_of_week": 4, "workout_type": "endurance", "duration_min": 75, "target_tss": 55, "description": "Steady endurance with some tempo efforts"},
     {"day_of_week": 5, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
     {"day_of_week": 6, "workout_type": "endurance", "duration_min": 120, "target_tss": 90, "description": "Long easy endurance ride"},
-    {"day_of_week": 7, "workout_type": "easy", "duration_min": 45, "target_tss": 25, "description": "Active recovery spin"},
+    {"day_of_week": 7, "workout_type": "recovery", "duration_min": 45, "target_tss": 25, "description": "Active recovery spin"},
 ]
 
 _PEAK_WEEK: list[dict] = [
     {"day_of_week": 1, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
     {"day_of_week": 2, "workout_type": "vo2max", "duration_min": 60, "target_tss": 90, "description": "5×5 min VO2max intervals"},
-    {"day_of_week": 3, "workout_type": "easy", "duration_min": 60, "target_tss": 40, "description": "Zone 2 aerobic"},
+    {"day_of_week": 3, "workout_type": "recovery", "duration_min": 60, "target_tss": 40, "description": "Zone 2 aerobic"},
     {"day_of_week": 4, "workout_type": "threshold", "duration_min": 90, "target_tss": 100, "description": "3×20 min threshold"},
     {"day_of_week": 5, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
     {"day_of_week": 6, "workout_type": "endurance", "duration_min": 150, "target_tss": 120, "description": "Long endurance with race-pace effort"},
-    {"day_of_week": 7, "workout_type": "easy", "duration_min": 45, "target_tss": 25, "description": "Active recovery"},
+    {"day_of_week": 7, "workout_type": "recovery", "duration_min": 45, "target_tss": 25, "description": "Active recovery"},
 ]
 
 _RECOVERY_WEEK: list[dict] = [
     {"day_of_week": 1, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
-    {"day_of_week": 2, "workout_type": "easy", "duration_min": 45, "target_tss": 25, "description": "Easy spin"},
-    {"day_of_week": 3, "workout_type": "easy", "duration_min": 60, "target_tss": 35, "description": "Zone 2"},
+    {"day_of_week": 2, "workout_type": "recovery", "duration_min": 45, "target_tss": 25, "description": "Easy spin"},
+    {"day_of_week": 3, "workout_type": "recovery", "duration_min": 60, "target_tss": 35, "description": "Zone 2"},
     {"day_of_week": 4, "workout_type": "tempo", "duration_min": 60, "target_tss": 55, "description": "Moderate tempo"},
     {"day_of_week": 5, "workout_type": "rest", "duration_min": None, "target_tss": None, "description": None},
     {"day_of_week": 6, "workout_type": "endurance", "duration_min": 90, "target_tss": 65, "description": "Shorter long ride"},

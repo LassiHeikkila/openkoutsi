@@ -10,7 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import select
 
-from backend.app.models.orm import Activity, ActivitySource, Athlete, ProviderConnection
+from backend.app.models.team_orm import Activity, ActivitySource, Athlete
+from backend.app.models.registry_orm import ProviderConnection
 from backend.app.services.provider_sync import ensure_fresh_token, sync_provider_activities
 from backend.app.services.providers.base import NormalizedActivity
 
@@ -56,30 +57,29 @@ def _norm(
 
 
 async def _make_athlete(session, user_id: str = "user-1") -> Athlete:
-    athlete = Athlete(user_id=user_id)
+    athlete = Athlete(global_user_id=user_id, ftp_tests=[])
     session.add(athlete)
     await session.commit()
     await session.refresh(athlete)
     return athlete
 
 
-async def _make_connection(
-    session,
+def _make_connection(
     athlete: Athlete,
     provider: str = "strava",
     expires_in: timedelta = timedelta(hours=1),
 ) -> ProviderConnection:
-    conn = ProviderConnection(
-        athlete_id=athlete.id,
-        provider=provider,
-        access_token="access-tok",
-        refresh_token="refresh-tok",
-        token_expires_at=datetime.now(timezone.utc) + expires_in,
-    )
-    session.add(conn)
-    await session.commit()
-    await session.refresh(conn)
+    conn = MagicMock(spec=ProviderConnection)
+    conn.user_id = athlete.global_user_id
+    conn.provider = provider
+    conn.access_token = "access-tok"
+    conn.refresh_token = "refresh-tok"
+    conn.token_expires_at = datetime.now(timezone.utc) + expires_in
     return conn
+
+
+_TEAM_ID = "test-team"
+_ACCESS_TOKEN = "access-tok"
 
 
 # ── ensure_fresh_token ─────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ class TestSyncProviderActivities:
     async def test_imports_new_activity_creates_source(self, session):
         """A new activity creates exactly one Activity + one ActivitySource."""
         athlete = await _make_athlete(session)
-        conn = await _make_connection(session, athlete)
+        conn = _make_connection(athlete)
 
         mock_client = MagicMock()
         mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
@@ -162,7 +162,9 @@ class TestSyncProviderActivities:
         mock_cls = MagicMock(return_value=mock_client)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
-            count, earliest = await sync_provider_activities(athlete, conn, session)
+            count, earliest = await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert count == 1
         assert earliest == date(2024, 6, 1)
@@ -178,7 +180,7 @@ class TestSyncProviderActivities:
     async def test_skips_already_imported_source(self, session):
         """If (provider, external_id) already has an ActivitySource, skip it."""
         athlete = await _make_athlete(session, user_id="user-2")
-        conn = await _make_connection(session, athlete)
+        conn = _make_connection(athlete)
 
         # Pre-seed Activity + ActivitySource
         act = Activity(
@@ -199,7 +201,9 @@ class TestSyncProviderActivities:
         mock_cls = MagicMock(return_value=mock_client)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
-            count, earliest = await sync_provider_activities(athlete, conn, session)
+            count, earliest = await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert count == 0
         assert earliest is None
@@ -208,8 +212,8 @@ class TestSyncProviderActivities:
         """When a second provider syncs the same workout, it adds an ActivitySource
         to the existing Activity instead of creating a new one."""
         athlete = await _make_athlete(session, user_id="user-3")
-        strava_conn = await _make_connection(session, athlete, provider="strava")
-        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
+        strava_conn = _make_connection(athlete, provider="strava")
+        wahoo_conn = _make_connection(athlete, provider="wahoo")
 
         base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
 
@@ -221,7 +225,9 @@ class TestSyncProviderActivities:
         strava_cls = MagicMock(return_value=strava_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
-            await sync_provider_activities(athlete, strava_conn, session)
+            await sync_provider_activities(
+                athlete, strava_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         # Sync Wahoo — same start_time, should attach to existing Activity
         wahoo_mock = MagicMock()
@@ -231,7 +237,9 @@ class TestSyncProviderActivities:
         wahoo_cls = MagicMock(return_value=wahoo_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
-            await sync_provider_activities(athlete, wahoo_conn, session)
+            await sync_provider_activities(
+                athlete, wahoo_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         # Exactly ONE Activity, TWO ActivitySources
         acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
@@ -248,8 +256,8 @@ class TestSyncProviderActivities:
         athlete.ftp = 250
         await session.commit()
 
-        strava_conn = await _make_connection(session, athlete, provider="strava")
-        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
+        strava_conn = _make_connection(athlete, provider="strava")
+        wahoo_conn = _make_connection(athlete, provider="wahoo")
 
         base_time = datetime(2024, 7, 1, 8, 0, tzinfo=timezone.utc)
 
@@ -261,7 +269,9 @@ class TestSyncProviderActivities:
         strava_cls = MagicMock(return_value=strava_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
-            await sync_provider_activities(athlete, strava_conn, session)
+            await sync_provider_activities(
+                athlete, strava_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         # Capture Strava-derived TSS
         acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
@@ -301,7 +311,9 @@ class TestSyncProviderActivities:
             patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
             patch("backend.app.services.provider_sync.encrypt_file"),
         ):
-            wahoo_count, _ = await sync_provider_activities(athlete, wahoo_conn, session)
+            wahoo_count, _ = await sync_provider_activities(
+                athlete, wahoo_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert wahoo_count == 1
 
@@ -318,8 +330,8 @@ class TestSyncProviderActivities:
         athlete.ftp = 250
         await session.commit()
 
-        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
-        strava_conn = await _make_connection(session, athlete, provider="strava")
+        wahoo_conn = _make_connection(athlete, provider="wahoo")
+        strava_conn = _make_connection(athlete, provider="strava")
 
         base_time = datetime(2024, 7, 2, 8, 0, tzinfo=timezone.utc)
 
@@ -352,7 +364,9 @@ class TestSyncProviderActivities:
             patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
             patch("backend.app.services.provider_sync.encrypt_file"),
         ):
-            await sync_provider_activities(athlete, wahoo_conn, session)
+            await sync_provider_activities(
+                athlete, wahoo_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
         assert len(acts) == 1
@@ -366,7 +380,9 @@ class TestSyncProviderActivities:
         strava_cls = MagicMock(return_value=strava_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
-            strava_count, _ = await sync_provider_activities(athlete, strava_conn, session)
+            strava_count, _ = await sync_provider_activities(
+                athlete, strava_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert strava_count == 0  # Strava source added but not counted as a new/updated activity
 
@@ -384,8 +400,8 @@ class TestSyncProviderActivities:
         athlete.ftp = 250
         await session.commit()
 
-        wahoo_conn = await _make_connection(session, athlete, provider="wahoo")
-        strava_conn = await _make_connection(session, athlete, provider="strava")
+        wahoo_conn = _make_connection(athlete, provider="wahoo")
+        strava_conn = _make_connection(athlete, provider="strava")
 
         base_time = datetime(2024, 7, 5, 8, 0, tzinfo=timezone.utc)
 
@@ -397,7 +413,9 @@ class TestSyncProviderActivities:
         wahoo_cls = MagicMock(return_value=wahoo_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}):
-            await sync_provider_activities(athlete, wahoo_conn, session)
+            await sync_provider_activities(
+                athlete, wahoo_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         acts = (await session.execute(select(Activity).where(Activity.athlete_id == athlete.id))).scalars().all()
         assert len(acts) == 1
@@ -411,7 +429,9 @@ class TestSyncProviderActivities:
         strava_cls = MagicMock(return_value=strava_mock)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": strava_cls}):
-            strava_count, _ = await sync_provider_activities(athlete, strava_conn, session)
+            strava_count, _ = await sync_provider_activities(
+                athlete, strava_conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert strava_count == 1  # repopulated
 
@@ -424,7 +444,7 @@ class TestSyncProviderActivities:
 
     async def test_returns_correct_count_and_earliest_date(self, session):
         athlete = await _make_athlete(session, user_id="user-7")
-        conn = await _make_connection(session, athlete)
+        conn = _make_connection(athlete)
 
         activities = [
             _norm(
@@ -440,16 +460,18 @@ class TestSyncProviderActivities:
         mock_cls = MagicMock(return_value=mock_client)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
-            count, earliest = await sync_provider_activities(athlete, conn, session)
+            count, earliest = await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert count == 3
         assert earliest == date(2024, 6, 1)
 
     async def test_stream_data_persisted_with_activity(self, session):
-        from backend.app.models.orm import ActivityStream
+        from backend.app.models.team_orm import ActivityStream
 
         athlete = await _make_athlete(session, user_id="user-8")
-        conn = await _make_connection(session, athlete)
+        conn = _make_connection(athlete)
 
         mock_client = MagicMock()
         mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
@@ -460,7 +482,9 @@ class TestSyncProviderActivities:
         mock_cls = MagicMock(return_value=mock_client)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
-            count, _ = await sync_provider_activities(athlete, conn, session)
+            count, _ = await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert count == 1
 
@@ -476,10 +500,12 @@ class TestSyncProviderActivities:
 
     async def test_unknown_provider_returns_zero(self, session):
         athlete = await _make_athlete(session, user_id="user-9")
-        conn = await _make_connection(session, athlete, provider="unknown")
+        conn = _make_connection(athlete, provider="unknown")
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {}):
-            count, earliest = await sync_provider_activities(athlete, conn, session)
+            count, earliest = await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert count == 0
         assert earliest is None
@@ -487,7 +513,7 @@ class TestSyncProviderActivities:
     async def test_pagination_stops_on_empty_page(self, session):
         """list_activities is called until it returns an empty list."""
         athlete = await _make_athlete(session, user_id="user-10")
-        conn = await _make_connection(session, athlete)
+        conn = _make_connection(athlete)
 
         # Each activity has a distinct start_time so they aren't merged
         t1 = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
@@ -507,7 +533,9 @@ class TestSyncProviderActivities:
         mock_cls = MagicMock(return_value=mock_client)
 
         with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
-            count, _ = await sync_provider_activities(athlete, conn, session)
+            count, _ = await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
 
         assert count == 3
         assert mock_client.list_activities.call_count == 3

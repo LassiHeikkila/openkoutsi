@@ -81,6 +81,10 @@ async def login(
     session: AsyncSession = Depends(get_registry_session),
 ):
     team = await _resolve_team(slug, session)
+    if team.status == "pending":
+        raise HTTPException(status_code=403, detail="Team pending approval")
+    if team.status == "rejected":
+        raise HTTPException(status_code=403, detail="Team access revoked")
 
     result = await session.execute(
         select(User).where(User.username == body.username, User.deleted_at.is_(None))

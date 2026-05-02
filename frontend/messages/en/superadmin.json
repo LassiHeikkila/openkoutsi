@@ -1,0 +1,29 @@
+{
+  "title": "Superadmin",
+  "secretLabel": "Superadmin secret",
+  "secretPlaceholder": "Enter superadmin secret",
+  "unlock": "Unlock",
+  "teamsTitle": "Teams",
+  "noTeams": "No teams found.",
+  "columns": {
+    "name": "Name",
+    "slug": "Slug",
+    "status": "Status",
+    "members": "Members",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "status": {
+    "pending": "Pending",
+    "active": "Active",
+    "rejected": "Rejected"
+  },
+  "approve": "Approve",
+  "delete": "Delete",
+  "deleteConfirmTitle": "Delete team",
+  "deleteConfirmDesc": "This will permanently delete team \"{name}\" and all its data.",
+  "deleteConfirmAction": "Delete",
+  "approveFailed": "Approval failed",
+  "deleteFailed": "Delete failed",
+  "authFailed": "Invalid secret"
+}

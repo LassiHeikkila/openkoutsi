@@ -64,6 +64,28 @@
     "copy": "COPY",
     "copied": "COPIED"
   },
+  "createTeam": {
+    "tabSignIn": "Sign in",
+    "tabCreate": "Create a team",
+    "title": "Create a team",
+    "subtitle": "Set up your team account. Your team will be reviewed before you can log in.",
+    "teamName": "Team name",
+    "teamNamePlaceholder": "Cycling Club",
+    "slug": "Team slug",
+    "slugPlaceholder": "cycling-club",
+    "slugHint": "Used in URLs — lowercase letters, numbers, and hyphens only.",
+    "adminUsername": "Your username",
+    "adminUsernamePlaceholder": "username",
+    "adminDisplayName": "Display name",
+    "adminDisplayNamePlaceholder": "Your name (optional)",
+    "password": "Password",
+    "passwordPlaceholder": "Min 12 chars, 1 uppercase, 1 digit",
+    "submit": "Request team",
+    "submitting": "Creating…",
+    "successTitle": "Request submitted!",
+    "successBody": "Your team is pending approval. You will be able to log in once a superadmin approves it.",
+    "failed": "Failed to create team"
+  },
   "setup": {
     "title": "Welcome to openkoutsi",
     "subtitle": "Create your first team and administrator account to get started.",

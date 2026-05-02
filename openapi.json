@@ -350,6 +350,210 @@
         }
       }
     },
+    "/api/teams": {
+      "post": {
+        "tags": [
+          "signup"
+        ],
+        "summary": "Create Team",
+        "description": "Self-serve team creation. New teams start in 'pending' status and require\nsuperadmin approval before members can log in.",
+        "operationId": "create_team_api_teams_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamSignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSignupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/superadmin/teams": {
+      "get": {
+        "tags": [
+          "superadmin"
+        ],
+        "summary": "List Teams",
+        "operationId": "list_teams_api_superadmin_teams_get",
+        "parameters": [
+          {
+            "name": "x-superadmin-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Superadmin-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SuperadminTeamResponse"
+                  },
+                  "title": "Response List Teams Api Superadmin Teams Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/superadmin/teams/{team_id}/approve": {
+      "post": {
+        "tags": [
+          "superadmin"
+        ],
+        "summary": "Approve Team",
+        "operationId": "approve_team_api_superadmin_teams__team_id__approve_post",
+        "parameters": [
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team Id"
+            }
+          },
+          {
+            "name": "x-superadmin-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Superadmin-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuperadminTeamResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/superadmin/teams/{team_id}": {
+      "delete": {
+        "tags": [
+          "superadmin"
+        ],
+        "summary": "Delete Team",
+        "operationId": "delete_team_api_superadmin_teams__team_id__delete",
+        "parameters": [
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team Id"
+            }
+          },
+          {
+            "name": "x-superadmin-secret",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Superadmin-Secret"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/teams/{slug}/members": {
       "get": {
         "tags": [
@@ -2894,6 +3098,56 @@
         }
       }
     },
+    "/api/public/teams/{team_id}/avatar/{athlete_id}": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "summary": "Get Avatar",
+        "description": "Serve an athlete's avatar image without requiring authentication.\n\nThe team_id + athlete_id pair acts as the opaque reference. No sensitive\ndata is exposed \u2014 only the image file itself is returned.",
+        "operationId": "get_avatar_api_public_teams__team_id__avatar__athlete_id__get",
+        "parameters": [
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Team Id"
+            }
+          },
+          {
+            "name": "athlete_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Athlete Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/version": {
       "get": {
         "summary": "Get Version",
@@ -4298,6 +4552,17 @@
             ],
             "title": "Expires In Days",
             "default": 7
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           }
         },
         "type": "object",
@@ -4315,6 +4580,17 @@
             },
             "type": "array",
             "title": "Roles"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
           },
           "created_by_username": {
             "type": "string",
@@ -4376,6 +4652,7 @@
         "required": [
           "id",
           "roles",
+          "note",
           "created_by_username",
           "used_by_username",
           "expires_at",
@@ -4882,6 +5159,45 @@
         ],
         "title": "SetupStatusResponse"
       },
+      "SuperadminTeamResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "created_at",
+          "member_count"
+        ],
+        "title": "SuperadminTeamResponse"
+      },
       "TeamSettingsPatch": {
         "properties": {
           "llm_base_url": {
@@ -4962,6 +5278,79 @@
           "llm_api_key_set"
         ],
         "title": "TeamSettingsResponse"
+      },
+      "TeamSignupRequest": {
+        "properties": {
+          "team_name": {
+            "type": "string",
+            "title": "Team Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "admin_username": {
+            "type": "string",
+            "title": "Admin Username"
+          },
+          "admin_password": {
+            "type": "string",
+            "title": "Admin Password"
+          },
+          "admin_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team_name",
+          "slug",
+          "admin_username",
+          "admin_password"
+        ],
+        "title": "TeamSignupRequest"
+      },
+      "TeamSignupResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "created_at"
+        ],
+        "title": "TeamSignupResponse"
       },
       "TokenResponse": {
         "properties": {

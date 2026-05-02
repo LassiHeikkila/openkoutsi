@@ -2,41 +2,41 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.auth import create_access_token, create_refresh_token, hash_password
+from backend.app.core.auth import hash_password
 from backend.app.db.registry import get_registry_session
 from backend.app.db.team_session import init_team_db, get_team_session_factory
 from backend.app.models.registry_orm import Team, TeamMembership, User
-from backend.app.schemas.teams import SetupRequest, SetupStatusResponse, TeamResponse
-from backend.app.schemas.auth import TokenResponse
+from backend.app.schemas.teams import TeamSignupRequest, TeamSignupResponse
 
-router = APIRouter(prefix="/setup", tags=["setup"])
-
-
-@router.get("/status", response_model=SetupStatusResponse)
-async def setup_status(session: AsyncSession = Depends(get_registry_session)):
-    result = await session.execute(select(func.count()).select_from(Team))
-    count = result.scalar_one()
-    return SetupStatusResponse(needs_setup=count == 0)
+router = APIRouter(prefix="/teams", tags=["signup"])
 
 
-@router.post("", response_model=TokenResponse, status_code=201)
-async def first_run_setup(
-    body: SetupRequest,
+@router.post("", response_model=TeamSignupResponse, status_code=201)
+async def create_team(
+    body: TeamSignupRequest,
     session: AsyncSession = Depends(get_registry_session),
 ):
-    """Create the first team and admin user. Returns 409 if any team already exists."""
-    existing = await session.execute(select(func.count()).select_from(Team))
-    if existing.scalar_one() > 0:
-        raise HTTPException(status_code=409, detail="Setup already completed")
-
+    """Self-serve team creation. New teams start in 'pending' status and require
+    superadmin approval before members can log in."""
     slug_check = await session.execute(select(Team).where(Team.slug == body.slug))
     if slug_check.scalar_one_or_none() is not None:
         raise HTTPException(status_code=400, detail="Slug already taken")
 
-    team = Team(id=str(uuid.uuid4()), slug=body.slug, name=body.team_name, status="active")
+    username_check = await session.execute(
+        select(User).where(User.username == body.admin_username)
+    )
+    if username_check.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=400, detail="Username already taken")
+
+    team = Team(
+        id=str(uuid.uuid4()),
+        slug=body.slug,
+        name=body.team_name,
+        status="pending",
+    )
     session.add(team)
     await session.flush()
 
@@ -48,16 +48,14 @@ async def first_run_setup(
     session.add(user)
     await session.flush()
 
-    roles = ["administrator", "user"]
     membership = TeamMembership(
         team_id=team.id,
         user_id=user.id,
-        roles=json.dumps(roles),
+        roles=json.dumps(["administrator", "user"]),
     )
     session.add(membership)
     await session.commit()
 
-    # Create the team DB and the admin's athlete profile
     await init_team_db(team.id)
     from backend.app.models.team_orm import Athlete
     async with get_team_session_factory(team.id)() as team_session:
@@ -70,5 +68,10 @@ async def first_run_setup(
         team_session.add(athlete)
         await team_session.commit()
 
-    access_token = create_access_token(user.id, team.id, roles)
-    return TokenResponse(access_token=access_token)
+    return TeamSignupResponse(
+        id=team.id,
+        slug=team.slug,
+        name=team.name,
+        status=team.status,
+        created_at=team.created_at,
+    )

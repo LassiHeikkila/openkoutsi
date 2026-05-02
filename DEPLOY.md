@@ -52,6 +52,11 @@ LLM_MODEL=                         # e.g. llama3.2, gpt-4o-mini
 # Optional: comma-separated list of allowed LLM base URLs teams may choose from.
 # When set, teams must pick from this list. Leave blank to allow any URL.
 LLM_ALLOWED_SERVERS=               # e.g. http://localhost:11434/v1,https://api.openai.com/v1
+
+# Superadmin panel — set this to enable the /superadmin page for approving new teams.
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Leave empty to disable the superadmin endpoints entirely.
+SUPERADMIN_SECRET=
 ```
 
 ### Initialize the database
@@ -64,7 +69,13 @@ uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 ### First-run setup
 
-On a fresh deployment, navigate to the frontend URL. The setup wizard will appear and guide you through creating the first team and administrator account. No teams can be created any other way until setup is complete.
+On a fresh deployment, navigate to the frontend URL. The setup wizard will appear and guide you through creating the first team and administrator account. The first team is automatically set to `active`.
+
+### Creating additional teams
+
+After initial setup, anyone can request a new team from the landing page ("Create a team" tab). New teams are created in `pending` status — members cannot log in until a superadmin approves the team.
+
+To approve or delete pending teams, visit `/superadmin` and enter the `SUPERADMIN_SECRET` configured in your `.env`. The page lists all teams with their status and lets you approve or permanently delete them.
 
 ### Run
 

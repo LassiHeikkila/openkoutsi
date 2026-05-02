@@ -223,6 +223,108 @@
   border-color: var(--accent);
 }
 
+/* Hero tabs */
+.lp .hero-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.lp .hero-tab {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 6px 16px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.lp .hero-tab:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.lp .hero-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Create-team form */
+.lp .ct-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.lp .ct-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lp .ct-label {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+
+.lp .ct-input {
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  outline: none;
+}
+
+.lp .ct-input::placeholder {
+  color: var(--ink-3);
+}
+
+.lp .ct-input:focus {
+  border-color: var(--accent);
+}
+
+.lp .ct-hint {
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.lp .ct-error {
+  font-size: 0.85rem;
+  color: oklch(0.65 0.2 25);
+  margin: 0;
+}
+
+.lp .ct-submit {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.lp .ct-success {
+  max-width: 360px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.lp .ct-success-title {
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+
+.lp .ct-success-body {
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  margin: 0;
+}
+
 /* Hero viz */
 .lp .hero-viz {
   position: relative;

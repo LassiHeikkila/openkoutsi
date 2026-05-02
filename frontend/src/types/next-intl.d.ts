@@ -5,6 +5,7 @@ import en_dashboard from '../../messages/en/dashboard.json'
 import en_activities from '../../messages/en/activities.json'
 import en_app from '../../messages/en/app.json'
 import en_admin from '../../messages/en/admin.json'
+import en_superadmin from '../../messages/en/superadmin.json'
 
 type Messages = {
   common: typeof en_common
@@ -14,6 +15,7 @@ type Messages = {
   activities: typeof en_activities
   app: typeof en_app
   admin: typeof en_admin
+  superadmin: typeof en_superadmin
 }
 
 declare global {

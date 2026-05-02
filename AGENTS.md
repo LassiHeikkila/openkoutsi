@@ -6,6 +6,8 @@ When adding features, add a one-liner to the readme.
 
 Make sure the deployment guide (DEPLOY.md) is kept up to date.
 
+Keep openapi.json up to date by regenerating it after API changes.
+
 ## Testing
 
 Always test the results.

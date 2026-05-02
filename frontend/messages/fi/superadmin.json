@@ -1,0 +1,29 @@
+{
+  "title": "Superylläpito",
+  "secretLabel": "Superylläpidon salaisuus",
+  "secretPlaceholder": "Syötä superylläpidon salaisuus",
+  "unlock": "Avaa",
+  "teamsTitle": "Tiimit",
+  "noTeams": "Tiimejä ei löydy.",
+  "columns": {
+    "name": "Nimi",
+    "slug": "Tunniste",
+    "status": "Tila",
+    "members": "Jäsenet",
+    "created": "Luotu",
+    "actions": "Toiminnot"
+  },
+  "status": {
+    "pending": "Odottaa",
+    "active": "Aktiivinen",
+    "rejected": "Hylätty"
+  },
+  "approve": "Hyväksy",
+  "delete": "Poista",
+  "deleteConfirmTitle": "Poista tiimi",
+  "deleteConfirmDesc": "Tämä poistaa tiimin \"{name}\" ja kaikki sen tiedot pysyvästi.",
+  "deleteConfirmAction": "Poista",
+  "approveFailed": "Hyväksyntä epäonnistui",
+  "deleteFailed": "Poistaminen epäonnistui",
+  "authFailed": "Virheellinen salaisuus"
+}

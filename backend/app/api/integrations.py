@@ -208,6 +208,7 @@ async def sync(
     ctx, _ = ctx_session
     _require_provider(provider)
     await _get_connection(ctx.user_id, provider, registry_session)  # ensure connected
+    await registry_session.close()  # return pool connection before bg task needs its own
     background_tasks.add_task(_bg_provider_sync, ctx.user_id, provider)
     return {"status": "sync started"}
 

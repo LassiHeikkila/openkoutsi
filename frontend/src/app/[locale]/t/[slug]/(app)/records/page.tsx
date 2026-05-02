@@ -1,5 +1,6 @@
 'use client'
 
+import { useParams } from 'next/navigation'
 import { Link } from '@/navigation'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
@@ -26,6 +27,7 @@ function formatDate(iso: string | null): string {
 }
 
 function DistanceMedalCell({ entry, rank }: { entry: DistanceBestEntry | undefined; rank: number }) {
+  const { slug } = useParams<{ slug: string }>()
   const hiddenClass = rank > 1 ? 'hidden sm:table-cell' : ''
   if (!entry) {
     return <td className={`px-3 py-2 text-center text-muted-foreground text-sm ${hiddenClass}`}>—</td>
@@ -33,7 +35,7 @@ function DistanceMedalCell({ entry, rank }: { entry: DistanceBestEntry | undefin
   return (
     <td className={`px-3 py-2 text-center text-sm ${hiddenClass}`}>
       <Link
-        href={`/activities/${entry.activity_id}`}
+        href={`/t/${slug}/activities/${entry.activity_id}`}
         className="hover:underline font-medium tabular-nums"
       >
         {formatTime(entry.time_s)}

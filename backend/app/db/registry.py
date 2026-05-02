@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.app.core.config import settings
@@ -13,9 +13,9 @@ def _make_registry_engine():
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{settings.registry_db_path}",
         echo=False,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=30,
+        pool_size=3,
+        max_overflow=2,
+        connect_args={"timeout": 30},
     )
     event.listen(engine.sync_engine, "connect", _set_wal_mode)
     return engine
@@ -32,8 +32,8 @@ async def get_registry_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_registry_db() -> None:
     """Create all registry tables (idempotent — safe to call on every startup)."""
-    # Ensure models are imported so metadata is populated
     import backend.app.models.registry_orm  # noqa: F401
 
     async with _registry_engine.begin() as conn:
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.run_sync(RegistryBase.metadata.create_all)

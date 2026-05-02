@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.app.core.config import settings
@@ -15,11 +15,12 @@ def _get_team_engine(team_id: str):
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
         echo=False,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=60,
+        pool_size=3,
+        max_overflow=2,
+        # timeout is passed to sqlite3.connect() → reliable busy_timeout in seconds
+        connect_args={"timeout": 30},
     )
-    event.listen(engine.sync_engine, "connect", _set_wal_mode)
+    event.listen(engine.sync_engine, "connect", _set_wal_mode)  # sets WAL mode
     return engine
 
 
@@ -43,4 +44,5 @@ async def init_team_db(team_id: str) -> None:
 
     engine = _get_team_engine(team_id)
     async with engine.begin() as conn:
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.run_sync(TeamBase.metadata.create_all)

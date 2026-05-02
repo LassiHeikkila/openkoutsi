@@ -98,6 +98,11 @@ async def get_current_user(
     )
     if result.scalar_one_or_none() is None:
         raise credentials_exception
+    # Release the pool connection immediately — the user object is no longer
+    # needed, but the dependency will keep the session alive until request end.
+    # Without this, the session holds the registry pool slot while waiting for
+    # the team session, starving concurrent auth checks.
+    await registry_session.close()
 
     roles = payload.get("roles", [])
     if isinstance(roles, str):

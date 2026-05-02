@@ -32,9 +32,9 @@ def _team_engine(db_path):
     eng = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
         echo=False,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=60,
+        pool_size=3,
+        max_overflow=2,
+        connect_args={"timeout": 30},
     )
     event.listen(eng.sync_engine, "connect", _set_wal_mode)
     return eng
@@ -45,9 +45,9 @@ def _registry_engine(db_path):
     eng = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
         echo=False,
-        pool_size=1,
-        max_overflow=0,
-        pool_timeout=30,
+        pool_size=3,
+        max_overflow=2,
+        connect_args={"timeout": 30},
     )
     event.listen(eng.sync_engine, "connect", _set_wal_mode)
     return eng

@@ -15,6 +15,9 @@ def _get_team_engine(team_id: str):
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
         echo=False,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=60,
     )
     event.listen(engine.sync_engine, "connect", _set_wal_mode)
     return engine

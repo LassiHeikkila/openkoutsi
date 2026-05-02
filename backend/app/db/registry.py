@@ -13,6 +13,9 @@ def _make_registry_engine():
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{settings.registry_db_path}",
         echo=False,
+        pool_size=1,
+        max_overflow=0,
+        pool_timeout=30,
     )
     event.listen(engine.sync_engine, "connect", _set_wal_mode)
     return engine

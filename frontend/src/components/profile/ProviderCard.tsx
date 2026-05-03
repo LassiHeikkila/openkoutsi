@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import {
@@ -92,16 +93,33 @@ export function ProviderCard({
           <>
             <span className="inline-block h-2 w-2 rounded-full bg-gray-300" />
             <span className="text-sm text-muted-foreground">{t('profile.provider.notConnected')}</span>
-            <Button
-              size="sm"
-              className="ml-auto"
-              variant={notConfigured ? 'outline' : 'default'}
-              disabled={configured === undefined}
-              aria-disabled={notConfigured}
-              onClick={handleConnectClick}
-            >
-              {t('profile.provider.connectBtn', { name })}
-            </Button>
+            {name === 'Strava' ? (
+              <button
+                className="ml-auto disabled:opacity-50"
+                disabled={configured === undefined}
+                aria-disabled={notConfigured}
+                onClick={handleConnectClick}
+              >
+                <Image
+                  src="/strava/btn_strava_connect_with_orange.png"
+                  alt="Connect with Strava"
+                  width={193}
+                  height={48}
+                  className="h-9 w-auto"
+                />
+              </button>
+            ) : (
+              <Button
+                size="sm"
+                className="ml-auto"
+                variant={notConfigured ? 'outline' : 'default'}
+                disabled={configured === undefined}
+                aria-disabled={notConfigured}
+                onClick={handleConnectClick}
+              >
+                {t('profile.provider.connectBtn', { name })}
+              </Button>
+            )}
           </>
         )}
       </div>

@@ -22,7 +22,10 @@ from typing import TYPE_CHECKING, AsyncIterator
 import httpx
 from sqlalchemy import select
 
+from ..core.config import settings
+from ..db.registry import _RegistrySessionLocal
 from ..db.team_session import get_team_session_factory
+from ..models.registry_orm import Team
 from ..models.team_orm import Activity, Athlete
 
 if TYPE_CHECKING:
@@ -91,11 +94,19 @@ def _build_prompt(activity: Activity, athlete: Athlete) -> str:
     return "\n".join(lines)
 
 
-async def _stream_analysis(activity: Activity, athlete: Athlete) -> AsyncIterator[str]:
+async def _stream_analysis(
+    activity: Activity, athlete: Athlete, team_id: str
+) -> AsyncIterator[str]:
     """Yield text chunks from the LLM via streaming SSE."""
-    app_settings = athlete.app_settings or {}
-    base_url = (app_settings.get("llm_base_url") or "").strip()
-    model = (app_settings.get("llm_model") or "").strip()
+    # Fetch team for LLM config
+    team: Team | None = None
+    async with _RegistrySessionLocal() as reg:
+        result = await reg.execute(select(Team).where(Team.id == team_id))
+        team = result.scalar_one_or_none()
+
+    # Priority: team settings → global env vars
+    base_url = (team.llm_base_url.strip() if team and team.llm_base_url else None) or (settings.llm_base_url or "").strip()
+    model = (team.llm_model.strip() if team and team.llm_model else None) or (settings.llm_model or "").strip()
 
     if not base_url or not model:
         raise ValueError("LLM base URL and model must be configured in Settings → AI / LLM")
@@ -103,15 +114,13 @@ async def _stream_analysis(activity: Activity, athlete: Athlete) -> AsyncIterato
     url = f"{base_url.rstrip('/')}/chat/completions"
     headers: dict[str, str] = {"Content-Type": "application/json"}
 
-    enc_key = app_settings.get("llm_api_key_enc")
-    team_id = getattr(athlete, "_team_id", None)
-    if enc_key and team_id:
+    if team and getattr(team, "llm_api_key_enc", None):
         try:
-            from backend.app.core.file_encryption import decrypt_secret
-            api_key = decrypt_secret(str(enc_key), team_id, athlete.global_user_id)
+            from backend.app.core.file_encryption import decrypt_team_secret
+            api_key = decrypt_team_secret(str(team.llm_api_key_enc), team_id)
             headers["Authorization"] = f"Bearer {api_key}"
         except Exception:
-            log.warning("Could not decrypt LLM API key for athlete %s — proceeding without auth", athlete.id)
+            log.warning("Could not decrypt team LLM API key for team %s — proceeding without auth", team_id)
 
     payload = {
         "model": model,
@@ -162,14 +171,13 @@ async def analyze_activity_bg(activity_id: str, athlete_id: str, team_id: str) -
             select(Athlete).where(Athlete.id == athlete_id)
         )
         athlete = athlete_result.scalar_one()
-        athlete._team_id = team_id  # pass team_id for decrypt_secret in _stream_analysis
 
         buffer: list[str] = []
         last_flush = time.monotonic()
         accumulated = ""
 
         try:
-            async for chunk in _stream_analysis(activity, athlete):
+            async for chunk in _stream_analysis(activity, athlete, team_id):
                 buffer.append(chunk)
                 if time.monotonic() - last_flush >= 0.5:
                     accumulated += "".join(buffer)

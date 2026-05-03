@@ -317,7 +317,7 @@ async def sync_provider_activities(
                     earliest = day
 
             app_cfg = athlete.app_settings or {}
-            if app_cfg.get("auto_analyze") and app_cfg.get("llm_base_url"):
+            if app_cfg.get("auto_analyze"):
                 from backend.app.services.llm_activity_analyzer import (
                     analyze_activity_bg,
                 )

@@ -200,7 +200,7 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
         await recalculate_from(athlete.id, start_date, session)
 
     app_cfg = athlete.app_settings or {}
-    if app_cfg.get("auto_analyze") and app_cfg.get("llm_base_url"):
+    if app_cfg.get("auto_analyze"):
         import asyncio
         from backend.app.services.llm_activity_analyzer import analyze_activity_bg
         activity.analysis_status = "pending"

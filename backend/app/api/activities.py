@@ -63,7 +63,7 @@ async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
 
 def _maybe_auto_analyze(activity_id: str, athlete: Athlete, team_id: str) -> bool:
     app_settings = athlete.app_settings or {}
-    if app_settings.get("auto_analyze") and app_settings.get("llm_base_url"):
+    if app_settings.get("auto_analyze"):
         from backend.app.services.llm_activity_analyzer import analyze_activity_bg
         asyncio.create_task(analyze_activity_bg(activity_id, athlete.id, team_id))
         return True

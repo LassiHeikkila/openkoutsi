@@ -29,6 +29,7 @@ from backend.app.schemas.activities import (
     ActivityDetailResponse,
     ActivityListResponse,
     ActivityResponse,
+    ActivityStreamsResponse,
     ActivityUpdate,
     FrontendAnalysisBody,
     IntervalResponse,
@@ -413,6 +414,27 @@ async def get_activity(
     return ActivityDetailResponse.from_orm_and_streams(
         activity, streams, power_bests, distance_bests, intervals
     )
+
+
+@router.get("/{activity_id}/streams", response_model=ActivityStreamsResponse)
+async def get_activity_streams(
+    activity_id: str,
+    ctx_session=Depends(get_ctx_and_session),
+):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    result = await session.execute(
+        select(Activity).where(Activity.id == activity_id, Activity.athlete_id == athlete.id)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    streams_result = await session.execute(
+        select(ActivityStream).where(ActivityStream.activity_id == activity_id)
+    )
+    streams = {s.stream_type: s.data for s in streams_result.scalars()}
+    return ActivityStreamsResponse(streams=streams)
 
 
 @router.get("/{activity_id}/fit")

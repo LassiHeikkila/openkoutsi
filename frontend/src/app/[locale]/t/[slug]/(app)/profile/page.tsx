@@ -17,7 +17,10 @@ import { ZoneEditor } from '@/components/profile/ZoneEditor'
 import { ProviderCard } from '@/components/profile/ProviderCard'
 import { Switch } from '@/components/ui/switch'
 import { Suspense } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CustomFunctionDialog } from '@/components/activities/CustomFunctionDialog'
+import { getCustomFunctions, CustomFunction } from '@/lib/customFunctions'
+import { useTranslations as useActivityTranslations } from 'next-intl'
 
 // ── Default zone templates ────────────────────────────────────────────────
 
@@ -73,6 +76,7 @@ function ProviderNotice() {
 export default function ProfilePage() {
   const t = useTranslations('app')
   const tCommon = useTranslations('common')
+  const tActivities = useActivityTranslations('activities')
   const { athlete, refreshAthlete } = useAuth()
   const { data: profile, mutate: mutateProfile } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
   const { data: weightLog } = useSWR<WeightLogEntry[]>('/api/athlete/weight-log', fetcher)
@@ -101,6 +105,8 @@ export default function ProfilePage() {
   const [powerZones, setPowerZones] = useState<Zone[]>([])
   const [savingHr, setSavingHr] = useState(false)
   const [savingPower, setSavingPower] = useState(false)
+  const [fnDialogOpen, setFnDialogOpen] = useState(false)
+  const [editingFn, setEditingFn] = useState<CustomFunction | undefined>()
 
   useEffect(() => {
     if (profile) {
@@ -645,6 +651,76 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
+      {/* Custom analysis functions */}
+      {(() => {
+        const customFunctions = getCustomFunctions(profile?.app_settings)
+
+        async function handleDeleteFn(fn: CustomFunction) {
+          try {
+            const currentSettings = (profile?.app_settings ?? {}) as Record<string, unknown>
+            const updated = getCustomFunctions(currentSettings).filter((f) => f.id !== fn.id)
+            await apiFetch('/api/athlete/', {
+              method: 'PUT',
+              body: JSON.stringify({ app_settings: { ...currentSettings, custom_functions: updated } }),
+            })
+            toast({ title: tActivities('detail.signals.deleted') })
+            mutateProfile()
+          } catch {
+            toast({ title: tActivities('detail.signals.deleted'), variant: 'destructive' })
+          }
+        }
+
+        return (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base">{tActivities('detail.signals.customFunctions')}</CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { setEditingFn(undefined); setFnDialogOpen(true) }}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                {tActivities('detail.signals.addFunction')}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {customFunctions.length === 0 && (
+                <p className="text-sm text-muted-foreground">{tActivities('detail.signals.noFunctions')}</p>
+              )}
+              {customFunctions.map((fn) => (
+                <div key={fn.id} className="flex items-center justify-between rounded-md border px-3 py-2 gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{fn.name}</p>
+                    {fn.description && (
+                      <p className="text-xs text-muted-foreground">{fn.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">{tActivities(`detail.signals.functionType.${fn.type}`)}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => { setEditingFn(fn); setFnDialogOpen(true) }}
+                    >
+                      <span className="text-xs">✏</span>
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-destructive"
+                      onClick={() => handleDeleteFn(fn)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )
+      })()}
+
       {/* Data export */}
       <Card>
         <CardHeader>
@@ -659,6 +735,15 @@ export default function ProfilePage() {
           </Button>
         </CardContent>
       </Card>
+
+      <CustomFunctionDialog
+        open={fnDialogOpen}
+        onOpenChange={setFnDialogOpen}
+        existing={editingFn}
+        streams={undefined}
+        athlete={profile ?? null}
+        onSaved={() => { mutateProfile(); setEditingFn(undefined) }}
+      />
     </div>
   )
 }

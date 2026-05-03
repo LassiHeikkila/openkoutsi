@@ -46,10 +46,47 @@
       "heartRate": "Sykevyöhykkeet",
       "power": "Tehovyöhykkeet"
     },
+    "streams": "Harjoitusdatavirrat",
     "powerHr": "Teho ja syke",
     "speedElevation": "Nopeus ja korkeus",
+    "laps": "Kierrokset",
     "powerBests": "Tehoparhaat",
     "distanceBests": "Matkaparhaat",
+    "chart": {
+      "toggleStreams": "Näytä virrat",
+      "fullscreen": "Koko näyttö",
+      "loadingFull": "Ladataan täyttä dataa…",
+      "streamLabels": {
+        "power": "Teho",
+        "heartrate": "Syke",
+        "speed": "Nopeus",
+        "altitude": "Korkeus",
+        "cadence": "Kadenssi"
+      },
+      "rollingAvg": "Liukuva keskiarvo",
+      "rollingAvgWindow": "Ikkuna (s)"
+    },
+    "signals": {
+      "title": "Signaalianalyysi",
+      "totalEnergy": "Kokonaistyö",
+      "normalizedPower": "Normalisoitu teho",
+      "customFunctions": "Mukautetut funktiot",
+      "addFunction": "Lisää funktio",
+      "noFunctions": "Ei mukautettuja funktioita.",
+      "functionType": {
+        "scalar": "Skalaari (yksittäinen arvo)",
+        "stream": "Virta (uusi sarja)"
+      },
+      "sandboxWarning": "Funktiot suoritetaan selaimessasi ja voivat käyttää selaimen rajapintoja.",
+      "test": "Testaa",
+      "testResult": "Tulos",
+      "saved": "Funktio tallennettu",
+      "deleted": "Funktio poistettu",
+      "editFunction": "Muokkaa funktiota",
+      "deleteFunction": "Poista",
+      "showOverlay": "Näytä kaaviossa",
+      "hideOverlay": "Piilota kaaviosta"
+    },
     "intervals": {
       "title": "Intervallit",
       "duration": "Kesto",

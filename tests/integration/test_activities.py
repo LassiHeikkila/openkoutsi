@@ -12,6 +12,7 @@ import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 
+from backend.app.core.auth import create_access_token
 from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 
 TESTDATA = Path(__file__).parent.parent.parent / "testdata"
@@ -474,3 +475,40 @@ class TestRenameActivity:
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.patch("/api/activities/some-id", json={"name": "x"})
         assert resp.status_code == 401
+
+
+# ── Activity raw streams ───────────────────────────────────────────────────────
+
+class TestGetActivityStreams:
+    async def test_returns_streams_key(self, client, auth_headers):
+        create_resp = await client.post(
+            "/api/activities/",
+            json={"sport_type": "Ride", "start_time": "2025-01-01T10:00:00Z", "duration_s": 3600},
+            headers=auth_headers,
+        )
+        activity_id = create_resp.json()["id"]
+        resp = await client.get(f"/api/activities/{activity_id}/streams", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "streams" in data
+        # manual activity has no streams
+        assert isinstance(data["streams"], dict)
+
+    async def test_nonexistent_activity_returns_404(self, client, auth_headers):
+        resp = await client.get("/api/activities/nonexistent-id/streams", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/activities/some-id/streams")
+        assert resp.status_code == 401
+
+    async def test_returns_empty_streams_for_manual_activity(self, client, auth_headers):
+        create_resp = await client.post(
+            "/api/activities/",
+            json={"sport_type": "Ride", "start_time": "2025-02-01T10:00:00Z", "duration_s": 1800},
+            headers=auth_headers,
+        )
+        activity_id = create_resp.json()["id"]
+        resp = await client.get(f"/api/activities/{activity_id}/streams", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["streams"] == {}

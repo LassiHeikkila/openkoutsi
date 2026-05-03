@@ -46,10 +46,47 @@
       "heartRate": "Heart Rate",
       "power": "Power"
     },
+    "streams": "Activity Streams",
     "powerHr": "Power & Heart Rate",
     "speedElevation": "Speed & Elevation",
+    "laps": "Laps",
     "powerBests": "Power Bests",
     "distanceBests": "Distance Bests",
+    "chart": {
+      "toggleStreams": "Show streams",
+      "fullscreen": "Full screen",
+      "loadingFull": "Loading full data…",
+      "streamLabels": {
+        "power": "Power",
+        "heartrate": "Heart Rate",
+        "speed": "Speed",
+        "altitude": "Elevation",
+        "cadence": "Cadence"
+      },
+      "rollingAvg": "Rolling avg",
+      "rollingAvgWindow": "Window (s)"
+    },
+    "signals": {
+      "title": "Signal Analysis",
+      "totalEnergy": "Total Work",
+      "normalizedPower": "Normalized Power",
+      "customFunctions": "Custom Functions",
+      "addFunction": "Add function",
+      "noFunctions": "No custom functions yet.",
+      "functionType": {
+        "scalar": "Scalar (single value)",
+        "stream": "Stream (new series)"
+      },
+      "sandboxWarning": "Functions run in your browser and can access browser APIs.",
+      "test": "Test",
+      "testResult": "Result",
+      "saved": "Function saved",
+      "deleted": "Function deleted",
+      "editFunction": "Edit function",
+      "deleteFunction": "Delete",
+      "showOverlay": "Show on chart",
+      "hideOverlay": "Hide from chart"
+    },
     "intervals": {
       "title": "Intervals",
       "duration": "Duration",

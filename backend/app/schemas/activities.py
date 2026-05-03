@@ -101,6 +101,10 @@ class ActivityListResponse(BaseModel):
     page_size: int
 
 
+class ActivityStreamsResponse(BaseModel):
+    streams: dict[str, list[Any]] = {}
+
+
 class ActivityDetailResponse(ActivityResponse):
     streams: dict[str, list[Any]] = {}
     power_bests: dict[int, float] = {}

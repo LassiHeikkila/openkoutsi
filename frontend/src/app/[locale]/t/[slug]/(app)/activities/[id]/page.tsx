@@ -11,8 +11,9 @@ import { getLlmConfig, streamAnalysis } from '@/lib/llm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { StreamChart } from '@/components/charts/StreamChart'
-import { SpeedElevationChart } from '@/components/charts/SpeedElevationChart'
+import { CombinedStreamChart, OverlayStream } from '@/components/charts/CombinedStreamChart'
+import { FullscreenStreamDialog } from '@/components/charts/FullscreenStreamDialog'
+import { SignalProcessingPanel } from '@/components/activities/SignalProcessingPanel'
 import { ZoneBar, toZoneEntries } from '@/components/charts/ZoneBar'
 import {
   AlertDialog,
@@ -30,7 +31,7 @@ import { SourceBadge } from '@/components/activities/SourceBadge'
 import { WorkoutCategoryBadge } from '@/components/activities/WorkoutCategoryBadge'
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR, formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
-import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 interface Props {
@@ -60,6 +61,10 @@ export default function ActivityDetailPage({ params }: Props) {
   const { data: athlete } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
 
   const [reprocessing, setReprocessing] = useState(false)
+  const [overlayStreams, setOverlayStreams] = useState<OverlayStream[]>([])
+  const [intervalsOpen, setIntervalsOpen] = useState(false)
+  const [powerBestsOpen, setPowerBestsOpen] = useState(false)
+  const [distanceBestsOpen, setDistanceBestsOpen] = useState(false)
 
   async function handleReprocessIntervals() {
     setReprocessing(true)
@@ -320,15 +325,6 @@ export default function ActivityDetailPage({ params }: Props) {
         ))}
       </div>
 
-      {/* Intervals */}
-      {activity.intervals?.length > 0 && (
-        <Card>
-          <CardContent className="pt-4">
-            <IntervalsTable intervals={activity.intervals} />
-          </CardContent>
-        </Card>
-      )}
-
       {/* Zone breakdown — HR and power side by side */}
       {(zonesData?.hr || zonesData?.power) && (
         <Card>
@@ -348,88 +344,127 @@ export default function ActivityDetailPage({ params }: Props) {
         </Card>
       )}
 
-      {/* Power/HR stream */}
-      {(activity.streams?.power || activity.streams?.heartrate) && (
+      {/* Combined stream chart */}
+      {activity.streams && Object.keys(activity.streams).length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t('detail.powerHr')}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-base">{t('detail.streams')}</CardTitle>
+            <FullscreenStreamDialog
+              activityId={id}
+              streams={activity.streams}
+              intervals={activity.intervals}
+              overlayStreams={overlayStreams}
+            />
           </CardHeader>
           <CardContent>
-            <StreamChart streams={activity.streams} intervals={activity.intervals} />
+            <CombinedStreamChart
+              streams={activity.streams}
+              intervals={activity.intervals}
+              overlayStreams={overlayStreams}
+            />
           </CardContent>
         </Card>
       )}
 
-      {/* Speed & elevation stream */}
-      {(activity.streams?.speed || activity.streams?.altitude) && (
+      {/* Signal processing panel */}
+      {activity.streams && Object.keys(activity.streams).length > 0 && (
+        <SignalProcessingPanel
+          streams={activity.streams}
+          activityId={id}
+          athlete={athlete ?? null}
+          overlayStreams={overlayStreams}
+          onOverlayStreamsChange={setOverlayStreams}
+        />
+      )}
+
+      {/* Intervals/laps */}
+      {activity.intervals?.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t('detail.speedElevation')}</CardTitle>
+          <CardHeader
+            className="flex flex-row items-center justify-between pb-2 cursor-pointer select-none"
+            onClick={() => setIntervalsOpen((v) => !v)}
+          >
+            <CardTitle className="text-base">{t('detail.laps')}</CardTitle>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${intervalsOpen ? 'rotate-180' : ''}`} />
           </CardHeader>
-          <CardContent>
-            <SpeedElevationChart streams={activity.streams} intervals={activity.intervals} />
-          </CardContent>
+          {intervalsOpen && (
+            <CardContent className="pt-0">
+              <IntervalsTable intervals={activity.intervals} />
+            </CardContent>
+          )}
         </Card>
       )}
 
       {/* Power bests */}
       {Object.keys(activity.power_bests ?? {}).length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader
+            className="flex flex-row items-center justify-between pb-2 cursor-pointer select-none"
+            onClick={() => setPowerBestsOpen((v) => !v)}
+          >
             <CardTitle className="text-base">{t('detail.powerBests')}</CardTitle>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${powerBestsOpen ? 'rotate-180' : ''}`} />
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {Object.entries(activity.power_bests)
-                .map(([d, w]) => [Number(d), w] as [number, number])
-                .sort((a, b) => a[0] - b[0])
-                .map(([duration_s, power_w]) => (
-                  <div
-                    key={duration_s}
-                    className="flex flex-col items-center py-3 px-2 border-b border-r last:border-r-0 hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {formatPeriod(duration_s)}
-                    </span>
-                    <span className="font-semibold text-sm mt-0.5 tabular-nums">
-                      {Math.round(power_w)} W
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
+          {powerBestsOpen && (
+            <CardContent className="p-0">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {Object.entries(activity.power_bests)
+                  .map(([d, w]) => [Number(d), w] as [number, number])
+                  .sort((a, b) => a[0] - b[0])
+                  .map(([duration_s, power_w]) => (
+                    <div
+                      key={duration_s}
+                      className="flex flex-col items-center py-3 px-2 border-b border-r last:border-r-0 hover:bg-muted/30 transition-colors"
+                    >
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {formatPeriod(duration_s)}
+                      </span>
+                      <span className="font-semibold text-sm mt-0.5 tabular-nums">
+                        {Math.round(power_w)} W
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
 
       {/* Distance bests */}
       {Object.keys(activity.distance_bests ?? {}).length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader
+            className="flex flex-row items-center justify-between pb-2 cursor-pointer select-none"
+            onClick={() => setDistanceBestsOpen((v) => !v)}
+          >
             <CardTitle className="text-base">{t('detail.distanceBests')}</CardTitle>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${distanceBestsOpen ? 'rotate-180' : ''}`} />
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {Object.entries(activity.distance_bests)
-                .map(([d, t]) => [Number(d), t] as [number, number])
-                .sort((a, b) => a[0] - b[0])
-                .map(([distance_m, time_s]) => (
-                  <div
-                    key={distance_m}
-                    className="flex flex-col items-center py-3 px-2 border-b border-r last:border-r-0 hover:bg-muted/30 transition-colors"
-                  >
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {formatDistanceLabel(distance_m)}
-                    </span>
-                    <span className="font-semibold text-sm mt-0.5 tabular-nums">
-                      {formatTime(time_s)}
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      ({formatSpeedKmh(distance_m, time_s)})
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
+          {distanceBestsOpen && (
+            <CardContent className="p-0">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                {Object.entries(activity.distance_bests)
+                  .map(([d, t]) => [Number(d), t] as [number, number])
+                  .sort((a, b) => a[0] - b[0])
+                  .map(([distance_m, time_s]) => (
+                    <div
+                      key={distance_m}
+                      className="flex flex-col items-center py-3 px-2 border-b border-r last:border-r-0 hover:bg-muted/30 transition-colors"
+                    >
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {formatDistanceLabel(distance_m)}
+                      </span>
+                      <span className="font-semibold text-sm mt-0.5 tabular-nums">
+                        {formatTime(time_s)}
+                      </span>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        ({formatSpeedKmh(distance_m, time_s)})
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
 

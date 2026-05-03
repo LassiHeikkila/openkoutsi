@@ -5,8 +5,6 @@
  * Strava API Terms of Service (section 2.3 — "Strava Attribution").
  */
 
-import Image from 'next/image'
-
 interface Props {
   sources: string[]
   className?: string
@@ -26,12 +24,11 @@ function SingleBadge({ source, className = '' }: { source: string; className?: s
   if (source === 'strava') {
     return (
       <span className={`inline-flex items-center ${className}`}>
-        <Image
-          src="/strava/api_logo_pwrdBy_strava_horiz_orange.png"
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/strava/api_logo_pwrdBy_strava_horiz_orange.svg"
           alt="Powered by Strava"
-          width={96}
-          height={24}
-          className="h-5 w-auto"
+          className="h-4 w-auto"
         />
       </span>
     )

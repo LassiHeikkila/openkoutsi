@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import {
@@ -100,11 +99,10 @@ export function ProviderCard({
                 aria-disabled={notConfigured}
                 onClick={handleConnectClick}
               >
-                <Image
-                  src="/strava/btn_strava_connect_with_orange.png"
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/strava/btn_strava_connect_with_orange.svg"
                   alt="Connect with Strava"
-                  width={193}
-                  height={48}
                   className="h-9 w-auto"
                 />
               </button>

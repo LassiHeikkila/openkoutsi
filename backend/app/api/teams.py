@@ -272,9 +272,9 @@ async def list_invitations(
             id=inv.id,
             roles=json.loads(inv.roles),
             note=inv.note,
-            created_by_username=users_by_id[inv.created_by_user_id].username,
+            created_by_username=users_by_id[inv.created_by_user_id].username if inv.created_by_user_id in users_by_id else "(deleted)",
             used_by_username=(
-                users_by_id[inv.used_by_user_id].username if inv.used_by_user_id else None
+                users_by_id[inv.used_by_user_id].username if inv.used_by_user_id and inv.used_by_user_id in users_by_id else None
             ),
             expires_at=inv.expires_at,
             used_at=inv.used_at,

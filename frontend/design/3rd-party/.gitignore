@@ -1,0 +1,4 @@
+# Don't include contents
+# whatever is actually needed will be copied to frontend/public/
+
+*

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { apiFetch, apiDownload, fetcher } from '@/lib/api'
 import type { AthleteProfile, WeightLogEntry, Zone } from '@/lib/types'
@@ -16,6 +16,7 @@ import { toast } from '@/components/ui/use-toast'
 import { ZoneEditor } from '@/components/profile/ZoneEditor'
 import { ProviderCard } from '@/components/profile/ProviderCard'
 import { Switch } from '@/components/ui/switch'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Suspense } from 'react'
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { CustomFunctionDialog } from '@/components/activities/CustomFunctionDialog'
@@ -77,7 +78,8 @@ export default function ProfilePage() {
   const t = useTranslations('app')
   const tCommon = useTranslations('common')
   const tActivities = useActivityTranslations('activities')
-  const { athlete, refreshAthlete } = useAuth()
+  const { athlete, refreshAthlete, logout, teamSlug } = useAuth()
+  const router = useRouter()
   const { data: profile, mutate: mutateProfile } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
   const { data: weightLog } = useSWR<WeightLogEntry[]>('/api/athlete/weight-log', fetcher)
   const { data: availableProviders } = useSWR<{ available: string[] }>('/api/integrations/available', fetcher)
@@ -107,6 +109,9 @@ export default function ProfilePage() {
   const [savingPower, setSavingPower] = useState(false)
   const [fnDialogOpen, setFnDialogOpen] = useState(false)
   const [editingFn, setEditingFn] = useState<CustomFunction | undefined>()
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (profile) {
@@ -230,6 +235,26 @@ export default function ProfilePage() {
         description: err instanceof Error ? err.message : tCommon('unknownError'),
         variant: 'destructive',
       })
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    try {
+      await apiFetch(`/api/teams/${teamSlug}/auth/account`, {
+        method: 'DELETE',
+        body: JSON.stringify({ password: deletePassword }),
+      })
+      logout()
+      router.push('/')
+    } catch (err) {
+      toast({
+        title: t('profile.deleteAccountFailed'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -735,6 +760,49 @@ export default function ProfilePage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Delete account */}
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-base text-destructive">{t('profile.deleteAccount')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            {t('profile.deleteAccountDesc')}
+          </p>
+          <Button variant="destructive" size="sm" onClick={() => { setDeletePassword(''); setDeleteDialogOpen(true) }}>
+            {t('profile.deleteAccountBtn')}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('profile.deleteAccountDialogTitle')}</DialogTitle>
+            <DialogDescription>{t('profile.deleteAccountDialogDesc')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="delete-password">{t('profile.deleteAccountPasswordLabel')}</Label>
+            <Input
+              id="delete-password"
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              placeholder={t('profile.deleteAccountPasswordPlaceholder')}
+              onKeyDown={(e) => { if (e.key === 'Enter' && deletePassword) handleDeleteAccount() }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              {tCommon('cancel')}
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAccount} disabled={!deletePassword || deleting}>
+              {deleting ? t('profile.deleteAccountDeleting') : t('profile.deleteAccountConfirmBtn')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CustomFunctionDialog
         open={fnDialogOpen}

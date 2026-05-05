@@ -35,6 +35,10 @@ class AdminResetTokenRequest(BaseModel):
     username: str
 
 
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str

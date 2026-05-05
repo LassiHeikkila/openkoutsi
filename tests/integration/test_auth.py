@@ -10,7 +10,7 @@ import secrets
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -367,11 +367,87 @@ class TestLogout:
 # ── /account (DELETE) ─────────────────────────────────────────────────────────
 
 
+@contextmanager
+def _mock_delete_account_team_db():
+    """Mock get_team_session_factory for delete account tests."""
+    from unittest.mock import MagicMock
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.execute = AsyncMock(return_value=AsyncMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+    class _TeamCM:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return mock_session
+
+        async def __aexit__(self, *args):
+            pass
+
+    with patch("backend.app.api.auth.get_team_session_factory", return_value=_TeamCM()):
+        yield
+
+
+def _delete_account(client, headers=None, password=_GOOD_PW):
+    """httpx.delete() doesn't accept a body; use client.request() instead."""
+    h = {"Content-Type": "application/json", **(headers or {})}
+    return client.request("DELETE", f"{_PREFIX}/account", content=json.dumps({"password": password}), headers=h)
+
+
 class TestDeleteAccount:
     async def test_delete_account_returns_204(self, client, auth_headers):
-        resp = await client.delete(f"{_PREFIX}/account", headers=auth_headers)
+        with _mock_delete_account_team_db():
+            resp = await _delete_account(client, auth_headers)
         assert resp.status_code == 204
 
-    async def test_unauthenticated_delete_returns_401(self, client):
-        resp = await client.delete(f"{_PREFIX}/account")
+    async def test_wrong_password_returns_401(self, client, auth_headers):
+        with _mock_delete_account_team_db():
+            resp = await _delete_account(client, auth_headers, password="WrongPassword99")
         assert resp.status_code == 401
+
+    async def test_missing_password_returns_422(self, client, auth_headers):
+        h = {"Content-Type": "application/json", **auth_headers}
+        resp = await client.request("DELETE", f"{_PREFIX}/account", content=json.dumps({}), headers=h)
+        assert resp.status_code == 422
+
+    async def test_unauthenticated_delete_returns_401(self, client):
+        resp = await _delete_account(client)
+        assert resp.status_code == 401
+
+    async def test_deleted_user_removed_from_registry(self, client, auth_headers, registry_session):
+        from backend.app.models.registry_orm import User
+        from sqlalchemy import select
+
+        with _mock_delete_account_team_db():
+            resp = await _delete_account(client, auth_headers)
+        assert resp.status_code == 204
+
+        result = await registry_session.execute(
+            select(User).where(User.id == _TEST_USER_ID)
+        )
+        assert result.scalar_one_or_none() is None
+
+    async def test_delete_revokes_provider_connections(self, client, auth_headers, registry_session):
+        from backend.app.models.registry_orm import ProviderConnection
+
+        conn = ProviderConnection(
+            user_id=_TEST_USER_ID,
+            provider="strava",
+            provider_athlete_id="12345",
+            access_token="tok",
+            refresh_token="ref",
+            token_expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+            scopes="read",
+        )
+        registry_session.add(conn)
+        await registry_session.commit()
+
+        mock_deauth = AsyncMock()
+        with (
+            _mock_delete_account_team_db(),
+            patch("backend.app.api.auth.PROVIDERS", {"strava": AsyncMock(deauthorize=mock_deauth)}),
+        ):
+            resp = await _delete_account(client, auth_headers)
+        assert resp.status_code == 204
+        mock_deauth.assert_awaited_once_with("tok")

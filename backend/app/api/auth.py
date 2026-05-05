@@ -1,8 +1,10 @@
 import hashlib
 import json
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from jose import JWTError
@@ -25,16 +27,22 @@ from backend.app.db.team_session import init_team_db, get_team_session_factory
 from backend.app.models.registry_orm import (
     Invitation,
     PasswordResetToken,
+    ProviderConnection,
     Team,
     TeamMembership,
     User,
 )
+from backend.app.models.team_orm import Athlete
 from backend.app.schemas.auth import (
+    DeleteAccountRequest,
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
 )
+from backend.app.services.providers.registry import PROVIDERS
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/teams/{slug}/auth", tags=["auth"])
 
@@ -244,15 +252,57 @@ async def logout(slug: str, response: Response):
 @router.delete("/account", status_code=204)
 async def delete_account(
     slug: str,
+    body: DeleteAccountRequest,
     response: Response,
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    result = await session.execute(select(User).where(User.id == ctx.user_id))
+    result = await session.execute(
+        select(User).where(User.id == ctx.user_id, User.deleted_at.is_(None))
+    )
     user = result.scalar_one_or_none()
-    if user:
-        user.deleted_at = datetime.now(timezone.utc)
-        await session.commit()
+    if user is None or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    # Revoke all provider connections (best-effort)
+    conn_result = await session.execute(
+        select(ProviderConnection).where(ProviderConnection.user_id == ctx.user_id)
+    )
+    for conn in conn_result.scalars().all():
+        if conn.access_token and conn.provider in PROVIDERS:
+            try:
+                await PROVIDERS[conn.provider].deauthorize(conn.access_token)  # type: ignore[call-arg]
+            except Exception:
+                pass
+
+    # Delete athlete data from every team the user belongs to
+    mb_result = await session.execute(
+        select(TeamMembership).where(TeamMembership.user_id == ctx.user_id)
+    )
+    for membership in mb_result.scalars().all():
+        try:
+            async with get_team_session_factory(membership.team_id)() as team_session:
+                athlete_result = await team_session.execute(
+                    select(Athlete).where(Athlete.global_user_id == ctx.user_id)
+                )
+                athlete = athlete_result.scalar_one_or_none()
+                if athlete is None:
+                    continue
+                if athlete.avatar_path:
+                    Path(athlete.avatar_path).unlink(missing_ok=True)
+                await team_session.delete(athlete)
+                await team_session.commit()
+        except Exception:
+            log.exception(
+                "Failed to delete athlete data for user %s in team %s",
+                ctx.user_id,
+                membership.team_id,
+            )
+
+    # Hard-delete the user; cascades to memberships, provider connections, reset tokens
+    await session.delete(user)
+    await session.commit()
+
     _clear_refresh_cookie(response, slug)
 
 

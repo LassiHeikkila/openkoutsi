@@ -258,6 +258,12 @@ export default function RootPage() {
               <div className="feat-num">{t('features.03.num')}</div>
               <h3>{t('features.03.title')}</h3>
               <p>{t('features.03.body')}</p>
+              <div className="feat-logos">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/strava/api_logo_cptblWith_strava_stack_white.svg" alt="Compatible with Strava" className="feat-logo-strava" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/wahoo/wahoo_logo.png" alt="Wahoo" className="feat-logo-wahoo" />
+              </div>
             </div>
             <div className="feat" style={{ gridColumn: 'span 3' }}>
               <div className="feat-num">{t('features.04.num')}</div>

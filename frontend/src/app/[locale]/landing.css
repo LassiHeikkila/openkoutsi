@@ -435,6 +435,25 @@
   margin: 0;
 }
 
+.lp .feat-logos {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.lp .feat-logo-strava {
+  height: 40px;
+  width: auto;
+}
+
+.lp .feat-logo-wahoo {
+  height: 60px;
+  width: auto;
+  filter: invert(1);
+  opacity: 0.85;
+}
+
 /* SELF-HOST */
 .lp .selfhost {
   padding: calc(80px * var(--density)) 0;

@@ -3,6 +3,7 @@
  *
  * Strava-sourced activities must be visually attributed to Strava per the
  * Strava API Terms of Service (section 2.3 — "Strava Attribution").
+ * The orange badge (#FC4C02) uses Strava's official brand colour.
  */
 
 interface Props {
@@ -11,29 +12,19 @@ interface Props {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
+  strava: 'Strava',
   wahoo: 'Wahoo',
   upload: 'FIT upload',
   manual: 'Manual',
 }
 
+// Brand colours for providers that require visual attribution per their ToS
 const BRANDED: Record<string, { bg: string; text: string }> = {
-  wahoo: { bg: '#FFD200', text: '#111' },
+  strava: { bg: '#FC4C02', text: 'white' },   // Strava API ToS §2.3
+  wahoo:  { bg: '#FFD200', text: '#111'   },   // Wahoo brand yellow
 }
 
 function SingleBadge({ source, className = '' }: { source: string; className?: string }) {
-  if (source === 'strava') {
-    return (
-      <span className={`inline-flex items-center ${className}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/strava/api_logo_pwrdBy_strava_horiz_orange.svg"
-          alt="Powered by Strava"
-          className="h-4 w-auto"
-        />
-      </span>
-    )
-  }
-
   const label = SOURCE_LABELS[source] ?? source
   const brand = BRANDED[source]
 

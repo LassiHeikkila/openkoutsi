@@ -16,6 +16,14 @@
   "ftpValue": "{value} W",
   "fitnessHistory": "Fitness history",
   "weeklyTss": "Weekly TSS",
+  "weeklyTssActual": "Actual TSS",
+  "weeklyTssPlanned": "Planned TSS",
+  "calendar": {
+    "title": "Activity Calendar",
+    "noActivities": "No activities this month",
+    "loading": "Loading activities…",
+    "dayNames": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+  },
   "noHistory": "No data yet \u2014 upload activities to start tracking",
   "recentActivities": "Recent activities",
   "noActivities": "No activities yet",

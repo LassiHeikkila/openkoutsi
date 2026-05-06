@@ -5,12 +5,13 @@ import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/auth'
 import { fetcher, apiFetch } from '@/lib/api'
-import type { FitnessPoint, FitnessCurrent, Activity } from '@/lib/types'
+import type { FitnessPoint, FitnessCurrent, TrainingPlan } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FitnessChart } from '@/components/charts/FitnessChart'
 import { WeeklyTssBar } from '@/components/charts/WeeklyTssBar'
-import { ActivityCard } from '@/components/activities/ActivityCard'
+import { ActivityCalendar } from '@/components/activities/ActivityCalendar'
+import { aggregatePlannedTssByWeek } from '@/lib/planUtils'
 import { toast } from '@/components/ui/use-toast'
 import { RefreshCw, HelpCircle } from 'lucide-react'
 import {
@@ -96,6 +97,8 @@ export default function DashboardPage() {
     `/api/metrics/fitness?days=${days}`,
     fetcher,
   )
+  const { data: plans } = useSWR<TrainingPlan[]>('/api/plans/', fetcher)
+  const plannedByWeek = plans ? aggregatePlannedTssByWeek(plans) : undefined
 
   async function handleRecalculate() {
     setRecalculating(true)
@@ -131,11 +134,6 @@ export default function DashboardPage() {
       setRecalculating(false)
     }
   }
-  const { data: recentActivities } = useSWR<{ items: Activity[]; total: number }>(
-    '/api/activities/?page=1&page_size=5',
-    fetcher,
-  )
-
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="flex items-start justify-between">
@@ -216,23 +214,13 @@ export default function DashboardPage() {
             <CardTitle className="text-base">{t('weeklyTss')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <WeeklyTssBar data={history} weeks={Math.min(Math.ceil(days / 7), 52)} />
+            <WeeklyTssBar data={history} weeks={Math.min(Math.ceil(days / 7), 52)} plannedByWeek={plannedByWeek} />
           </CardContent>
         </Card>
       )}
 
-      {/* Recent activities */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">{t('recentActivities')}</h2>
-        <div className="space-y-2">
-          {recentActivities?.items.map((a) => (
-            <ActivityCard key={a.id} activity={a} />
-          ))}
-          {recentActivities?.items.length === 0 && (
-            <p className="text-sm text-muted-foreground">{t('noActivities')}</p>
-          )}
-        </div>
-      </div>
+      {/* Activity calendar */}
+      <ActivityCalendar />
     </div>
   )
 }

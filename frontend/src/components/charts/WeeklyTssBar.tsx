@@ -1,15 +1,19 @@
 'use client'
 
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
+import { useTranslations } from 'next-intl'
 import type { FitnessPoint } from '@/lib/types'
 import { format, eachWeekOfInterval, subWeeks } from 'date-fns'
 
 interface Props {
   data: FitnessPoint[]
   weeks?: number
+  plannedByWeek?: Map<string, number>
 }
 
-export function WeeklyTssBar({ data, weeks = 12 }: Props) {
+export function WeeklyTssBar({ data, weeks = 12, plannedByWeek }: Props) {
+  const t = useTranslations('dashboard')
+
   // Aggregate daily_tss into weekly buckets
   const now = new Date()
   const start = subWeeks(now, weeks)
@@ -25,7 +29,12 @@ export function WeeklyTssBar({ data, weeks = 12 }: Props) {
       const key = d.toISOString().slice(0, 10)
       total += byDate.get(key) ?? 0
     }
-    return { week: format(weekStart, 'MMM d'), tss: Math.round(total) }
+    const wKey = weekStart.toISOString().slice(0, 10)
+    return {
+      week: format(weekStart, 'MMM d'),
+      tss: Math.round(total),
+      ...(plannedByWeek ? { planned: plannedByWeek.get(wKey) ?? 0 } : {}),
+    }
   })
 
   // Show fewer x-axis labels when there are many bars
@@ -37,7 +46,11 @@ export function WeeklyTssBar({ data, weeks = 12 }: Props) {
         <XAxis dataKey="week" tick={{ fontSize: 11 }} tickLine={false} interval={tickInterval} />
         <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-        <Bar dataKey="tss" name="Weekly TSS" fill="hsl(var(--primary))" radius={3} />
+        {plannedByWeek && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        <Bar dataKey="tss" name={t('weeklyTssActual')} fill="hsl(var(--primary))" radius={3} />
+        {plannedByWeek && (
+          <Bar dataKey="planned" name={t('weeklyTssPlanned')} fill="hsl(var(--muted-foreground))" radius={3} opacity={0.5} />
+        )}
       </BarChart>
     </ResponsiveContainer>
   )

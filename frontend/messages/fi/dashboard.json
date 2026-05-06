@@ -16,6 +16,14 @@
   "ftpValue": "{value} W",
   "fitnessHistory": "Kuntohistoria",
   "weeklyTss": "Viikottainen TSS",
+  "weeklyTssActual": "Toteutunut TSS",
+  "weeklyTssPlanned": "Suunniteltu TSS",
+  "calendar": {
+    "title": "Harjoituskalenteri",
+    "noActivities": "Ei harjoituksia tässä kuussa",
+    "loading": "Ladataan harjoituksia…",
+    "dayNames": ["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"]
+  },
   "noHistory": "Ei dataa viel\u00e4 \u2014 lataa harjoituksia aloittaaksesi seurannan",
   "recentActivities": "Viimeisimm\u00e4t harjoitukset",
   "noActivities": "Ei harjoituksia viel\u00e4",

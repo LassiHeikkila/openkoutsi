@@ -14,18 +14,28 @@ import {
   groupActivitiesByDate,
   monthBounds,
   offsetMonth,
-  parseMonthInput,
-  formatMonthInput,
 } from '@/lib/calendarUtils'
 import { formatDuration, formatDistance } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 function ActivityListRow({ activity, slug }: { activity: Activity; slug: string }) {
   const parts: string[] = [formatDuration(activity.duration_s)]
@@ -78,12 +88,6 @@ export function ActivityCalendar() {
     setMonth(next.month)
   }
 
-  function handleMonthInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const { year: y, month: m } = parseMonthInput(e.target.value)
-    setYear(y)
-    setMonth(m)
-  }
-
   function handleDayClick(day: Date) {
     const key = format(day, 'yyyy-MM-dd')
     if (!byDate.has(key)) return
@@ -98,17 +102,34 @@ export function ActivityCalendar() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">{t('calendar.title')}</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base">{t('calendar.title')}</CardTitle>
+              {isLoading && <span className="text-xs text-muted-foreground">{t('calendar.loading')}</span>}
+            </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handlePrev} aria-label="Previous month">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <input
-                type="month"
-                value={formatMonthInput(year, month)}
-                onChange={handleMonthInput}
-                className="text-sm border rounded px-2 py-0.5 bg-background"
-              />
+              <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+                <SelectTrigger className="h-7 w-[110px] text-xs px-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_NAMES.map((name, i) => (
+                    <SelectItem key={i} value={String(i)} className="text-xs">{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                <SelectTrigger className="h-7 w-[70px] text-xs px-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: now.getFullYear() - 2000 + 3 }, (_, i) => 2000 + i).map((y) => (
+                    <SelectItem key={y} value={String(y)} className="text-xs">{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleNext} aria-label="Next month">
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -125,20 +146,14 @@ export function ActivityCalendar() {
             ))}
           </div>
 
-          {/* Loading state */}
-          {isLoading && (
-            <p className="text-xs text-muted-foreground text-center py-4">{t('calendar.loading')}</p>
-          )}
-
           {/* Day grid */}
-          {!isLoading && (
-            <div className="grid grid-cols-7 gap-px">
-              {grid.map((day) => {
+          <div className="grid grid-cols-7 gap-1">
+            {grid.map((day) => {
                 const key = format(day, 'yyyy-MM-dd')
                 const activities = byDate.get(key) ?? []
                 const inMonth = isSameMonth(day, currentMonthStart)
                 const hasActivities = activities.length > 0
-                const dots = activities.slice(0, 3)
+                const bars = activities.slice(0, 3)
                 const overflow = activities.length - 3
 
                 return (
@@ -146,25 +161,30 @@ export function ActivityCalendar() {
                     key={key}
                     onClick={() => handleDayClick(day)}
                     className={[
-                      'min-h-[52px] rounded-sm p-1 flex flex-col',
-                      inMonth ? '' : 'opacity-40',
-                      hasActivities ? 'cursor-pointer hover:bg-muted transition-colors' : '',
+                      'min-h-[56px] rounded-md p-1.5 flex flex-col transition-colors',
+                      inMonth ? '' : 'opacity-35',
+                      hasActivities
+                        ? 'cursor-pointer bg-primary/10 border border-primary/20 hover:bg-primary/20'
+                        : 'border border-transparent',
                     ].join(' ')}
                   >
-                    <span className="text-xs text-muted-foreground leading-none mb-1">
+                    <span className={[
+                      'text-xs leading-none font-medium',
+                      hasActivities && inMonth ? 'text-primary' : 'text-muted-foreground',
+                    ].join(' ')}>
                       {format(day, 'd')}
                     </span>
                     {hasActivities && (
-                      <div className="flex flex-wrap gap-0.5 mt-auto">
-                        {dots.map((a) => (
-                          <span
+                      <div className="flex flex-col gap-0.5 mt-auto">
+                        {bars.map((a) => (
+                          <div
                             key={a.id}
-                            className="h-1.5 w-1.5 rounded-full bg-primary"
+                            className="h-1 w-full rounded-full bg-primary/70"
                             title={a.name}
                           />
                         ))}
                         {overflow > 0 && (
-                          <span className="text-[10px] text-muted-foreground leading-none self-end">
+                          <span className="text-[9px] text-primary/70 leading-none font-medium">
                             +{overflow}
                           </span>
                         )}
@@ -173,8 +193,7 @@ export function ActivityCalendar() {
                   </div>
                 )
               })}
-            </div>
-          )}
+          </div>
 
           {/* Empty state */}
           {!isLoading && data && data.items.length === 0 && (

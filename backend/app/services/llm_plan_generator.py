@@ -4,15 +4,14 @@ LLM-based training plan generator.
 Uses any OpenAI-compatible chat completions API (Ollama, OpenAI, Mistral, etc.)
 via httpx. No additional dependencies required.
 
-Configure via environment variables:
-  LLM_BASE_URL  e.g. "http://localhost:11434/v1" or "https://api.openai.com/v1"
-  LLM_API_KEY   empty string is fine for local models
-  LLM_MODEL     e.g. "llama3.2", "gpt-4o-mini", "mistral"
+LLM settings are resolved with the same priority as the chat proxy:
+  athlete app_settings → team settings → global env vars (LLM_BASE_URL / LLM_API_KEY / LLM_MODEL)
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import date, timedelta
 from typing import Optional
@@ -22,8 +21,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..models.registry_orm import Team
 from ..models.team_orm import TrainingPlan, PlannedWorkout, Athlete, DailyMetric
 from ..schemas.plans import PlanConfig
+
+log = logging.getLogger(__name__)
 
 
 _SYSTEM_PROMPT = """\
@@ -151,14 +153,61 @@ def _parse_response(raw: str, num_weeks: int) -> list[list[dict]]:
     return result
 
 
-async def _call_llm(user_prompt: str) -> str:
+def _resolve_llm_config(
+    athlete: Athlete,
+    team: Team | None,
+    team_id: str,
+    user_id: str,
+) -> tuple[str, str, str | None]:
+    """Return *(base_url, model, api_key)* using athlete → team → global priority."""
+    athlete_settings = athlete.app_settings or {}
+
+    base_url = (athlete_settings.get("llm_base_url") or "").strip()
+    if not base_url and team and team.llm_base_url:
+        base_url = team.llm_base_url.strip()
+    if not base_url:
+        base_url = (settings.llm_base_url or "").strip()
+
+    if not base_url:
+        raise ValueError(
+            "LLM not configured. Set a base URL in Settings → AI / LLM or ask your team admin."
+        )
+
+    model = (athlete_settings.get("llm_model") or "").strip()
+    if not model and team and team.llm_model:
+        model = team.llm_model.strip()
+    if not model:
+        model = (settings.llm_model or "llama3.2").strip()
+
+    api_key: str | None = None
+
+    enc_key = athlete_settings.get("llm_api_key_enc")
+    if enc_key:
+        try:
+            from ..core.file_encryption import decrypt_secret
+            api_key = decrypt_secret(str(enc_key), team_id, user_id)
+        except Exception as exc:
+            log.error("Failed to decrypt athlete LLM API key for user %s: %s", user_id, exc)
+            raise ValueError("Failed to decrypt the stored LLM API key. Try re-entering it in Settings → AI / LLM.") from exc
+
+    if api_key is None and team and team.llm_api_key_enc:
+        try:
+            from ..core.file_encryption import decrypt_team_secret
+            api_key = decrypt_team_secret(str(team.llm_api_key_enc), team_id)
+        except Exception as exc:
+            log.error("Failed to decrypt team LLM API key for team %s: %s", team_id, exc)
+
+    return base_url, model, api_key
+
+
+async def _call_llm(user_prompt: str, base_url: str, model: str, api_key: str | None) -> str:
     """Call the OpenAI-compatible chat completions endpoint, return raw text."""
     headers: dict[str, str] = {"Content-Type": "application/json"}
-    if settings.llm_api_key:
-        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     payload = {
-        "model": settings.llm_model,
+        "model": model,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -168,7 +217,7 @@ async def _call_llm(user_prompt: str) -> str:
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+            f"{base_url.rstrip('/')}/chat/completions",
             headers=headers,
             json=payload,
         )
@@ -185,8 +234,13 @@ async def generate_plan_llm(
     num_weeks: int,
     goal: Optional[str],
     session: AsyncSession,
+    team: Team | None = None,
+    team_id: str = "",
+    user_id: str = "",
 ) -> TrainingPlan:
     """Generate a TrainingPlan using an LLM via OpenAI-compatible API."""
+
+    base_url, model, api_key = _resolve_llm_config(athlete, team, team_id, user_id)
 
     # Fetch athlete's latest CTL for context
     ctl: Optional[float] = None
@@ -203,7 +257,7 @@ async def generate_plan_llm(
     user_prompt = _build_user_prompt(config, goal, num_weeks, athlete.ftp, ctl)
 
     # Call LLM with one retry on parse failure
-    raw = await _call_llm(user_prompt)
+    raw = await _call_llm(user_prompt, base_url, model, api_key)
     try:
         weeks_data = _parse_response(raw, num_weeks)
     except (json.JSONDecodeError, KeyError, ValueError):
@@ -213,7 +267,7 @@ async def generate_plan_llm(
             + "\n\nYour previous response could not be parsed as valid JSON matching "
             "the required schema. Respond with ONLY the JSON object, nothing else."
         )
-        raw = await _call_llm(correction)
+        raw = await _call_llm(correction, base_url, model, api_key)
         weeks_data = _parse_response(raw, num_weeks)  # raises HTTP 503 if still invalid
 
     end_date = start_date + timedelta(weeks=num_weeks) - timedelta(days=1)

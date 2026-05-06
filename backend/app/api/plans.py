@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.deps import get_ctx_and_session
-from backend.app.core.config import settings
+from backend.app.db.registry import get_registry_session
+from backend.app.models.registry_orm import Team
 from backend.app.models.team_orm import Athlete, TrainingPlan, PlannedWorkout
 from backend.app.schemas.plans import TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse
 from backend.app.services.plan_generator import generate_plan
@@ -41,10 +42,9 @@ async def list_plans(ctx_session=Depends(get_ctx_and_session)):
 async def create_plan(
     body: TrainingPlanCreate,
     ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
 ):
     ctx, session = ctx_session
-    if body.use_llm and not body.llm_weeks and not settings.llm_base_url:
-        raise HTTPException(400, "LLM generation is not configured (LLM_BASE_URL is not set)")
 
     athlete = await _get_athlete(ctx.user_id, session)
 
@@ -90,6 +90,8 @@ async def create_plan(
     elif body.use_llm:
         if not body.config:
             raise HTTPException(400, "A plan config (training days and types) is required for LLM generation")
+        team_result = await registry_session.execute(select(Team).where(Team.id == ctx.team_id))
+        team = team_result.scalar_one_or_none()
         try:
             plan = await generate_plan_llm(
                 athlete=athlete,
@@ -99,7 +101,12 @@ async def create_plan(
                 num_weeks=body.weeks,
                 goal=body.goal,
                 session=session,
+                team=team,
+                team_id=ctx.team_id,
+                user_id=ctx.user_id,
             )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         except Exception as exc:
             raise HTTPException(503, f"LLM plan generation failed: {exc}") from exc
     else:

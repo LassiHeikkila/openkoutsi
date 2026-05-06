@@ -22,7 +22,8 @@
     "title": "Activity Calendar",
     "noActivities": "No activities this month",
     "loading": "Loading activities…",
-    "dayNames": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    "dayNames": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "monthNames": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
   },
   "noHistory": "No data yet \u2014 upload activities to start tracking",
   "recentActivities": "Recent activities",

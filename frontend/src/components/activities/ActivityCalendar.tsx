@@ -32,10 +32,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
 
 function ActivityListRow({ activity, slug }: { activity: Activity; slug: string }) {
   const parts: string[] = [formatDuration(activity.duration_s)]
@@ -96,6 +92,7 @@ export function ActivityCalendar() {
   }
 
   const dayNames = t.raw('calendar.dayNames') as string[]
+  const monthNames = t.raw('calendar.monthNames') as string[]
 
   return (
     <>
@@ -115,7 +112,7 @@ export function ActivityCalendar() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {MONTH_NAMES.map((name, i) => (
+                  {monthNames.map((name, i) => (
                     <SelectItem key={i} value={String(i)} className="text-xs">{name}</SelectItem>
                   ))}
                 </SelectContent>

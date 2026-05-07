@@ -225,6 +225,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -1603,6 +1613,53 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/activities/{activity_id}/streams": {
+      "get": {
+        "tags": [
+          "activities"
+        ],
+        "summary": "Get Activity Streams",
+        "operationId": "get_activity_streams_api_activities__activity_id__streams_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "activity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Activity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityStreamsResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -3148,6 +3205,299 @@
         }
       }
     },
+    "/api/workouts/export/formats": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "List Export Formats",
+        "operationId": "list_export_formats_api_workouts_export_formats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExportFormatInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Export Formats Api Workouts Export Formats Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workouts/": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "List Workouts",
+        "operationId": "list_workouts_api_workouts__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkoutDefinitionResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Workouts Api Workouts  Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Create Workout",
+        "operationId": "create_workout_api_workouts__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkoutDefinitionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/workouts/{workout_id}": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Get Workout",
+        "operationId": "get_workout_api_workouts__workout_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workout Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Update Workout",
+        "operationId": "update_workout_api_workouts__workout_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workout Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkoutDefinitionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDefinitionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Delete Workout",
+        "operationId": "delete_workout_api_workouts__workout_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workout Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workouts/{workout_id}/export/{format_key}": {
+      "get": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Export Workout",
+        "operationId": "export_workout_api_workouts__workout_id__export__format_key__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workout Id"
+            }
+          },
+          {
+            "name": "format_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Format Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/version": {
       "get": {
         "summary": "Get Version",
@@ -3167,6 +3517,26 @@
   },
   "components": {
     "schemas": {
+      "AbsoluteSpec": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "absolute",
+            "title": "Type"
+          },
+          "value": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "value"
+        ],
+        "title": "AbsoluteSpec"
+      },
       "ActivityDetailResponse": {
         "properties": {
           "id": {
@@ -3625,6 +3995,21 @@
         ],
         "title": "ActivityResponse"
       },
+      "ActivityStreamsResponse": {
+        "properties": {
+          "streams": {
+            "additionalProperties": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Streams",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "title": "ActivityStreamsResponse"
+      },
       "ActivityUpdate": {
         "properties": {
           "name": {
@@ -4021,6 +4406,19 @@
         ],
         "title": "DayConfig"
       },
+      "DeleteAccountRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "DeleteAccountRequest"
+      },
       "DistanceBestEntry": {
         "properties": {
           "distance_m": {
@@ -4073,6 +4471,54 @@
           "activity_start_time"
         ],
         "title": "DistanceBestEntry"
+      },
+      "DistanceDuration": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "distance",
+            "title": "Type"
+          },
+          "meters": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Meters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "meters"
+        ],
+        "title": "DistanceDuration"
+      },
+      "ExportFormatInfo": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "file_extension": {
+            "type": "string",
+            "title": "File Extension"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "file_extension",
+          "mime_type"
+        ],
+        "title": "ExportFormatInfo"
       },
       "FitnessCurrentResponse": {
         "properties": {
@@ -4859,6 +5305,20 @@
         ],
         "title": "MemberRolesUpdate"
       },
+      "OpenDuration": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "open",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "OpenDuration"
+      },
       "PasswordResetLinkResponse": {
         "properties": {
           "reset_url": {
@@ -4871,6 +5331,26 @@
           "reset_url"
         ],
         "title": "PasswordResetLinkResponse"
+      },
+      "PctFtpSpec": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "pct_ftp",
+            "title": "Type"
+          },
+          "pct": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "pct"
+        ],
+        "title": "PctFtpSpec"
       },
       "PlanConfig": {
         "properties": {
@@ -5055,6 +5535,30 @@
         ],
         "title": "PowerBestEntry"
       },
+      "RangeSpec": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "range",
+            "title": "Type"
+          },
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "low",
+          "high"
+        ],
+        "title": "RangeSpec"
+      },
       "RegisterRequest": {
         "properties": {
           "username": {
@@ -5088,6 +5592,49 @@
           "invite_token"
         ],
         "title": "RegisterRequest"
+      },
+      "RepeatBlock": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "repeat",
+            "title": "Kind"
+          },
+          "repeat_count": {
+            "type": "integer",
+            "minimum": 2.0,
+            "title": "Repeat Count"
+          },
+          "steps": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/WorkoutStep"
+                },
+                {
+                  "$ref": "#/components/schemas/RepeatBlock"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "repeat": "#/components/schemas/RepeatBlock",
+                  "step": "#/components/schemas/WorkoutStep"
+                }
+              }
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "repeat_count",
+          "steps"
+        ],
+        "title": "RepeatBlock"
       },
       "ResetPasswordRequest": {
         "properties": {
@@ -5351,6 +5898,26 @@
           "created_at"
         ],
         "title": "TeamSignupResponse"
+      },
+      "TimeDuration": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "time",
+            "title": "Type"
+          },
+          "seconds": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "seconds"
+        ],
+        "title": "TimeDuration"
       },
       "TokenResponse": {
         "properties": {
@@ -5662,6 +6229,326 @@
         "title": "WorkoutCreate",
         "description": "A single workout day as returned by the frontend LLM."
       },
+      "WorkoutDefinitionCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sport_type": {
+            "type": "string",
+            "title": "Sport Type",
+            "default": "Ride"
+          },
+          "steps": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/WorkoutStep"
+                },
+                {
+                  "$ref": "#/components/schemas/RepeatBlock"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "repeat": "#/components/schemas/RepeatBlock",
+                  "step": "#/components/schemas/WorkoutStep"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "WorkoutDefinitionCreate"
+      },
+      "WorkoutDefinitionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "athlete_id": {
+            "type": "string",
+            "title": "Athlete Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sport_type": {
+            "type": "string",
+            "title": "Sport Type"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "estimated_duration_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Duration S"
+          },
+          "estimated_tss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Tss"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "athlete_id",
+          "name",
+          "sport_type",
+          "steps",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WorkoutDefinitionResponse"
+      },
+      "WorkoutDefinitionUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sport_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sport Type"
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkoutStep"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RepeatBlock"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "kind",
+                    "mapping": {
+                      "repeat": "#/components/schemas/RepeatBlock",
+                      "step": "#/components/schemas/WorkoutStep"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          }
+        },
+        "type": "object",
+        "title": "WorkoutDefinitionUpdate"
+      },
+      "WorkoutStep": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "step",
+            "title": "Kind"
+          },
+          "step_type": {
+            "type": "string",
+            "enum": [
+              "warmup",
+              "active",
+              "recovery",
+              "cooldown",
+              "rest",
+              "other"
+            ],
+            "title": "Step Type"
+          },
+          "duration": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeDuration"
+              },
+              {
+                "$ref": "#/components/schemas/DistanceDuration"
+              },
+              {
+                "$ref": "#/components/schemas/OpenDuration"
+              }
+            ],
+            "title": "Duration",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "distance": "#/components/schemas/DistanceDuration",
+                "open": "#/components/schemas/OpenDuration",
+                "time": "#/components/schemas/TimeDuration"
+              }
+            }
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkoutTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "step_type",
+          "duration"
+        ],
+        "title": "WorkoutStep"
+      },
+      "WorkoutTarget": {
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "power",
+              "hr",
+              "cadence",
+              "pace"
+            ],
+            "title": "Metric"
+          },
+          "spec": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ZoneSpec"
+              },
+              {
+                "$ref": "#/components/schemas/PctFtpSpec"
+              },
+              {
+                "$ref": "#/components/schemas/AbsoluteSpec"
+              },
+              {
+                "$ref": "#/components/schemas/RangeSpec"
+              }
+            ],
+            "title": "Spec",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "absolute": "#/components/schemas/AbsoluteSpec",
+                "pct_ftp": "#/components/schemas/PctFtpSpec",
+                "range": "#/components/schemas/RangeSpec",
+                "zone": "#/components/schemas/ZoneSpec"
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "metric",
+          "spec"
+        ],
+        "title": "WorkoutTarget"
+      },
       "ZoneSchema": {
         "properties": {
           "low": {
@@ -5684,6 +6571,26 @@
           "name"
         ],
         "title": "ZoneSchema"
+      },
+      "ZoneSpec": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "zone",
+            "title": "Type"
+          },
+          "zone_number": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Zone Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "zone_number"
+        ],
+        "title": "ZoneSpec"
       }
     },
     "securitySchemes": {

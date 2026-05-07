@@ -171,6 +171,61 @@ export interface PlannedWorkout {
   duration_min: number | null
   target_tss: number | null
   completed_activity_id: string | null
+  workout_definition_id?: string | null
+}
+
+// ---- Structured workout definitions ----
+
+export type StepType = 'warmup' | 'active' | 'recovery' | 'cooldown' | 'rest' | 'other'
+export type TargetMetric = 'power' | 'hr' | 'cadence' | 'pace'
+
+export interface TimeDuration { type: 'time'; seconds: number }
+export interface DistanceDuration { type: 'distance'; meters: number }
+export interface OpenDuration { type: 'open' }
+export type WorkoutDuration = TimeDuration | DistanceDuration | OpenDuration
+
+export interface ZoneSpec { type: 'zone'; zone_number: number }
+export interface PctFtpSpec { type: 'pct_ftp'; pct: number }
+export interface AbsoluteSpec { type: 'absolute'; value: number }
+export interface RangeSpec { type: 'range'; low: number; high: number }
+export type TargetSpec = ZoneSpec | PctFtpSpec | AbsoluteSpec | RangeSpec
+
+export interface WorkoutTarget { metric: TargetMetric; spec: TargetSpec }
+
+export interface WorkoutStep {
+  kind: 'step'
+  step_type: StepType
+  duration: WorkoutDuration
+  target: WorkoutTarget | null
+  notes: string | null
+}
+
+export interface RepeatBlock {
+  kind: 'repeat'
+  repeat_count: number
+  steps: WorkoutStepOrRepeat[]
+}
+
+export type WorkoutStepOrRepeat = WorkoutStep | RepeatBlock
+
+export interface WorkoutDefinition {
+  id: string
+  athlete_id: string
+  name: string
+  description: string | null
+  sport_type: string
+  steps: WorkoutStepOrRepeat[]
+  estimated_duration_s: number | null
+  estimated_tss: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ExportFormat {
+  key: string
+  label: string
+  file_extension: string
+  mime_type: string
 }
 
 export interface TrainingPlan {

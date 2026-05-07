@@ -18,6 +18,7 @@ dependencies = [
     "email-validator",
     "slowapi",
     "cryptography",
+    "fit-tool>=0.9",
 ]
 
 [dependency-groups]

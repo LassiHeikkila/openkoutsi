@@ -66,6 +66,9 @@ class Athlete(TeamBase):
     weight_log: Mapped[list["WeightLog"]] = relationship(
         "WeightLog", back_populates="athlete", cascade="all, delete-orphan"
     )
+    workout_definitions: Mapped[list["WorkoutDefinition"]] = relationship(
+        "WorkoutDefinition", back_populates="athlete", cascade="all, delete-orphan"
+    )
 
 
 class WeightLog(TeamBase):
@@ -305,5 +308,31 @@ class PlannedWorkout(TeamBase):
     completed_activity_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("activities.id", ondelete="SET NULL"), nullable=True
     )
+    workout_definition_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("workout_definitions.id", ondelete="SET NULL"), nullable=True
+    )
 
     plan: Mapped["TrainingPlan"] = relationship("TrainingPlan", back_populates="workouts")
+
+
+class WorkoutDefinition(TeamBase):
+    __tablename__ = "workout_definitions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    athlete_id: Mapped[str] = mapped_column(
+        String, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sport_type: Mapped[str] = mapped_column(String, nullable=False, default="Ride")
+    steps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    estimated_duration_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    estimated_tss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+    athlete: Mapped["Athlete"] = relationship(
+        "Athlete", back_populates="workout_definitions"
+    )

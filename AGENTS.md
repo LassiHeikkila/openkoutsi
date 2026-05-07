@@ -12,6 +12,20 @@ Keep openapi.json up to date by regenerating it after API changes.
 
 Always test the results.
 
+Tests are executed by running:
+
+```console
+uv run python -m pytest tests/
+```
+
+in the project root directory.
+
+Frontend tests can be run from `frontend/` directory with:
+
+```console
+npx vitest run
+```
+
 For new features, you should add new tests and ensure the existing ones pass.
 
 For bug fixes, you should ensure existing tests pass.

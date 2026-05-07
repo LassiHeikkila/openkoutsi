@@ -67,6 +67,16 @@ Tables are created automatically on first startup — no manual step required:
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
+### Migrating existing team databases
+
+New team databases are always created with the latest schema. Existing team databases require Alembic migrations when upgrading. Run once per team after updating the code:
+
+```bash
+TEAM_ID=<team-uuid> uv run alembic -c backend/alembic-team.ini upgrade head
+```
+
+You can find your team UUIDs by listing `data/teams/`. This step is only needed when upgrading an existing deployment — new installs handle schema creation automatically on first startup.
+
 ### First-run setup
 
 On a fresh deployment, navigate to the frontend URL. The setup wizard will appear and guide you through creating the first team and administrator account. The first team is automatically set to `active`.

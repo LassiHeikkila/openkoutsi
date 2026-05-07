@@ -55,6 +55,11 @@
       "num": "06 / LUOKITTELU",
       "title": "Tied\u00e4 mit\u00e4 harjoittelit.",
       "body": "Jokainen ajo luokitellaan automaattisesti \u2014 Palautuminen, Kest\u00e4vyys, Tempo, Kynnys, VO2max, Anaerobinen tai Sprintti \u2014 Cogganin tehomallilla. Muuta yhdell\u00e4 napsautuksella."
+    },
+    "07": {
+      "num": "07 / TREENIT",
+      "title": "Rakenna strukturoituja harjoituksia.",
+      "body": "Suunnittele intervalliharjoituksia jaksokohtaisilla teho-, syke- tai kadenssitavoitteilla \u2014 vy\u00f6hykenumeroilla, % FTP:st\u00e4 tai absoluuttisina watteina. Vie Zwiftiin (.zwo) tai FIT-harjoitustiedostona Wahoo ELEMNTille ja Garmin-py\u00f6r\u00e4tietokoneille."
     }
   },
   "selfhost": {

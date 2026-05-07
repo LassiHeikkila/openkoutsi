@@ -55,6 +55,11 @@
       "num": "06 / CLASSIFICATION",
       "title": "Know what you trained.",
       "body": "Every ride is automatically classified \u2014 Recovery, Endurance, Tempo, Threshold, VO2 Max, Anaerobic, or Sprint \u2014 using Coggan's power model. Override with one click."
+    },
+    "07": {
+      "num": "07 / WORKOUTS",
+      "title": "Build structured sessions.",
+      "body": "Design interval workouts with per-step power, HR, or cadence targets \u2014 zone numbers, % FTP, or absolute watts. Export to Zwift (.zwo) or as FIT workout files for Wahoo ELEMNT and Garmin bike computers."
     }
   },
   "selfhost": {

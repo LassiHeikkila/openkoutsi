@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Link, usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
 import { Button } from './ui/button'
-import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X, Shield } from 'lucide-react'
+import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X, Shield, Dumbbell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LocaleSwitcher } from './LocaleSwitcher'
 
@@ -28,6 +28,7 @@ function NavInner({ onClose }: NavInnerProps) {
     { href: `/t/${slug}/records`, labelKey: 'nav.records' as const, icon: Timer },
     { href: `/t/${slug}/goals`, labelKey: 'nav.goals' as const, icon: Target },
     { href: `/t/${slug}/plan`, labelKey: 'nav.plan' as const, icon: Calendar },
+    { href: `/t/${slug}/workouts`, labelKey: 'nav.workouts' as const, icon: Dumbbell },
     { href: `/t/${slug}/profile`, labelKey: 'nav.profile' as const, icon: User },
     { href: `/t/${slug}/settings`, labelKey: 'nav.settings' as const, icon: Settings },
   ]

@@ -18,6 +18,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
       activities: (await import(`../../messages/${locale}/activities.json`)).default,
       app:        (await import(`../../messages/${locale}/app.json`)).default,
       admin:      (await import(`../../messages/${locale}/admin.json`)).default,
+      workouts:   (await import(`../../messages/${locale}/workouts.json`)).default,
     },
   }
 })

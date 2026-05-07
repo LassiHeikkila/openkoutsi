@@ -26,6 +26,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Power curve time ranges** — all-time, 12M, 6M, or 3M rolling windows for the power curve chart
 - **AI coaching analysis** — per-activity LLM analysis and AI-generated training plans; bring your own API key (encrypted at rest, proxied server-side — never exposed to the browser); override the server LLM per team
 - **Training plan generation** — periodized plans (Base → Build → Peak → Taper) generated from your goals, availability, and current fitness
+- **Structured workouts** — create interval workouts with per-step power/HR/cadence targets (absolute watts, % FTP, zones, or ranges); export to Zwift (.zwo) or FIT workout files (.fit) for Wahoo ELEMNT and Garmin bike computers
 - **Privacy-first** — full data export (JSON + FIT files) and account deletion at any time
 - **Self-hostable** — runs as a single Docker container or bare `uv` + `pnpm` processes; no public URL required
 

@@ -492,10 +492,10 @@ async def reprocess_intervals(
 ):
     import io
     from sqlalchemy import delete as sa_delete
-    from backend.app.services.fit_processor import (
-        _auto_interval_s,
-        _build_auto_intervals,
-        _compute_interval_stats,
+    from openkoutsi.fit_processing import (
+        auto_interval_s,
+        build_auto_intervals,
+        compute_interval_stats,
     )
 
     ctx, session = ctx_session
@@ -534,14 +534,14 @@ async def reprocess_intervals(
         duration_s = activity.duration_s or 0
         stream_length = max((len(v) for v in stream_map.values() if v), default=duration_s)
         actual_duration = max(duration_s, stream_length)
-        interval_s = _auto_interval_s(actual_duration)
+        interval_s = auto_interval_s(actual_duration)
         start_time = activity.start_time
         if start_time and actual_duration:
-            raw = _build_auto_intervals(start_time, actual_duration, interval_s)
+            raw = build_auto_intervals(start_time, actual_duration, interval_s)
 
     intervals_data: list[dict] = []
     if raw and activity.start_time:
-        intervals_data = _compute_interval_stats(raw, activity.start_time, stream_map, is_auto)
+        intervals_data = compute_interval_stats(raw, activity.start_time, stream_map, is_auto)
 
     await session.execute(
         sa_delete(ActivityInterval).where(ActivityInterval.activity_id == activity_id)

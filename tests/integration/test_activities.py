@@ -512,3 +512,56 @@ class TestGetActivityStreams:
         resp = await client.get(f"/api/activities/{activity_id}/streams", headers=auth_headers)
         assert resp.status_code == 200
         assert resp.json()["streams"] == {}
+
+
+# ── Reprocess intervals ────────────────────────────────────────────────────────
+
+class TestReprocessIntervals:
+    async def _create_processed(self, client, auth_headers) -> str:
+        resp = await client.post(
+            "/api/activities/",
+            json={"sport_type": "Ride", "start_time": "2025-01-01T10:00:00Z", "duration_s": 3600},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+        assert resp.json()["status"] == "processed"
+        return resp.json()["id"]
+
+    async def test_reprocess_returns_200_with_intervals(self, client, auth_headers):
+        activity_id = await self._create_processed(client, auth_headers)
+        resp = await client.post(
+            f"/api/activities/{activity_id}/reprocess-intervals",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == activity_id
+        assert isinstance(data["intervals"], list)
+        assert len(data["intervals"]) > 0
+
+    async def test_reprocess_nonexistent_returns_404(self, client, auth_headers):
+        resp = await client.post(
+            "/api/activities/nonexistent-id/reprocess-intervals",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_reprocess_unprocessed_returns_400(self, client, auth_headers, session):
+        from backend.app.models.team_orm import Activity
+        from sqlalchemy import select as sa_select
+
+        activity_id = await self._create_processed(client, auth_headers)
+        result = await session.execute(sa_select(Activity).where(Activity.id == activity_id))
+        activity = result.scalar_one()
+        activity.status = "pending"
+        await session.commit()
+
+        resp = await client.post(
+            f"/api/activities/{activity_id}/reprocess-intervals",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
+    async def test_reprocess_unauthenticated_returns_401(self, client):
+        resp = await client.post("/api/activities/some-id/reprocess-intervals")
+        assert resp.status_code == 401

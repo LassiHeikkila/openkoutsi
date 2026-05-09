@@ -1,0 +1,44 @@
+/* ─── light-warm ───────────────────────────────────────────────── */
+/* Warm cream / paper background, amber accent */
+:root {
+  /* landing */
+  --bg:            oklch(0.98 0.014 80);
+  --bg-2:          oklch(0.95 0.018 80);
+  --line:          oklch(0.86 0.022 70);
+  --line-strong:   oklch(0.74 0.026 70);
+  --ink:           oklch(0.18 0.03 58);
+  --ink-2:         oklch(0.44 0.022 60);
+  --ink-3:         oklch(0.63 0.016 65);
+  --lp-accent:     oklch(0.6 0.22 50);
+  --lp-accent-ink: oklch(0.98 0.005 50);
+  --density:       0.7;
+
+  /* image helpers */
+  --lp-logo-filter:  brightness(0);
+  --lp-wahoo-filter: none;
+
+  /* code snippet string color */
+  --lp-snippet-string: oklch(0.45 0.14 120);
+
+  /* shadcn / app */
+  --background:         36 38% 97%;
+  --foreground:         30 30% 10%;
+  --card:               36 25% 99%;
+  --card-foreground:    30 30% 10%;
+  --popover:            36 38% 99%;
+  --popover-foreground: 30 30% 10%;
+  --primary:            32 88% 46%;
+  --primary-foreground: 36 40% 98%;
+  --secondary:          36 28% 92%;
+  --secondary-foreground: 30 25% 18%;
+  --muted:              36 22% 92%;
+  --muted-foreground:   30 15% 46%;
+  --accent:             36 28% 90%;
+  --accent-foreground:  30 25% 18%;
+  --destructive:        0 72% 50%;
+  --destructive-foreground: 36 40% 98%;
+  --border:             36 22% 87%;
+  --input:              36 22% 87%;
+  --ring:               32 88% 46%;
+  --radius:             0.5rem;
+}

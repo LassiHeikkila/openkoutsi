@@ -2,17 +2,6 @@
 /* Fonts are loaded via next/font/google in layout.tsx and exposed as CSS variables. */
 
 .lp {
-  --bg: oklch(0.17 0.01 260);
-  --bg-2: oklch(0.21 0.012 260);
-  --line: oklch(0.32 0.012 260);
-  --line-strong: oklch(0.42 0.015 260);
-  --ink: oklch(0.97 0.005 260);
-  --ink-2: oklch(0.78 0.01 260);
-  --ink-3: oklch(0.58 0.012 260);
-  --accent: oklch(0.78 0.2 50);
-  --accent-ink: oklch(0.2 0.05 50);
-  --density: 0.7;
-
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-inter), system-ui, sans-serif;
@@ -78,7 +67,7 @@
 .lp .logo-img {
   height: 28px;
   width: auto;
-  filter: brightness(0) invert(1);
+  filter: var(--lp-logo-filter);
   display: block;
 }
 
@@ -91,7 +80,7 @@
 }
 
 .lp .nav-right a:hover {
-  color: var(--accent);
+  color: var(--lp-accent);
 }
 
 .lp .btn {
@@ -113,14 +102,14 @@
 }
 
 .lp .btn-primary {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+  background: var(--lp-accent);
+  color: var(--lp-accent-ink);
+  border-color: var(--lp-accent);
   font-weight: 600;
 }
 
 .lp .btn-primary:hover {
-  background: color-mix(in oklch, var(--accent) 85%, white);
+  background: color-mix(in oklch, var(--lp-accent) 85%, white);
   transform: translateY(-1px);
 }
 
@@ -154,8 +143,8 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent) 20%, transparent);
+  background: var(--lp-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--lp-accent) 20%, transparent);
 }
 
 .lp .version-badge {
@@ -184,7 +173,7 @@
 .lp .hero h1 .italic {
   font-style: italic;
   font-weight: 500;
-  color: var(--accent);
+  color: var(--lp-accent);
 }
 
 .lp .hero-sub {
@@ -220,7 +209,7 @@
 }
 
 .lp .team-slug-input:focus {
-  border-color: var(--accent);
+  border-color: var(--lp-accent);
 }
 
 /* Hero tabs */
@@ -247,8 +236,8 @@
 }
 
 .lp .hero-tab.active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--lp-accent);
+  color: var(--lp-accent);
 }
 
 /* Create-team form */
@@ -285,7 +274,7 @@
 }
 
 .lp .ct-input:focus {
-  border-color: var(--accent);
+  border-color: var(--lp-accent);
 }
 
 .lp .ct-hint {
@@ -315,7 +304,7 @@
 
 .lp .ct-success-title {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--lp-accent);
   margin: 0 0 6px;
 }
 
@@ -355,7 +344,7 @@
   font-size: 84px;
   line-height: 0.85;
   letter-spacing: -0.04em;
-  color: var(--accent);
+  color: var(--lp-accent);
   font-variant-numeric: tabular-nums;
 }
 
@@ -466,7 +455,7 @@
 .lp .feat-logo-wahoo {
   height: 60px;
   width: auto;
-  filter: invert(1);
+  filter: var(--lp-wahoo-filter);
   opacity: 0.85;
 }
 
@@ -561,8 +550,8 @@
 }
 
 .lp .copy-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--lp-accent);
+  color: var(--lp-accent);
 }
 
 .lp pre.snippet {
@@ -579,11 +568,11 @@
 }
 
 .lp .snippet .k {
-  color: var(--accent);
+  color: var(--lp-accent);
 }
 
 .lp .snippet .s {
-  color: oklch(0.8 0.08 100);
+  color: var(--lp-snippet-string);
 }
 
 /* FOOTER */
@@ -604,7 +593,36 @@
 }
 
 .lp .foot-inner a:hover {
-  color: var(--accent);
+  color: var(--lp-accent);
+}
+
+/* THEME PICKER */
+.lp .theme-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lp .theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  flex-shrink: 0;
+  transition: transform 0.12s ease, outline-color 0.12s ease;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.lp .theme-swatch:hover {
+  transform: scale(1.2);
+}
+
+.lp .theme-swatch.active {
+  outline-color: var(--ink-2);
 }
 
 @media (max-width: 860px) {

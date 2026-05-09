@@ -565,3 +565,76 @@ class TestReprocessIntervals:
     async def test_reprocess_unauthenticated_returns_401(self, client):
         resp = await client.post("/api/activities/some-id/reprocess-intervals")
         assert resp.status_code == 401
+
+
+# ── Recalculate category ───────────────────────────────────────────────────────
+
+class TestRecalculateCategory:
+    async def _create_processed(self, client, auth_headers) -> str:
+        resp = await client.post(
+            "/api/activities/",
+            json={"sport_type": "Ride", "start_time": "2025-05-01T10:00:00Z", "duration_s": 3600},
+            headers=auth_headers,
+        )
+        return resp.json()["id"]
+
+    async def test_returns_200_with_category(self, client, auth_headers, session):
+        activity_id = await self._create_processed(client, auth_headers)
+
+        # Give the activity enough data to classify
+        from backend.app.models.team_orm import Activity
+        from sqlalchemy import select as sa_select
+        act_result = await session.execute(sa_select(Activity).where(Activity.id == activity_id))
+        act = act_result.scalar_one()
+        act.intensity_factor = 0.75
+        act.normalized_power = 188
+        act.avg_power = 170
+        await session.commit()
+
+        resp = await client.post(
+            f"/api/activities/{activity_id}/recalculate-category",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["workout_category"] is not None
+
+    async def test_no_power_data_still_returns_200(self, client, auth_headers):
+        activity_id = await self._create_processed(client, auth_headers)
+        resp = await client.post(
+            f"/api/activities/{activity_id}/recalculate-category",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        # Without IF/NP data, category may be None or a default
+        assert "workout_category" in resp.json()
+
+    async def test_nonexistent_activity_returns_404(self, client, auth_headers):
+        resp = await client.post(
+            "/api/activities/nonexistent-id/recalculate-category",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.post("/api/activities/some-id/recalculate-category")
+        assert resp.status_code == 401
+
+
+# ── Upload edge cases ──────────────────────────────────────────────────────────
+
+class TestFitUploadEdgeCases:
+    async def test_non_fit_file_returns_400(self, client, auth_headers):
+        resp = await client.post(
+            "/api/activities/upload",
+            files={"file": ("test.fit", b"this is not a fit file at all!", "application/octet-stream")},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
+    async def test_too_short_file_returns_400(self, client, auth_headers):
+        resp = await client.post(
+            "/api/activities/upload",
+            files={"file": ("test.fit", b"\x00\x01\x02", "application/octet-stream")},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400

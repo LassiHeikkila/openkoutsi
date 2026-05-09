@@ -33,3 +33,11 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning:passlib"]
+
+[tool.coverage.run]
+omit = [
+    "backend/app/db/migrations/env.py",
+    "backend/app/db/migrations/registry/env.py",
+    "backend/app/db/migrations/team/env.py",
+    "strava_bridge/main.py",
+]

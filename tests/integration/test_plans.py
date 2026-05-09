@@ -1,7 +1,9 @@
 """
 Integration tests for /api/plans endpoints.
 """
+import json
 from datetime import date, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 _START = date(2025, 6, 2)  # A Monday
@@ -163,3 +165,152 @@ class TestDeletePlan:
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.delete("/api/plans/some-id")
         assert resp.status_code == 401
+
+
+# ── LLM plan generation ────────────────────────────────────────────────────────
+
+def _make_llm_plan_json(num_weeks=4) -> str:
+    """Build a minimal valid LLM response for num_weeks weeks."""
+    weeks = []
+    for w in range(1, num_weeks + 1):
+        workouts = []
+        for day in range(1, 8):
+            if day in (2, 4, 6):
+                workouts.append({"day_of_week": day, "workout_type": "endurance",
+                                  "description": "Easy ride", "duration_min": 60, "target_tss": 50})
+            else:
+                workouts.append({"day_of_week": day, "workout_type": "rest",
+                                  "description": None, "duration_min": None, "target_tss": None})
+        weeks.append({"week_number": w, "workouts": workouts})
+    return json.dumps({"weeks": weeks})
+
+
+_LLM_REQUEST_BODY = {
+    "name": "LLM Plan",
+    "start_date": str(_START),
+    "weeks": 4,
+    "use_llm": True,
+    "config": {
+        "days_per_week": 3,
+        "day_configs": [
+            {"day_of_week": 2, "workout_type": "endurance"},
+            {"day_of_week": 4, "workout_type": "threshold"},
+            {"day_of_week": 6, "workout_type": "long"},
+        ],
+        "periodization": "base_building",
+        "intensity_preference": "moderate",
+    },
+}
+
+
+class TestLlmPlanGeneration:
+    async def _mock_llm_call(self, raw_json: str):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"choices": [{"message": {"content": raw_json}}]}
+
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=mock_resp)
+        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+        mock_http.__aexit__ = AsyncMock(return_value=False)
+        return mock_http
+
+    async def test_llm_plan_created_when_url_configured(self, client, auth_headers, session):
+        from sqlalchemy import select as sa_select
+        from backend.app.models.team_orm import Athlete
+
+        # Set LLM URL on athlete
+        await client.put(
+            "/api/athlete/",
+            json={"app_settings": {"llm_base_url": "http://localhost:11434/v1",
+                                   "llm_model": "llama3.2"}},
+            headers=auth_headers,
+        )
+
+        mock_http = await self._mock_llm_call(_make_llm_plan_json(4))
+
+        with patch("httpx.AsyncClient", return_value=mock_http):
+            resp = await client.post("/api/plans/", json=_LLM_REQUEST_BODY, headers=auth_headers)
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["generation_method"] == "llm"
+        assert len(data["workouts"]) == 28  # 4 weeks × 7 days
+
+    async def test_llm_plan_retries_on_parse_failure(self, client, auth_headers):
+        await client.put(
+            "/api/athlete/",
+            json={"app_settings": {"llm_base_url": "http://localhost:11434/v1",
+                                   "llm_model": "llama3.2"}},
+            headers=auth_headers,
+        )
+
+        # First call returns garbage, second returns valid JSON
+        bad_resp = MagicMock()
+        bad_resp.raise_for_status = MagicMock()
+        bad_resp.json.return_value = {"choices": [{"message": {"content": "not json at all"}}]}
+
+        good_resp = MagicMock()
+        good_resp.raise_for_status = MagicMock()
+        good_resp.json.return_value = {"choices": [{"message": {"content": _make_llm_plan_json(4)}}]}
+
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(side_effect=[bad_resp, good_resp])
+        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+        mock_http.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("httpx.AsyncClient", return_value=mock_http):
+            resp = await client.post("/api/plans/", json=_LLM_REQUEST_BODY, headers=auth_headers)
+
+        assert resp.status_code == 201
+        assert resp.json()["generation_method"] == "llm"
+
+    async def test_llm_plan_fails_gracefully_on_double_parse_error(self, client, auth_headers):
+        await client.put(
+            "/api/athlete/",
+            json={"app_settings": {"llm_base_url": "http://localhost:11434/v1",
+                                   "llm_model": "llama3.2"}},
+            headers=auth_headers,
+        )
+
+        bad_resp = MagicMock()
+        bad_resp.raise_for_status = MagicMock()
+        bad_resp.json.return_value = {"choices": [{"message": {"content": "still not json"}}]}
+
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(return_value=bad_resp)
+        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+        mock_http.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("httpx.AsyncClient", return_value=mock_http):
+            resp = await client.post("/api/plans/", json=_LLM_REQUEST_BODY, headers=auth_headers)
+
+        # API returns 4xx/5xx when both LLM attempts produce unparseable JSON
+        assert resp.status_code >= 400
+
+    async def test_build_user_prompt_includes_ftp(self, client, auth_headers):
+        from backend.app.services.llm_plan_generator import _build_user_prompt
+        from backend.app.schemas.plans import PlanConfig, DayConfig
+
+        config = PlanConfig(
+            days_per_week=3,
+            day_configs=[DayConfig(day_of_week=2, workout_type="endurance")],
+            periodization="base_building",
+            intensity_preference="moderate",
+        )
+        prompt = _build_user_prompt(config, "Gran Fondo 2025", 8, 280, 45.0)
+        assert "280" in prompt  # FTP
+        assert "45.0" in prompt  # CTL
+        assert "Gran Fondo" in prompt
+
+    async def test_extract_json_strips_markdown_fences(self):
+        from backend.app.services.llm_plan_generator import _extract_json
+        raw = '```json\n{"foo": "bar"}\n```'
+        assert _extract_json(raw) == '{"foo": "bar"}'
+
+    async def test_parse_response_validates_week_count(self):
+        from backend.app.services.llm_plan_generator import _parse_response
+        import pytest
+        valid = _make_llm_plan_json(4)
+        with pytest.raises(ValueError, match="Expected 6 weeks"):
+            _parse_response(valid, 6)

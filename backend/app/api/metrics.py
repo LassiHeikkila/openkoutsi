@@ -146,11 +146,16 @@ async def recalculate_all(
     return {"status": "recalculation started"}
 
 
+_RECALCULATE_LOOKBACK_DAYS = 180
+
+
 async def _bg_full_recalculate(team_id: str, athlete_id: str) -> None:
     from sqlalchemy import delete
     from openkoutsi.training_math import normalized_power, calculate_tss, compute_power_bests, compute_distance_bests
     from backend.app.services.metrics_engine import recalculate_from
     from backend.app.models.team_orm import ActivityDistanceBest, ActivityPowerBest
+
+    lookback_date = date.today() - timedelta(days=_RECALCULATE_LOOKBACK_DAYS)
 
     async with get_team_session_factory(team_id)() as session:
         athlete_result = await session.execute(
@@ -158,12 +163,13 @@ async def _bg_full_recalculate(team_id: str, athlete_id: str) -> None:
         )
         athlete = athlete_result.scalar_one()
 
-        # Load all processed activities
+        # Load recent processed activities only; CTL/ATL seed error < 2% after 180 days
         acts_result = await session.execute(
             select(Activity)
             .where(
                 Activity.athlete_id == athlete_id,
                 Activity.status == "processed",
+                Activity.start_time >= datetime.combine(lookback_date, time.min),
             )
             .order_by(Activity.start_time)
         )

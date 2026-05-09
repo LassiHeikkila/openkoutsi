@@ -127,6 +127,9 @@ async def _bg_process_and_recalculate(
                     await session.execute(
                         delete(ActivityDistanceBest).where(ActivityDistanceBest.activity_id == existing_act.id)
                     )
+                    await session.execute(
+                        delete(ActivityInterval).where(ActivityInterval.activity_id == existing_act.id)
+                    )
                     await session.flush()
 
                     await session.execute(
@@ -142,6 +145,11 @@ async def _bg_process_and_recalculate(
                     await session.execute(
                         update(ActivityDistanceBest)
                         .where(ActivityDistanceBest.activity_id == activity_id)
+                        .values(activity_id=existing_act.id)
+                    )
+                    await session.execute(
+                        update(ActivityInterval)
+                        .where(ActivityInterval.activity_id == activity_id)
                         .values(activity_id=existing_act.id)
                     )
                     await session.flush()

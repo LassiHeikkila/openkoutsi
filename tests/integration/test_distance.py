@@ -42,7 +42,7 @@ async def _insert_activity_with_speed(
         )
     )
 
-    from backend.app.services.training_math import compute_distance_bests
+    from openkoutsi.training_math import compute_distance_bests
 
     bests = compute_distance_bests(speed_stream)
     for distance_m, time_s in bests.items():

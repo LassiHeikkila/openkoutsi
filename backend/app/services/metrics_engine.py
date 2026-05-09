@@ -1,16 +1,16 @@
-import math
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models.team_orm import Activity, DailyMetric
+from openkoutsi.fatigue_metrics import compute_daily_metrics
 
 
 async def recalculate_from(
     athlete_id: str, from_date: date, session: AsyncSession
 ) -> None:
-    # Load seed CTL/ATL from the day before from_date (or 0.0)
+    # Seed CTL/ATL from the day before from_date (or 0.0)
     prev_date = from_date - timedelta(days=1)
     prev_result = await session.execute(
         select(DailyMetric).where(
@@ -19,10 +19,10 @@ async def recalculate_from(
         )
     )
     prev = prev_result.scalar_one_or_none()
-    ctl = prev.ctl if prev else 0.0
-    atl = prev.atl if prev else 0.0
+    initial_ctl = prev.ctl if prev else 0.0
+    initial_atl = prev.atl if prev else 0.0
 
-    # Load all processed activities from from_date onwards, bucket TSS by date
+    # Bucket TSS by date for all processed activities from from_date onwards
     cutoff = datetime.combine(from_date, time.min)
     acts_result = await session.execute(
         select(Activity).where(
@@ -36,42 +36,26 @@ async def recalculate_from(
     for act in acts_result.scalars():
         if act.start_time is None:
             continue
-        day = (
-            act.start_time.date()
-            if hasattr(act.start_time, "date")
-            else act.start_time
-        )
+        day = act.start_time.date() if hasattr(act.start_time, "date") else act.start_time
         tss_by_date[day] = tss_by_date.get(day, 0.0) + (act.tss or 0.0)
 
-    k42 = 1 - math.exp(-1 / 42)
-    k7 = 1 - math.exp(-1 / 7)
+    metrics = compute_daily_metrics(tss_by_date, from_date, date.today(), initial_ctl, initial_atl)
 
-    current = from_date
-    today = date.today()
-    while current <= today:
-        tss_day = tss_by_date.get(current, 0.0)
-        tsb = ctl - atl  # form = yesterday's CTL - yesterday's ATL
-        new_ctl = ctl + (tss_day - ctl) * k42
-        new_atl = atl + (tss_day - atl) * k7
-
+    for m in metrics:
         existing = await session.execute(
             select(DailyMetric).where(
                 DailyMetric.athlete_id == athlete_id,
-                DailyMetric.date == current,
+                DailyMetric.date == m["date"],
             )
         )
         metric = existing.scalar_one_or_none()
         if metric is None:
-            metric = DailyMetric(athlete_id=athlete_id, date=current)
+            metric = DailyMetric(athlete_id=athlete_id, date=m["date"])
             session.add(metric)
 
-        metric.ctl = new_ctl
-        metric.atl = new_atl
-        metric.tsb = tsb
-        metric.tss_day = tss_day
-
-        ctl = new_ctl
-        atl = new_atl
-        current += timedelta(days=1)
+        metric.ctl = m["ctl"]
+        metric.atl = m["atl"]
+        metric.tsb = m["tsb"]
+        metric.tss_day = m["tss_day"]
 
     await session.commit()

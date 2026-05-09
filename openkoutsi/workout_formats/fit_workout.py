@@ -6,7 +6,7 @@ Requires the `fit-tool` package (add to pyproject.toml and run `uv sync`).
 
 from __future__ import annotations
 
-from backend.app.services.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
+from openkoutsi.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
 
 try:
     from fit_tool.fit_file_builder import FitFileBuilder
@@ -26,7 +26,6 @@ except ImportError:
     _FIT_AVAILABLE = False
 
 
-# FIT intensity values
 _INTENSITY = {
     "warmup": "WARMUP",
     "active": "ACTIVE",
@@ -44,7 +43,6 @@ def _zone_midpoint_w(zone_number: int, power_zones: list[dict] | None, ftp: int)
         low = z.get("low", 0)
         high = z.get("high", low)
         return int((low + high) / 2.0)
-    # Fallback percentages of FTP
     fallback_pct = {1: 0.55, 2: 0.65, 3: 0.80, 4: 0.92, 5: 1.05, 6: 1.20, 7: 1.50}
     return int(ftp * fallback_pct.get(zone_number, 0.75))
 
@@ -107,7 +105,7 @@ def _build_fit_bytes(
     workout_msg = WorkoutMessage()
     workout_msg.sport = Sport.CYCLING
     workout_msg.num_valid_steps = len(flat_steps)
-    workout_msg.wkt_name = workout_name[:15]  # FIT name field is limited
+    workout_msg.workout_name = workout_name
     builder.add(workout_msg)
 
     for step in flat_steps:
@@ -121,7 +119,6 @@ def _build_fit_bytes(
             builder.add(msg)
             continue
 
-        # Regular step
         dur = step.get("duration", {})
         if dur.get("type") == "time":
             msg.duration_type = WorkoutStepDuration.TIME
@@ -137,8 +134,7 @@ def _build_fit_bytes(
         if target and target.get("metric") == "power" and ftp:
             msg.target_type = WorkoutStepTarget.POWER
             watts = _spec_to_watts(target["spec"], ftp, power_zones)
-            # FIT power target uses offset 1000: value = watts + 1000
-            msg.target_value = watts + 1000
+            msg.target_value = watts + 1000  # FIT power target offset
         elif target and target.get("metric") == "hr":
             msg.target_type = WorkoutStepTarget.HEART_RATE
             spec = target["spec"]

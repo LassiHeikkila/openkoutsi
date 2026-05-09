@@ -1,11 +1,23 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openkoutsi.fit import summarizeWorkout, getStartTime, extractIntervals
 from openkoutsi.categorization import classify_workout
+from openkoutsi.fit_processing import (
+    resolve_sport_type,
+    auto_interval_s,
+    build_auto_intervals,
+    compute_interval_stats,
+)
+from openkoutsi.training_math import (
+    normalized_power,
+    calculate_tss,
+    compute_power_bests,
+    compute_distance_bests,
+)
 from backend.app.models.team_orm import (
     Activity,
     ActivityDistanceBest,
@@ -14,103 +26,6 @@ from backend.app.models.team_orm import (
     ActivityStream,
     Athlete,
 )
-from backend.app.services.training_math import (
-    normalized_power,
-    calculate_tss,
-    compute_power_bests,
-    compute_distance_bests,
-)
-
-
-_FIT_SPORT_MAP = {
-    "running": "Run",
-    "cycling": "Ride",
-    "training": "WeightTraining",
-    "swimming": "Swim",
-    "walking": "Walk",
-    "hiking": "Hike",
-}
-
-
-def _resolve_sport_type(fit_sport: str | None) -> str:
-    """Normalise a raw fitdecode sport string to a Strava-style name."""
-    if fit_sport is None:
-        return "Cycling"
-    mapped = _FIT_SPORT_MAP.get(fit_sport.lower())
-    if mapped:
-        return mapped
-    # Unknown sport: title-case the raw string rather than defaulting to Cycling.
-    return fit_sport.title()
-
-
-def _auto_interval_s(duration_s: int) -> int:
-    minutes = duration_s / 60
-    if minutes <= 45:
-        return 5 * 60
-    elif minutes <= 90:
-        return 10 * 60
-    else:
-        return 15 * 60
-
-
-def _build_auto_intervals(activity_start: datetime, duration_s: int, interval_s: int) -> list[dict]:
-    intervals = []
-    offset = 0
-    while offset < duration_s:
-        length = min(interval_s, duration_s - offset)
-        intervals.append({
-            "start_time": activity_start + timedelta(seconds=offset),
-            "duration_s": float(length),
-            "distance_m": None,
-        })
-        offset += interval_s
-    return intervals
-
-
-def _mean_nonzero(values: list[float]) -> Optional[float]:
-    nonzero = [v for v in values if v > 0]
-    return sum(nonzero) / len(nonzero) if nonzero else None
-
-
-def _compute_interval_stats(
-    raw: list[dict],
-    activity_start: datetime,
-    stream_map: dict[str, list[float]],
-    is_auto: bool,
-) -> list[dict]:
-    # Strip tzinfo before subtraction so naive DB datetimes and tz-aware FIT
-    # datetimes can be compared without error.
-    if activity_start.tzinfo is not None:
-        activity_start = activity_start.replace(tzinfo=None)
-
-    result = []
-    for i, iv in enumerate(raw):
-        iv_start = iv["start_time"]
-        if isinstance(iv_start, datetime) and iv_start.tzinfo is not None:
-            iv_start = iv_start.replace(tzinfo=None)
-        start_offset_s = int(round((iv_start - activity_start).total_seconds()))
-        duration_s = int(round(iv["duration_s"]))
-        start_offset_s = max(0, start_offset_s)
-        end = start_offset_s + duration_s
-
-        def _slice_mean(key: str) -> Optional[float]:
-            data = stream_map.get(key, [])
-            if not data:
-                return None
-            return _mean_nonzero(data[start_offset_s:end])
-
-        result.append({
-            "interval_number": i + 1,
-            "start_offset_s": start_offset_s,
-            "duration_s": duration_s,
-            "distance_m": iv.get("distance_m"),
-            "avg_hr": _slice_mean("heartrate"),
-            "avg_power": _slice_mean("power"),
-            "avg_speed_ms": _slice_mean("speed"),
-            "avg_cadence": _slice_mean("cadence"),
-            "is_auto_split": is_auto,
-        })
-    return result
 
 
 def read_fit_start_time(path: str) -> Optional[datetime]:
@@ -140,7 +55,7 @@ async def process_fit_file(
     )
 
     activity.name = activity.name or "Uploaded Activity"
-    activity.sport_type = activity.sport_type or _resolve_sport_type(profile.sport_type)
+    activity.sport_type = activity.sport_type or resolve_sport_type(profile.sport_type)
     activity.start_time = profile.start_time
     activity.duration_s = profile.duration
     activity.distance_m = float(profile.distance)
@@ -187,7 +102,7 @@ async def process_fit_file(
                 )
             )
 
-    speed_data_ms = stream_map["speed"]  # already converted to m/s above
+    speed_data_ms = stream_map["speed"]
     if speed_data_ms:
         dbests = compute_distance_bests(speed_data_ms)
         for distance_m, time_s in dbests.items():
@@ -204,18 +119,14 @@ async def process_fit_file(
     raw_intervals = extractIntervals(path)
     is_auto = len(raw_intervals) <= 1
     if is_auto:
-        # Use stream length rather than timer duration — Wahoo (and other
-        # devices) pause the timer during stops, so total_timer_time can be
-        # significantly shorter than the elapsed wall-clock time recorded in
-        # the streams. Splitting by timer duration leaves the tail uncovered.
         stream_length = max(
             (len(v) for v in stream_map.values() if v), default=profile.duration
         )
         actual_duration = max(profile.duration, stream_length)
-        interval_s = _auto_interval_s(actual_duration)
-        raw_intervals = _build_auto_intervals(profile.start_time, actual_duration, interval_s)
+        interval_s = auto_interval_s(actual_duration)
+        raw_intervals = build_auto_intervals(profile.start_time, actual_duration, interval_s)
 
-    intervals = _compute_interval_stats(raw_intervals, profile.start_time, stream_map, is_auto)
+    intervals = compute_interval_stats(raw_intervals, profile.start_time, stream_map, is_auto)
     for iv in intervals:
         session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity.id, **iv))
 

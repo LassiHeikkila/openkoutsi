@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from backend.app.services.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
+from openkoutsi.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
 
 
 def _zone_midpoint_pct(zone_number: int, power_zones: list[dict] | None, ftp: int) -> float:
@@ -15,7 +15,6 @@ def _zone_midpoint_pct(zone_number: int, power_zones: list[dict] | None, ftp: in
         high = z.get("high", low)
         mid = (low + high) / 2.0
         return mid / ftp
-    # Fallback: rough zone fractions
     fallback = {1: 0.55, 2: 0.65, 3: 0.80, 4: 0.92, 5: 1.05, 6: 1.20, 7: 1.50}
     return fallback.get(zone_number, 0.75)
 
@@ -43,7 +42,6 @@ def _step_to_element(step: dict, ftp: int, power_zones: list[dict] | None) -> ET
     if dur.get("type") == "time":
         duration_s = dur["seconds"]
     else:
-        # Open / distance steps: use 60 s placeholder
         duration_s = 60
 
     target = step.get("target")
@@ -89,12 +87,6 @@ def _step_to_element(step: dict, ftp: int, power_zones: list[dict] | None) -> ET
 
 
 def _repeat_to_elements(block: dict, ftp: int, power_zones: list[dict] | None) -> list[ET.Element]:
-    """
-    Convert a RepeatBlock to Zwift XML elements.
-
-    A two-child block (active + recovery) maps neatly to <IntervalsT>.
-    Anything else is flattened and repeated inline.
-    """
     count = block.get("repeat_count", 1)
     children = block.get("steps", [])
 
@@ -124,7 +116,6 @@ def _repeat_to_elements(block: dict, ftp: int, power_zones: list[dict] | None) -
                 el.set("OffPower", "0.500")
             return [el]
 
-    # General case: inline repetition
     elements = []
     for _ in range(count):
         for child in children:

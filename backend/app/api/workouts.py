@@ -12,10 +12,10 @@ from backend.app.schemas.workouts import (
     WorkoutDefinitionCreate,
     WorkoutDefinitionResponse,
     WorkoutDefinitionUpdate,
-    WorkoutStepOrRepeat,
 )
-from backend.app.services.workout_estimator import estimate_duration_s, estimate_tss
-from backend.app.services.workout_formats.registry import EXPORTERS
+from openkoutsi.workout_estimator import estimate_duration_s, estimate_tss
+from openkoutsi.workout_formats.registry import EXPORTERS
+from openkoutsi.workout_schema import WorkoutStepOrRepeat
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
 
@@ -47,7 +47,7 @@ async def _get_workout(
 
 def _validate_steps(steps_raw: list[WorkoutStepOrRepeat]) -> list[dict]:
     """Validate and serialise steps, enforcing max repeat-nesting depth of 1."""
-    from backend.app.schemas.workouts import RepeatBlock
+    from openkoutsi.workout_schema import RepeatBlock
 
     for step in steps_raw:
         if isinstance(step, RepeatBlock) and step.max_depth() > 1:

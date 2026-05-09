@@ -4,7 +4,7 @@ Unit tests for peak_average_power and compute_power_bests in training_math.py.
 
 import pytest
 
-from backend.app.services.training_math import (
+from openkoutsi.training_math import (
     POWER_BEST_DURATIONS,
     compute_power_bests,
     peak_average_power,

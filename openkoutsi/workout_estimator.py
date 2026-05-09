@@ -38,8 +38,7 @@ def _step_tss(step: dict, ftp: int) -> float:
         pct = ((low + high) / 2.0) / ftp if ftp else 0.0
     else:
         return 0.0
-    # TSS = (duration_h * NP * IF) / (FTP * 3600) * 100; for steady state NP≈power
-    # Simplified: TSS = duration_h * IF^2 * 100
+    # TSS = duration_h * IF^2 * 100 (simplified steady-state approximation)
     return duration_h * (pct ** 2) * 100.0
 
 

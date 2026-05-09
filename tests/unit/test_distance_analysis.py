@@ -3,7 +3,7 @@ Unit tests for best_time_for_distance and compute_distance_bests in training_mat
 """
 import pytest
 
-from backend.app.services.training_math import (
+from openkoutsi.training_math import (
     DISTANCE_BEST_DISTANCES,
     best_time_for_distance,
     compute_distance_bests,

@@ -473,7 +473,7 @@ export default function ProfilePage() {
             )
               .filter(({ provider }) => profile.connected_providers.includes(provider))
               .map(({ provider, name }) => (
-                <div key={provider} className="flex items-center justify-between gap-4">
+                <div key={provider} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted-foreground">
                     {name}: {t(`profile.syncZonesProvides.${provider}`)}
                   </p>
@@ -482,7 +482,7 @@ export default function ProfilePage() {
                     size="sm"
                     disabled={syncingZones !== null}
                     onClick={() => handleSyncZones(provider)}
-                    className="shrink-0"
+                    className="self-start sm:self-auto shrink-0"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncingZones === provider ? 'animate-spin' : ''}`} />
                     {syncingZones === provider

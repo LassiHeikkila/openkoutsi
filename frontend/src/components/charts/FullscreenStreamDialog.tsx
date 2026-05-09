@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import useSWR from 'swr'
-import { Maximize2, Loader2 } from 'lucide-react'
+import { Maximize2, Loader2, ZoomOut } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
   ResponsiveContainer,
@@ -156,7 +156,20 @@ export function FullscreenStreamDialog({ activityId, streams, intervals, overlay
       </DialogTrigger>
       <DialogContent className="max-w-[95vw] w-full h-[90vh] flex flex-col gap-0 p-4">
         <DialogHeader className="shrink-0 pb-2">
-          <DialogTitle className="text-base">{t('detail.streams')}</DialogTitle>
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle className="text-base">{t('detail.streams')}</DialogTitle>
+            {(brushRange[0] > 0 || brushRange[1] < 1) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetZoom}
+                className="shrink-0 h-7 text-xs gap-1"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+                {t('detail.chart.resetZoom')}
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {isLoading && (

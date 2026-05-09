@@ -69,12 +69,14 @@ export function ProviderCard({
 
   return (
     <>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         {connected ? (
           <>
-            <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-sm">{t('profile.provider.connected')}</span>
-            <div className="ml-auto flex gap-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500 shrink-0" />
+              <span className="text-sm">{t('profile.provider.connected')}</span>
+            </div>
+            <div className="flex gap-2 sm:ml-auto">
               <Button variant="outline" size="sm" onClick={onSync} disabled={syncing}>
                 {syncing ? t('profile.provider.syncing') : t('profile.provider.syncNow')}
               </Button>
@@ -90,11 +92,13 @@ export function ProviderCard({
           </>
         ) : (
           <>
-            <span className="inline-block h-2 w-2 rounded-full bg-gray-300" />
-            <span className="text-sm text-muted-foreground">{t('profile.provider.notConnected')}</span>
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-gray-300 shrink-0" />
+              <span className="text-sm text-muted-foreground">{t('profile.provider.notConnected')}</span>
+            </div>
             {name === 'Strava' ? (
               <button
-                className="ml-auto disabled:opacity-50"
+                className="disabled:opacity-50"
                 disabled={configured === undefined}
                 aria-disabled={notConfigured}
                 onClick={handleConnectClick}
@@ -109,7 +113,6 @@ export function ProviderCard({
             ) : (
               <Button
                 size="sm"
-                className="ml-auto"
                 variant={notConfigured ? 'outline' : 'default'}
                 disabled={configured === undefined}
                 aria-disabled={notConfigured}

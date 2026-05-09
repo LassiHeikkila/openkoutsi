@@ -236,19 +236,23 @@ export function CombinedStreamChart({
   return (
     <div className={isFullHeight ? 'flex flex-col h-full gap-3' : 'space-y-3'}>
       {/* Stream toggles */}
-      <div className="flex flex-wrap gap-x-4 gap-y-2 shrink-0">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 shrink-0">
         {STREAM_KEYS.filter((k) => presentKeys.has(k)).map((k) => {
           const cfg = STREAM_CONFIG[k]
           return (
-            <div key={k} className="flex items-center gap-1.5">
+            <div key={k} className="flex items-center gap-2">
               <Checkbox
                 id={`stream-${k}`}
                 checked={visibleStreams.has(k)}
                 onCheckedChange={() => toggleStream(k)}
+                className="h-5 w-5"
               />
-              <Label htmlFor={`stream-${k}`} className="flex items-center gap-1 cursor-pointer text-sm">
+              <Label
+                htmlFor={`stream-${k}`}
+                className="flex items-center gap-1.5 cursor-pointer text-sm py-2 pr-1"
+              >
                 <span
-                  className="inline-block h-2 w-2 rounded-full shrink-0"
+                  className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: cfg.color }}
                 />
                 {streamLabels[k]}

@@ -1,36 +1,36 @@
 {
   "title": "Harjoitukset",
-  "noActivities": "Ei harjoituksia viel\u00e4. Lataa .fit-tiedosto yll\u00e4.",
-  "loading": "Ladataan\u2026",
+  "noActivities": "Ei harjoituksia vielä. Lataa .fit-tiedosto yllä.",
+  "loading": "Ladataan…",
   "upload": {
-    "drop": "Pudota .fit-tiedostot t\u00e4h\u00e4n tai napsauta selataksesi",
-    "uploading": "Ladataan\u2026",
+    "drop": "Pudota .fit-tiedostot tähän tai napsauta selataksesi",
+    "uploading": "Ladataan…",
     "invalidFile": "Virheellinen tiedosto",
     "invalidFileDesc": "Vain .fit-tiedostot ovat tuettuja",
     "someSkipped": "Joitain tiedostoja ohitettu",
     "someSkippedDesc": "Vain .fit-tiedostot ovat tuettuja",
     "uploaded": "Ladattu",
     "uploadedMultiple": "Ladattu {count} tiedostoa",
-    "processing": "{name} k\u00e4sitell\u00e4\u00e4n",
-    "processingMultiple": "Tiedostoja k\u00e4sitell\u00e4\u00e4n",
-    "uploadFailed": "{name} lataus ep\u00e4onnistui"
+    "processing": "{name} käsitellään",
+    "processingMultiple": "Tiedostoja käsitellään",
+    "uploadFailed": "{name} lataus epäonnistui"
   },
-  "processing": "K\u00e4sitell\u00e4\u00e4n\u2026",
+  "processing": "Käsitellään…",
   "detail": {
-    "loading": "Ladataan\u2026",
+    "loading": "Ladataan…",
     "notFound": "Harjoitusta ei löydy",
     "clickToRename": "Napsauta nimetäksesi uudelleen",
     "downloadFit": "Lataa FIT-tiedosto",
     "reprocessIntervals": "Päivitä intervallit",
     "reprocessFailed": "Intervallien päivitys epäonnistui",
     "renameFailed": "Uudelleennimeäminen epäonnistui",
-    "downloadFailed": "Lataus ep\u00e4onnistui",
-    "deleteFailed": "Poisto ep\u00e4onnistui",
+    "downloadFailed": "Lataus epäonnistui",
+    "deleteFailed": "Poisto epäonnistui",
     "deleted": "Harjoitus poistettu",
     "deleteTitle": "Poistetaanko harjoitus?",
-    "deleteDesc": "T\u00e4m\u00e4 poistaa harjoituksen pysyv\u00e4sti ja laskee kuntomittarisi uudelleen.",
+    "deleteDesc": "Tämä poistaa harjoituksen pysyvästi ja laskee kuntomittarisi uudelleen.",
     "stats": {
-      "date": "P\u00e4iv\u00e4m\u00e4\u00e4r\u00e4",
+      "date": "Päivämäärä",
       "duration": "Kesto",
       "distance": "Matka",
       "avgPower": "Keskim. teho",
@@ -64,7 +64,8 @@
         "cadence": "Kadenssi"
       },
       "rollingAvg": "Liukuva keskiarvo",
-      "rollingAvgWindow": "Ikkuna (s)"
+      "rollingAvgWindow": "Ikkuna (s)",
+      "resetZoom": "Nollaa zoomaus"
     },
     "signals": {
       "title": "Signaalianalyysi",
@@ -112,15 +113,15 @@
     "analysis": {
       "title": "Tekoälyanalyysi",
       "analyse": "Analysoi harjoitus",
-      "retry": "Yrit\u00e4 uudelleen",
+      "retry": "Yritä uudelleen",
       "reanalyse": "Analysoi uudelleen",
       "stop": "Pysäytä",
-      "analysing": "Analysoidaan\u2026",
-      "analysingWait": "Analysoidaan\u2026 t\u00e4m\u00e4 saattaa kest\u00e4\u00e4 muutaman minuutin",
-      "failed": "Analyysi ep\u00e4onnistui. Yrit\u00e4 uudelleen.",
-      "noAnalysis": "Ei analyysi\u00e4 viel\u00e4. Napsauta \u201cAnalysoi harjoitus\u201d saadaksesi tekoälyvalmennuspalautetta.",
-      "analysisFailed": "Analyysi ep\u00e4onnistui",
-      "analysisFailedToStart": "Analyysin k\u00e4ynnistys ep\u00e4onnistui"
+      "analysing": "Analysoidaan…",
+      "analysingWait": "Analysoidaan… tämä saattaa kestää muutaman minuutin",
+      "failed": "Analyysi epäonnistui. Yritä uudelleen.",
+      "noAnalysis": "Ei analyysiä vielä. Napsauta “Analysoi harjoitus” saadaksesi tekoälyvalmennuspalautetta.",
+      "analysisFailed": "Analyysi epäonnistui",
+      "analysisFailedToStart": "Analyysin käynnistys epäonnistui"
     }
   }
 }

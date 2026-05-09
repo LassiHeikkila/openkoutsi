@@ -41,9 +41,30 @@ export function WeeklyTssBar({ data, weeks = 12, plannedByWeek }: Props) {
   const tickInterval = weeks <= 13 ? 0 : weeks <= 26 ? 1 : 3
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={weekly} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <XAxis dataKey="week" tick={{ fontSize: 11 }} tickLine={false} interval={tickInterval} />
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={weekly} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+        <XAxis
+          dataKey="week"
+          tickLine={false}
+          interval={tickInterval}
+          height={48}
+          tick={({ x, y, payload }) => (
+            <g transform={`translate(${x},${y})`}>
+              <text
+                x={0}
+                y={0}
+                dy={2}
+                textAnchor="end"
+                fill="currentColor"
+                fontSize={10}
+                transform="rotate(-40)"
+                opacity={0.6}
+              >
+                {payload.value}
+              </text>
+            </g>
+          )}
+        />
         <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
         <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
         {plannedByWeek && <Legend wrapperStyle={{ fontSize: 11 }} />}

@@ -31,12 +31,18 @@ from backend.app.models.registry_orm import ProviderConnection
 from backend.app.models.team_orm import (
     Activity,
     ActivityDistanceBest,
+    ActivityInterval,
     ActivityPowerBest,
     ActivitySource,
     ActivityStream,
     Athlete,
 )
-from openkoutsi.fit_processing import resolve_sport_type
+from openkoutsi.fit_processing import (
+    resolve_sport_type,
+    auto_interval_s,
+    build_auto_intervals,
+    compute_interval_stats,
+)
 from backend.app.services.providers.registry import PROVIDERS
 from openkoutsi.training_math import (
     calculate_tss,
@@ -44,7 +50,7 @@ from openkoutsi.training_math import (
     compute_power_bests,
     normalized_power,
 )
-from openkoutsi.fit import summarizeWorkout
+from openkoutsi.fit import summarizeWorkout, extractIntervals
 
 log = logging.getLogger(__name__)
 
@@ -491,6 +497,15 @@ async def _fill_from_source(
             )
             _add_power_bests(activity, athlete, session, power_data)
             _add_distance_bests(activity, athlete, session, speed_ms)
+
+            stream_map = {
+                "power": power_data,
+                "heartrate": hr_data,
+                "cadence": cadence_data,
+                "speed": speed_ms,
+                "altitude": alt_data,
+            }
+            _add_intervals(activity, session, fit_bytes, profile.start_time, stream_map)
         else:
             # FIT parse failed — use summary metadata only
             activity.name = activity.name or norm.name
@@ -625,3 +640,23 @@ def _add_distance_bests(
                 activity_start_time=activity.start_time,
             )
         )
+
+
+def _add_intervals(
+    activity: Activity,
+    session: AsyncSession,
+    fit_bytes: bytes,
+    activity_start: datetime,
+    stream_map: dict,
+) -> None:
+    import io as _io
+    raw = extractIntervals(_io.BytesIO(fit_bytes))
+    is_auto = len(raw) <= 1
+    if is_auto:
+        duration_s = activity.duration_s or 0
+        if duration_s:
+            interval_s = auto_interval_s(duration_s)
+            raw = build_auto_intervals(activity_start, duration_s, interval_s)
+    if raw:
+        for iv in compute_interval_stats(raw, activity_start, stream_map, is_auto):
+            session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity.id, **iv))

@@ -1,5 +1,5 @@
 """
-Shared training load calculations used by both the FIT processor and Strava sync.
+Shared training load calculations — peak power, normalized power, TSS, distance bests.
 """
 
 POWER_BEST_DURATIONS: list[int] = [
@@ -60,7 +60,6 @@ def best_time_for_distance(speed_stream: list[float], distance_m: int) -> int | 
     if n == 0:
         return None
 
-    # prefix sums of distance (metres)
     cum = [0.0] * (n + 1)
     for i, v in enumerate(speed_stream):
         cum[i + 1] = cum[i] + v
@@ -68,7 +67,7 @@ def best_time_for_distance(speed_stream: list[float], distance_m: int) -> int | 
     if cum[n] < distance_m:
         return None
 
-    best = n + 1  # larger than any valid window
+    best = n + 1
     j = 0
     for i in range(1, n + 1):
         while cum[i] - cum[j] >= distance_m:
@@ -123,11 +122,6 @@ def calculate_tss(
         return tss, intensity_factor
 
     if avg_hr is not None and max_hr:
-        # HR-based TSS: TSS = (duration_h) × IF² × 100
-        # where IF = avg_hr / LTHR and LTHR ≈ 90 % of max HR.
-        # The old formula multiplied linearly by the TRIMP coefficient 1.92
-        # (which belongs inside an exponent), producing wildly inflated values
-        # for low-intensity activities.
         lthr = 0.9 * max_hr
         if lthr == 0:
             return None, None

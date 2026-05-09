@@ -7,7 +7,7 @@ import math
 
 import pytest
 
-from backend.app.services.training_math import calculate_tss, normalized_power
+from openkoutsi.training_math import calculate_tss, normalized_power
 
 
 # ── normalized_power ──────────────────────────────────────────────────────────

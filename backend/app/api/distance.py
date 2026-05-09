@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.deps import get_ctx_and_session
 from backend.app.models.team_orm import Activity, ActivityDistanceBest, Athlete
 from backend.app.schemas.distance import AllTimeDistanceBestsResponse, DistanceBestEntry
-from backend.app.services.training_math import DISTANCE_BEST_DISTANCES
+from openkoutsi.training_math import DISTANCE_BEST_DISTANCES
 
 router = APIRouter(prefix="/distance", tags=["distance"])
 

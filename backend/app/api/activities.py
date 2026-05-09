@@ -39,7 +39,7 @@ from backend.app.core.limiter import limiter
 from backend.app.services.fit_processor import process_fit_file, read_fit_start_time
 from backend.app.services.metrics_engine import recalculate_from
 from backend.app.services.provider_sync import _source_priority
-from backend.app.services.training_math import calculate_tss
+from openkoutsi.training_math import calculate_tss
 from openkoutsi.categorization import WorkoutCategory, classify_workout
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB

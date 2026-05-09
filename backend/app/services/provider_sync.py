@@ -36,9 +36,9 @@ from backend.app.models.team_orm import (
     ActivityStream,
     Athlete,
 )
-from backend.app.services.fit_processor import _resolve_sport_type
+from openkoutsi.fit_processing import resolve_sport_type
 from backend.app.services.providers.registry import PROVIDERS
-from backend.app.services.training_math import (
+from openkoutsi.training_math import (
     calculate_tss,
     compute_distance_bests,
     compute_power_bests,
@@ -460,7 +460,7 @@ async def _fill_from_source(
             activity.sport_type = (
                 activity.sport_type
                 or norm.sport_type
-                or _resolve_sport_type(profile.sport_type)
+                or resolve_sport_type(profile.sport_type)
             )
             activity.start_time = profile.start_time or norm.start_time
             activity.duration_s = profile.duration

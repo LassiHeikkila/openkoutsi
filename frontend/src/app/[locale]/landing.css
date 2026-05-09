@@ -362,6 +362,9 @@
 .lp .viz-num .unit {
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 13px;
+  line-height: 1;
+  letter-spacing: normal;
+  vertical-align: middle;
   color: var(--ink-2);
   font-weight: 400;
   margin-left: 6px;
@@ -385,6 +388,19 @@
   color: var(--ink-3);
   display: flex;
   justify-content: space-between;
+}
+
+.lp .viz-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lp .viz-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 /* FEATURE STRIP */

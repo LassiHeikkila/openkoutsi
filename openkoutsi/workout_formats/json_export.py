@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from backend.app.services.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
+from openkoutsi.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
 
 
 class JsonExporter(AbstractWorkoutExporter):

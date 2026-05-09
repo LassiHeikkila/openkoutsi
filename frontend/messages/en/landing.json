@@ -22,8 +22,8 @@
   },
   "heroViz": {
     "label": "week 14 \u00b7 TSS",
-    "caption1": "+8.4% on 4-wk avg",
-    "caption2": "FTP 284W"
+    "caption1": "actual",
+    "caption2": "weekly target"
   },
   "features": {
     "01": {

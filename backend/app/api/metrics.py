@@ -148,7 +148,7 @@ async def recalculate_all(
 
 async def _bg_full_recalculate(team_id: str, athlete_id: str) -> None:
     from sqlalchemy import delete
-    from backend.app.services.training_math import normalized_power, calculate_tss, compute_power_bests, compute_distance_bests
+    from openkoutsi.training_math import normalized_power, calculate_tss, compute_power_bests, compute_distance_bests
     from backend.app.services.metrics_engine import recalculate_from
     from backend.app.models.team_orm import ActivityDistanceBest, ActivityPowerBest
 

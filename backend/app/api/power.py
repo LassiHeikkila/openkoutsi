@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.deps import get_ctx_and_session
 from backend.app.models.team_orm import Activity, ActivityPowerBest, Athlete, WeightLog
 from backend.app.schemas.power import AllTimePowerBestsResponse, PowerBestEntry
-from backend.app.services.training_math import POWER_BEST_DURATIONS
+from openkoutsi.training_math import POWER_BEST_DURATIONS
 
 router = APIRouter(prefix="/power", tags=["power"])
 

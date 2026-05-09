@@ -220,22 +220,35 @@ export default function RootPage() {
               612<span className="unit">/ 720 target</span>
             </div>
             <div className="viz-chart">
+              {/* 8 weeks of bars: actual (accent) + planned (muted). Week 8 = current: 612 actual vs 720 planned. */}
               <svg viewBox="0 0 400 60" preserveAspectRatio="none">
-                <line x1="0" y1="15" x2="400" y2="15" stroke="var(--line)" strokeDasharray="2 4" />
-                <line x1="0" y1="35" x2="400" y2="35" stroke="var(--line)" strokeDasharray="2 4" />
-                <polyline
-                  points="0,45 50,40 100,42 150,34 200,38 250,24 300,28 350,18 400,10"
-                  fill="none"
-                  stroke="var(--accent)"
-                  strokeWidth="2"
-                />
-                <circle cx="400" cy="10" r="4" fill="var(--accent)" />
-                <circle cx="400" cy="10" r="9" fill="var(--accent)" opacity="0.25" />
+                <rect x="9.5"   y="35" width="14" height="25" fill="var(--accent)" rx="2"/>
+                <rect x="26.5"  y="34" width="14" height="26" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="59.5"  y="32" width="14" height="28" fill="var(--accent)" rx="2"/>
+                <rect x="76.5"  y="33" width="14" height="27" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="109.5" y="42" width="14" height="18" fill="var(--accent)" rx="2"/>
+                <rect x="126.5" y="39" width="14" height="21" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="159.5" y="28" width="14" height="32" fill="var(--accent)" rx="2"/>
+                <rect x="176.5" y="30" width="14" height="30" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="209.5" y="24" width="14" height="36" fill="var(--accent)" rx="2"/>
+                <rect x="226.5" y="26" width="14" height="34" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="259.5" y="35" width="14" height="25" fill="var(--accent)" rx="2"/>
+                <rect x="276.5" y="32" width="14" height="28" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="309.5" y="14" width="14" height="46" fill="var(--accent)" rx="2"/>
+                <rect x="326.5" y="16" width="14" height="44" fill="var(--ink-3)" rx="2" opacity="0.4"/>
+                <rect x="359.5" y="11" width="14" height="49" fill="var(--accent)" rx="2"/>
+                <rect x="376.5" y="2"  width="14" height="58" fill="var(--ink-3)" rx="2" opacity="0.4"/>
               </svg>
             </div>
             <div className="viz-cap">
-              <span>{t('heroViz.caption1')}</span>
-              <span>{t('heroViz.caption2')}</span>
+              <span className="viz-legend-item">
+                <span className="viz-legend-dot" style={{ background: 'var(--accent)' }} />
+                {t('heroViz.caption1')}
+              </span>
+              <span className="viz-legend-item">
+                <span className="viz-legend-dot" style={{ background: 'var(--ink-3)', opacity: 0.5 }} />
+                {t('heroViz.caption2')}
+              </span>
             </div>
           </div>
         </div>

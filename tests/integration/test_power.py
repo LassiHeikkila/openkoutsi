@@ -42,7 +42,7 @@ async def _insert_activity_with_power(
         )
     )
 
-    from backend.app.services.training_math import compute_power_bests
+    from openkoutsi.training_math import compute_power_bests
 
     bests = compute_power_bests(power_stream)
     for duration_s, power_w in bests.items():

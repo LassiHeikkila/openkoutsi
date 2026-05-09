@@ -203,7 +203,7 @@ export default function WorkoutsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{t('library')}</h1>
         <div className="flex gap-2">
           <ImportButton onImported={handleCreated} />

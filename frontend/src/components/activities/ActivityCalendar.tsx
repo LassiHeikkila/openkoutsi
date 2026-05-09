@@ -98,7 +98,7 @@ export function ActivityCalendar() {
     <>
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <CardTitle className="text-base">{t('calendar.title')}</CardTitle>
               {isLoading && <span className="text-xs text-muted-foreground">{t('calendar.loading')}</span>}

@@ -6,8 +6,8 @@ import useSWR from 'swr'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from '@/navigation'
 import { fetcher, apiFetch, apiDownload } from '@/lib/api'
-import type { ActivityDetail, AthleteProfile } from '@/lib/types'
-import { getLlmConfig, streamAnalysis } from '@/lib/llm'
+import type { ActivityDetail, AthleteProfile, FitnessCurrent } from '@/lib/types'
+import { getLlmConfig, streamAnalysis, type FatigueContext } from '@/lib/llm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +32,41 @@ import { WorkoutCategoryBadge } from '@/components/activities/WorkoutCategoryBad
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR, formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
 import { ArrowLeft, ChevronDown, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+
+const KOUTSI_AVATAR: Record<string, string> = {
+  cheer: '/koutsi/koutsi-cheer.svg',
+  knowing: '/koutsi/koutsi-knowing.svg',
+  neutral: '/koutsi/koutsi-neutral.svg',
+  stern: '/koutsi/koutsi-stern.svg',
+}
+
+function parseMoodAndParagraphs(text: string): { mood: string; paragraphs: string[] } {
+  const lines = text.split('\n')
+  let mood = 'knowing'
+  let startIdx = 0
+  if (lines[0]?.startsWith('MOOD:')) {
+    const candidate = lines[0].slice(5).trim().toLowerCase()
+    if (candidate in KOUTSI_AVATAR) mood = candidate
+    startIdx = 1
+    while (startIdx < lines.length && lines[startIdx].trim() === '') startIdx++
+  }
+  const rest = lines.slice(startIdx).join('\n')
+  return { mood, paragraphs: rest.split(/\n\n+/).map((p) => p.trim()).filter(Boolean) }
+}
+
+function KoutsiAvatar({ mood }: { mood: string }) {
+  const src = KOUTSI_AVATAR[mood] ?? KOUTSI_AVATAR.knowing
+  return <img src={src} alt="Koutsi" className="w-10 h-10 shrink-0 rounded-full" />
+}
+
+function KoutsiBubble({ text, isPartial }: { text: string; isPartial?: boolean }) {
+  return (
+    <p className="bg-muted rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed max-w-prose">
+      {text}
+      {isPartial && <span className="inline-block w-0.5 h-3.5 ml-0.5 bg-foreground align-middle animate-pulse" />}
+    </p>
+  )
+}
 import { toast } from '@/components/ui/use-toast'
 
 interface Props {
@@ -59,6 +94,7 @@ export default function ActivityDetailPage({ params }: Props) {
     { shouldRetryOnError: false },
   )
   const { data: athlete } = useSWR<AthleteProfile>('/api/athlete/', fetcher)
+  const { data: fitnessCurrent } = useSWR<FitnessCurrent>('/api/metrics/fitness/current', fetcher, { shouldRetryOnError: false })
 
   const [reprocessing, setReprocessing] = useState(false)
   const [overlayStreams, setOverlayStreams] = useState<OverlayStream[]>([])
@@ -160,6 +196,10 @@ export default function ActivityDetailPage({ params }: Props) {
   }
 
   async function handleAnalyze() {
+    const fatigue: FatigueContext | undefined = fitnessCurrent
+      ? { ctl: fitnessCurrent.ctl, atl: fitnessCurrent.atl, tsb: fitnessCurrent.tsb, form: fitnessCurrent.form }
+      : undefined
+
     if (llmConfig && activity && athlete) {
       // User-configured LLM path: proxied through the backend (/api/llm/chat).
       // The API key is decrypted server-side — it never touches the browser.
@@ -172,6 +212,7 @@ export default function ActivityDetailPage({ params }: Props) {
           (chunk) => setStreamingText((t) => (t ?? '') + chunk),
           abortRef.current.signal,
           locale,
+          fatigue,
         )
         // Persist result to backend
         await apiFetch(`/api/activities/${id}/analysis`, {
@@ -195,7 +236,10 @@ export default function ActivityDetailPage({ params }: Props) {
     } else {
       // Server-side LLM path (server has its own LLM configured)
       try {
-        await apiFetch(`/api/activities/${id}/analyze`, { method: 'POST' })
+        await apiFetch(`/api/activities/${id}/analyze`, {
+          method: 'POST',
+          body: JSON.stringify({ locale }),
+        })
         mutate()
       } catch (err) {
         toast({
@@ -468,7 +512,7 @@ export default function ActivityDetailPage({ params }: Props) {
         </Card>
       )}
 
-      {/* AI Analysis */}
+      {/* AI Analysis — Koutsi chat */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-base">{t('detail.analysis.title')}</CardTitle>
@@ -498,26 +542,67 @@ export default function ActivityDetailPage({ params }: Props) {
           )}
         </CardHeader>
         <CardContent>
-          {isStreaming && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                <span>{t('detail.analysis.analysing')}</span>
+          {/* Streaming: build chat bubbles from accumulated text */}
+          {isStreaming && (() => {
+            const { mood, paragraphs } = parseMoodAndParagraphs(streamingText ?? '')
+            const completedParagraphs = paragraphs.slice(0, -1)
+            const partial = paragraphs[paragraphs.length - 1] ?? ''
+            const showWaiting = paragraphs.length === 0
+            return (
+              <div className="flex flex-col gap-3">
+                {showWaiting && (
+                  <div className="flex items-start gap-3">
+                    <KoutsiAvatar mood="neutral" />
+                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                )}
+                {completedParagraphs.map((para, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <KoutsiAvatar mood={mood} />
+                    <KoutsiBubble text={para} />
+                  </div>
+                ))}
+                {partial && (
+                  <div className="flex items-start gap-3">
+                    <KoutsiAvatar mood={mood} />
+                    <KoutsiBubble text={partial} isPartial />
+                  </div>
+                )}
               </div>
-              {streamingText && (
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{streamingText}</p>
-              )}
-            </div>
-          )}
+            )
+          })()}
+
+          {/* Server-side pending (polling) */}
           {!isStreaming && isAnalysisPending && (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              <span>{t('detail.analysis.analysingWait')}</span>
+            <div className="flex items-start gap-3">
+              <KoutsiAvatar mood="neutral" />
+              <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+              </div>
             </div>
           )}
-          {!isStreaming && activity.analysis && (
-            <p className="text-sm whitespace-pre-wrap leading-relaxed">{activity.analysis}</p>
-          )}
+
+          {/* Completed analysis: render as chat bubbles */}
+          {!isStreaming && activity.analysis && (() => {
+            const { mood, paragraphs } = parseMoodAndParagraphs(activity.analysis)
+            return (
+              <div className="flex flex-col gap-3">
+                {paragraphs.map((para, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <KoutsiAvatar mood={mood} />
+                    <KoutsiBubble text={para} />
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
           {!isStreaming && activity.analysis_status === 'error' && !activity.analysis && (
             <p className="text-sm text-destructive">{t('detail.analysis.failed')}</p>
           )}

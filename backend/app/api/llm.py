@@ -159,6 +159,102 @@ async def get_allowed_servers(ctx_session=Depends(get_ctx_and_session)):
     return {"servers": settings.llm_allowed_servers_list}
 
 
+class LlmTestResponse(BaseModel):
+    ok: bool
+    base_url: Optional[str] = None
+    model_configured: Optional[str] = None
+    models_available: Optional[list[str]] = None
+    model_found: bool = False
+    http_status: Optional[int] = None
+    error: Optional[str] = None
+
+
+@router.post("/test-connection", response_model=LlmTestResponse)
+async def test_llm_connection(
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
+):
+    """Test the team's configured LLM connection. Admin-only.
+
+    Calls GET {base_url}/models on the team's saved LLM config and checks
+    whether the configured model appears in the response.
+    """
+    ctx, _ = ctx_session
+    if not ctx.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    team_result = await registry_session.execute(select(Team).where(Team.id == ctx.team_id))
+    team = team_result.scalar_one_or_none()
+
+    base_url = (team.llm_base_url.strip() if team and team.llm_base_url else None) or (settings.llm_base_url or "").strip()
+    model = (team.llm_model.strip() if team and team.llm_model else None) or (settings.llm_model or "").strip()
+
+    if not base_url:
+        raise HTTPException(status_code=400, detail="No LLM base URL configured. Save a base URL first.")
+
+    api_key: str | None = None
+    if team and team.llm_api_key_enc:
+        try:
+            from backend.app.core.file_encryption import decrypt_team_secret
+            api_key = decrypt_team_secret(str(team.llm_api_key_enc), ctx.team_id)
+        except Exception as exc:
+            log.warning("Could not decrypt team LLM API key for test: %s", exc)
+
+    models_url = f"{base_url.rstrip('/')}/models"
+    try:
+        _check_url_safe(models_url)
+    except HTTPException as exc:
+        return LlmTestResponse(ok=False, base_url=base_url, model_configured=model or None, error=exc.detail)
+
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0)) as client:
+            resp = await client.get(models_url, headers=headers, follow_redirects=False)
+    except httpx.ConnectError as exc:
+        return LlmTestResponse(ok=False, base_url=base_url, model_configured=model or None, error=f"Connection refused: {exc}")
+    except httpx.TimeoutException:
+        return LlmTestResponse(ok=False, base_url=base_url, model_configured=model or None, error="Connection timed out")
+    except Exception as exc:
+        return LlmTestResponse(ok=False, base_url=base_url, model_configured=model or None, error=str(exc))
+
+    if resp.status_code == 401:
+        return LlmTestResponse(
+            ok=False,
+            base_url=base_url,
+            model_configured=model or None,
+            http_status=resp.status_code,
+            error="Authentication failed — check your API key",
+        )
+    if resp.status_code != 200:
+        snippet = resp.text[:200] if resp.text else ""
+        return LlmTestResponse(
+            ok=False,
+            base_url=base_url,
+            model_configured=model or None,
+            http_status=resp.status_code,
+            error=f"HTTP {resp.status_code}: {snippet}",
+        )
+
+    try:
+        data = resp.json()
+        models_available = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m]
+    except Exception:
+        models_available = []
+
+    model_found = bool(model) and model in models_available
+
+    return LlmTestResponse(
+        ok=True,
+        base_url=base_url,
+        model_configured=model or None,
+        models_available=models_available,
+        model_found=model_found,
+    )
+
+
 async def _get_llm_config(
     athlete: Athlete,
     team_id: str,

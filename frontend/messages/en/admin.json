@@ -69,6 +69,14 @@
     "save": "Save settings",
     "saving": "Saving…",
     "saved": "Settings saved",
-    "saveFailed": "Save failed"
+    "saveFailed": "Save failed",
+    "testConnection": "Test connection",
+    "testConnectionTesting": "Testing…",
+    "testConnectionOk": "Connection OK",
+    "testConnectionFailed": "Connection failed",
+    "testModelFound": "Configured model found",
+    "testModelNotFound": "Configured model not found in the available models list",
+    "testModelsAvailable": "Available models",
+    "testNoBaseUrl": "Save a base URL first before testing"
   }
 }

@@ -26,24 +26,60 @@ from ..core.config import settings
 from ..db.registry import _RegistrySessionLocal
 from ..db.team_session import get_team_session_factory
 from ..models.registry_orm import Team
-from ..models.team_orm import Activity, Athlete
+from ..models.team_orm import Activity, Athlete, DailyMetric
 
 if TYPE_CHECKING:
     pass
 
 log = logging.getLogger(__name__)
 
+_LOCALE_LANGUAGE: dict[str, str] = {
+    "en": "English",
+    "fi": "Finnish",
+    "sv": "Swedish",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "pt": "Portuguese",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ru": "Russian",
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "ko": "Korean",
+}
 
-_SYSTEM_PROMPT = """\
-You are an expert endurance sports coach. Analyse the following workout data and \
-provide actionable coaching feedback in 3-5 paragraphs. Cover: effort quality and \
-pacing, power/heart-rate relationship if data is available, training load context, \
-and 1-2 specific recommendations for the athlete's next sessions.
-Write in plain prose — no markdown headers, no bullet points, no code blocks.\
+_SYSTEM_PROMPT_BASE = """\
+You are Koutsi, an expert endurance sports coach. Analyse the following workout data and \
+provide actionable coaching feedback in 3-5 paragraphs. Cover: effort quality and pacing, \
+power/heart-rate relationship if data is available, the athlete's current fatigue state and \
+what it means for recovery, and 1-2 specific recommendations for the athlete's next sessions.
+Write in plain prose — no markdown headers, no bullet points, no code blocks.
+Separate each paragraph with a single blank line.
+
+Before the feedback paragraphs, output a single line in the format: MOOD:<mood>
+where <mood> is one of: cheer, knowing, neutral, stern.
+- cheer: great session, personal records set, athlete exceeded expectations
+- stern: poor effort, insufficient intensity, or counterproductive session
+- neutral: routine session with no strong positive or negative takeaway
+- knowing: all other cases (default)
+The MOOD line must be the very first line, followed by a blank line, then the paragraphs.\
 """
 
 
-def _build_prompt(activity: Activity, athlete: Athlete) -> str:
+def _build_system_prompt(locale: str | None = None) -> str:
+    prompt = _SYSTEM_PROMPT_BASE
+    if locale:
+        lang = _LOCALE_LANGUAGE.get(locale.split("-")[0].lower())
+        if lang:
+            prompt += f" Respond in {lang}."
+    return prompt
+
+
+def _build_prompt(
+    activity: Activity, athlete: Athlete, fatigue: DailyMetric | None = None
+) -> str:
     lines = [f"Workout summary for a {activity.sport_type or 'unknown sport'} session:"]
 
     if activity.start_time:
@@ -76,6 +112,13 @@ def _build_prompt(activity: Activity, athlete: Athlete) -> str:
     if athlete.max_hr:
         lines.append(f"  Athlete max HR: {athlete.max_hr} bpm")
 
+    if fatigue:
+        from ..schemas.metrics import _tsb_to_form
+        lines.append("\nAthlete fatigue state prior to this workout:")
+        lines.append(f"  Fitness (CTL): {fatigue.ctl:.1f}")
+        lines.append(f"  Fatigue (ATL): {fatigue.atl:.1f}")
+        lines.append(f"  Form (TSB): {fatigue.tsb:.1f} ({_tsb_to_form(fatigue.tsb)})")
+
     if activity.intervals:
         lines.append("\nInterval breakdown:")
         for iv in activity.intervals:
@@ -95,7 +138,11 @@ def _build_prompt(activity: Activity, athlete: Athlete) -> str:
 
 
 async def _stream_analysis(
-    activity: Activity, athlete: Athlete, team_id: str
+    activity: Activity,
+    athlete: Athlete,
+    team_id: str,
+    fatigue: DailyMetric | None = None,
+    locale: str | None = None,
 ) -> AsyncIterator[str]:
     """Yield text chunks from the LLM via streaming SSE."""
     # Fetch team for LLM config
@@ -125,8 +172,8 @@ async def _stream_analysis(
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": _build_prompt(activity, athlete)},
+            {"role": "system", "content": _build_system_prompt(locale)},
+            {"role": "user", "content": _build_prompt(activity, athlete, fatigue)},
         ],
         "temperature": 0.7,
         "stream": True,
@@ -153,7 +200,9 @@ async def _stream_analysis(
                     continue
 
 
-async def analyze_activity_bg(activity_id: str, athlete_id: str, team_id: str) -> None:
+async def analyze_activity_bg(
+    activity_id: str, athlete_id: str, team_id: str, locale: str | None = None
+) -> None:
     """
     Background task: stream LLM analysis → write chunks to DB every 500 ms
     → set final analysis_status to 'done' or 'error'.
@@ -172,12 +221,32 @@ async def analyze_activity_bg(activity_id: str, athlete_id: str, team_id: str) -
         )
         athlete = athlete_result.scalar_one()
 
+        # Resolve locale: explicit arg → athlete app_settings → None (defaults to English)
+        resolved_locale = locale or (athlete.app_settings or {}).get("locale")
+
+        # Fetch fatigue metrics for the day before the workout
+        workout_date = activity.start_time.date() if activity.start_time else None
+        fatigue: DailyMetric | None = None
+        if workout_date:
+            fat_res = await session.execute(
+                select(DailyMetric)
+                .where(
+                    DailyMetric.athlete_id == athlete.id,
+                    DailyMetric.date < workout_date,
+                )
+                .order_by(DailyMetric.date.desc())
+                .limit(1)
+            )
+            fatigue = fat_res.scalar_one_or_none()
+
         buffer: list[str] = []
         last_flush = time.monotonic()
         accumulated = ""
 
         try:
-            async for chunk in _stream_analysis(activity, athlete, team_id):
+            async for chunk in _stream_analysis(
+                activity, athlete, team_id, fatigue=fatigue, locale=resolved_locale
+            ):
                 buffer.append(chunk)
                 if time.monotonic() - last_flush >= 0.5:
                     accumulated += "".join(buffer)

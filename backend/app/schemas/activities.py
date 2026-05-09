@@ -13,6 +13,10 @@ class FrontendAnalysisBody(BaseModel):
     analysis: str = Field(..., min_length=1)
 
 
+class AnalyzeBody(BaseModel):
+    locale: Optional[str] = None
+
+
 class ManualActivityCreate(BaseModel):
     sport_type: str
     start_time: datetime

@@ -69,6 +69,14 @@
     "save": "Tallenna asetukset",
     "saving": "Tallennetaan…",
     "saved": "Asetukset tallennettu",
-    "saveFailed": "Tallennus epäonnistui"
+    "saveFailed": "Tallennus epäonnistui",
+    "testConnection": "Testaa yhteys",
+    "testConnectionTesting": "Testataan…",
+    "testConnectionOk": "Yhteys toimii",
+    "testConnectionFailed": "Yhteys epäonnistui",
+    "testModelFound": "Määritetty malli löytyi",
+    "testModelNotFound": "Määritettyä mallia ei löydy saatavilla olevien mallien listalta",
+    "testModelsAvailable": "Saatavilla olevat mallit",
+    "testNoBaseUrl": "Tallenna perus-URL ennen testaamista"
   }
 }

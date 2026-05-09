@@ -513,6 +513,16 @@ function InvitationsTab({ slug }: { slug: string }) {
 
 // ── Settings tab ───────────────────────────────────────────────────────────────
 
+interface LlmTestResult {
+  ok: boolean
+  base_url?: string | null
+  model_configured?: string | null
+  models_available?: string[] | null
+  model_found?: boolean
+  http_status?: number | null
+  error?: string | null
+}
+
 function SettingsTab({ slug }: { slug: string }) {
   const t = useTranslations('admin')
   const { data: settings, mutate } = useSWR<TeamSettingsResponse>(
@@ -524,6 +534,8 @@ function SettingsTab({ slug }: { slug: string }) {
   const [apiKey, setApiKey] = useState('')
   const [clearKey, setClearKey] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<LlmTestResult | null>(null)
 
   useEffect(() => {
     if (settings) {
@@ -547,6 +559,7 @@ function SettingsTab({ slug }: { slug: string }) {
       })
       setApiKey('')
       setClearKey(false)
+      setTestResult(null)
       mutate()
       toast({ title: t('settings.saved') })
     } catch (err) {
@@ -557,6 +570,23 @@ function SettingsTab({ slug }: { slug: string }) {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleTestConnection() {
+    if (!settings?.llm_base_url) {
+      setTestResult({ ok: false, error: t('settings.testNoBaseUrl') })
+      return
+    }
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await apiFetch('/api/llm/test-connection', { method: 'POST' }) as LlmTestResult
+      setTestResult(result)
+    } catch (err) {
+      setTestResult({ ok: false, error: err instanceof Error ? err.message : 'Unknown error' })
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -575,7 +605,7 @@ function SettingsTab({ slug }: { slug: string }) {
               type="url"
               placeholder={t('settings.baseUrlPlaceholder')}
               value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
+              onChange={(e) => { setBaseUrl(e.target.value); setTestResult(null) }}
             />
           </div>
           <div className="space-y-2">
@@ -585,7 +615,7 @@ function SettingsTab({ slug }: { slug: string }) {
               type="text"
               placeholder={t('settings.modelPlaceholder')}
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => { setModel(e.target.value); setTestResult(null) }}
             />
           </div>
           <div className="space-y-2">
@@ -598,7 +628,7 @@ function SettingsTab({ slug }: { slug: string }) {
               type="password"
               placeholder={t('settings.apiKeyPlaceholder')}
               value={apiKey}
-              onChange={(e) => { setApiKey(e.target.value); setClearKey(false) }}
+              onChange={(e) => { setApiKey(e.target.value); setClearKey(false); setTestResult(null) }}
               autoComplete="new-password"
             />
             {settings?.llm_api_key_set && (
@@ -606,16 +636,51 @@ function SettingsTab({ slug }: { slug: string }) {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => { setClearKey(true); setApiKey('') }}
+                onClick={() => { setClearKey(true); setApiKey(''); setTestResult(null) }}
               >
                 {t('settings.clearKey')}
               </Button>
             )}
           </div>
-          <Button type="submit" disabled={saving}>
-            {saving ? t('settings.saving') : t('settings.save')}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={saving}>
+              {saving ? t('settings.saving') : t('settings.save')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={testing || saving}
+              onClick={handleTestConnection}
+            >
+              {testing ? t('settings.testConnectionTesting') : t('settings.testConnection')}
+            </Button>
+          </div>
         </form>
+
+        {testResult && (
+          <div className={`mt-4 max-w-md rounded-lg border p-4 text-sm space-y-2 ${testResult.ok ? 'border-green-500/40 bg-green-500/5' : 'border-destructive/40 bg-destructive/5'}`}>
+            <p className={`font-medium ${testResult.ok ? 'text-green-700 dark:text-green-400' : 'text-destructive'}`}>
+              {testResult.ok ? t('settings.testConnectionOk') : t('settings.testConnectionFailed')}
+            </p>
+            {testResult.error && (
+              <p className="text-muted-foreground">{testResult.error}</p>
+            )}
+            {testResult.ok && testResult.model_configured && (
+              <p className={testResult.model_found ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}>
+                {testResult.model_found ? t('settings.testModelFound') : t('settings.testModelNotFound')}
+                {' '}({testResult.model_configured})
+              </p>
+            )}
+            {testResult.ok && testResult.models_available && testResult.models_available.length > 0 && (
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">{t('settings.testModelsAvailable')}:</p>
+                <p className="text-xs font-mono text-muted-foreground break-all">
+                  {testResult.models_available.join(', ')}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

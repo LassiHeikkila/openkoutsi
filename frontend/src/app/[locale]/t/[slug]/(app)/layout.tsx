@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/api'
 import { Nav } from '@/components/Nav'
 import { Menu } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const t = useTranslations('common')
+  const locale = useLocale()
   const { athlete, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
@@ -22,6 +24,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       router.replace(`/t/${slug}/login`)
     }
   }, [athlete, loading, router, slug])
+
+  // Persist locale in app_settings so backend jobs (auto-analysis) can use it
+  useEffect(() => {
+    if (athlete && (athlete.app_settings as Record<string, unknown>)?.locale !== locale) {
+      apiFetch('/api/athlete/', {
+        method: 'PATCH',
+        body: JSON.stringify({ app_settings: { locale } }),
+      }).catch(() => {})
+    }
+  }, [locale, athlete])
 
   useEffect(() => {
     setNavOpen(false)

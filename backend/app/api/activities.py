@@ -31,6 +31,7 @@ from backend.app.schemas.activities import (
     ActivityResponse,
     ActivityStreamsResponse,
     ActivityUpdate,
+    AnalyzeBody,
     FrontendAnalysisBody,
     IntervalResponse,
     ManualActivityCreate,
@@ -671,6 +672,7 @@ async def delete_activity(
 async def trigger_analysis(
     activity_id: str,
     background_tasks: BackgroundTasks,
+    body: AnalyzeBody = AnalyzeBody(),
     ctx_session=Depends(get_ctx_and_session),
 ):
     from backend.app.services.llm_activity_analyzer import analyze_activity_bg
@@ -690,7 +692,9 @@ async def trigger_analysis(
     activity.analysis = None
     await session.commit()
 
-    background_tasks.add_task(analyze_activity_bg, activity_id, athlete.id, ctx.team_id)
+    background_tasks.add_task(
+        analyze_activity_bg, activity_id, athlete.id, ctx.team_id, body.locale
+    )
     return {"status": "pending"}
 
 

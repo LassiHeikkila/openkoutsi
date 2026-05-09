@@ -89,12 +89,27 @@ async function _proxyFetch(
 
 // ── Activity analysis ─────────────────────────────────────────────────────
 
+export interface FatigueContext {
+  ctl: number
+  atl: number
+  tsb: number
+  form: string
+}
+
 const ANALYSIS_SYSTEM_PROMPT_BASE =
-  'You are an expert endurance sports coach. Analyse the following workout data and ' +
+  'You are Koutsi, an expert endurance sports coach. Analyse the following workout data and ' +
   'provide actionable coaching feedback in 3-5 paragraphs. Cover: effort quality and ' +
-  'pacing, power/heart-rate relationship if data is available, training load context, ' +
-  'and 1-2 specific recommendations for the athlete\'s next sessions. ' +
-  'Write in plain prose — no markdown headers, no bullet points, no code blocks.'
+  'pacing, power/heart-rate relationship if data is available, the athlete\'s current fatigue ' +
+  'state and what it means for recovery, and 1-2 specific recommendations for the athlete\'s next sessions. ' +
+  'Write in plain prose — no markdown headers, no bullet points, no code blocks. ' +
+  'Separate each paragraph with a single blank line.\n\n' +
+  'Before the feedback paragraphs, output a single line in the format: MOOD:<mood>\n' +
+  'where <mood> is one of: cheer, knowing, neutral, stern.\n' +
+  '- cheer: great session, personal records set, athlete exceeded expectations\n' +
+  '- stern: poor effort, insufficient intensity, or counterproductive session\n' +
+  '- neutral: routine session with no strong positive or negative takeaway\n' +
+  '- knowing: all other cases (default)\n' +
+  'The MOOD line must be the very first line, followed by a blank line, then the paragraphs.'
 
 const LOCALE_LANGUAGE: Record<string, string> = {
   en: 'English',
@@ -120,7 +135,11 @@ function buildAnalysisSystemPrompt(locale?: string): string {
   return `${ANALYSIS_SYSTEM_PROMPT_BASE} Respond in ${language}.`
 }
 
-function buildAnalysisPrompt(activity: ActivityDetail, athlete: AthleteProfile): string {
+function buildAnalysisPrompt(
+  activity: ActivityDetail,
+  athlete: AthleteProfile,
+  fatigue?: FatigueContext,
+): string {
   const lines: string[] = [
     `Workout summary for a ${activity.sport_type || 'unknown sport'} session:`,
   ]
@@ -154,6 +173,13 @@ function buildAnalysisPrompt(activity: ActivityDetail, athlete: AthleteProfile):
   if (athlete.ftp != null) lines.push(`  Athlete FTP: ${athlete.ftp} W`)
   if (athlete.max_hr != null) lines.push(`  Athlete max HR: ${athlete.max_hr} bpm`)
 
+  if (fatigue) {
+    lines.push('', 'Athlete fatigue state prior to this workout:')
+    lines.push(`  Fitness (CTL): ${fatigue.ctl.toFixed(1)}`)
+    lines.push(`  Fatigue (ATL): ${fatigue.atl.toFixed(1)}`)
+    lines.push(`  Form (TSB): ${fatigue.tsb.toFixed(1)} (${fatigue.form})`)
+  }
+
   return lines.join('\n')
 }
 
@@ -168,12 +194,13 @@ export async function streamAnalysis(
   onChunk: (chunk: string) => void,
   signal?: AbortSignal,
   locale?: string,
+  fatigue?: FatigueContext,
 ): Promise<string> {
   const resp = await _proxyFetch(
     {
       messages: [
         { role: 'system', content: buildAnalysisSystemPrompt(locale) },
-        { role: 'user', content: buildAnalysisPrompt(activity, athlete) },
+        { role: 'user', content: buildAnalysisPrompt(activity, athlete, fatigue) },
       ],
       temperature: 0.7,
       stream: true,

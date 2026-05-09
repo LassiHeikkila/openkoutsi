@@ -98,7 +98,8 @@ export default function DashboardPage() {
     fetcher,
   )
   const { data: plans } = useSWR<TrainingPlan[]>('/api/plans/', fetcher)
-  const plannedByWeek = plans ? aggregatePlannedTssByWeek(plans) : undefined
+  const _rawPlanned = plans ? aggregatePlannedTssByWeek(plans) : undefined
+  const plannedByWeek = _rawPlanned?.size ? _rawPlanned : undefined
 
   async function handleRecalculate() {
     setRecalculating(true)

@@ -277,12 +277,12 @@ export default function ActivityDetailPage({ params }: Props) {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
+          <div className="min-w-0">
             {editingTitle ? (
               <Input
                 ref={titleInputRef}
@@ -295,14 +295,14 @@ export default function ActivityDetailPage({ params }: Props) {
               />
             ) : (
               <h1
-                className="text-xl font-bold cursor-pointer hover:text-muted-foreground transition-colors"
+                className="text-xl font-bold cursor-pointer hover:text-muted-foreground transition-colors truncate"
                 onClick={startEditingTitle}
                 title={t('detail.clickToRename')}
               >
                 {activity.name}
               </h1>
             )}
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
               <p className="text-sm text-muted-foreground capitalize">{activity.sport_type}</p>
               <WorkoutCategoryBadge
                 category={activity.workout_category}
@@ -313,7 +313,7 @@ export default function ActivityDetailPage({ params }: Props) {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {activity.status === 'processed' && (
             <Button
               variant="outline"

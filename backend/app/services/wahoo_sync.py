@@ -61,6 +61,12 @@ async def process_wahoo_webhook(payload: dict) -> None:
 
     norm = _normalize_workout(workout)
 
+    # Extract the CDN FIT URL attached to the webhook payload. This is the
+    # original device file; prefer it over the API endpoint which may return a
+    # processed version without structured-workout lap records.
+    workout_summary_for_url = workout.get("workout_summary") or workout_summary
+    cdn_fit_url: str | None = (workout_summary_for_url.get("file") or {}).get("url")
+
     # Resolve user and team memberships from registry
     async with _RegistrySessionLocal() as reg_session:
         conn_result = await reg_session.execute(
@@ -92,14 +98,31 @@ async def process_wahoo_webhook(payload: dict) -> None:
                 if athlete is None:
                     continue
 
-                await _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, session)
+                await _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, session, cdn_fit_url=cdn_fit_url)
         except Exception:
             log.exception(
                 "Failed to process Wahoo webhook for user %s in team %s", user_id, team_id
             )
 
 
-async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, session) -> None:
+async def _download_fit_cdn_first(
+    access_token: str, external_id: str, cdn_url: str | None
+) -> bytes | None:
+    """Download FIT bytes, preferring the CDN URL (original device file)
+    over the API endpoint which may return a processed version."""
+    import httpx
+    if cdn_url:
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0), follow_redirects=True) as client:
+                r = await client.get(cdn_url)
+                if r.is_success:
+                    return r.content
+        except Exception:
+            pass
+    return await _wahoo_client.download_fit_file(access_token, external_id)
+
+
+async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, session, *, cdn_fit_url: str | None = None) -> None:
     from backend.app.services.metrics_engine import recalculate_from
 
     # Idempotent: skip if this (provider, external_id) is already imported
@@ -137,8 +160,8 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
 
         prefetched_fit: bytes | None = None
         try:
-            prefetched_fit = await _wahoo_client.download_fit_file(
-                access_token, norm.external_id
+            prefetched_fit = await _download_fit_cdn_first(
+                access_token, norm.external_id, cdn_fit_url
             )
         except Exception:
             prefetched_fit = None
@@ -187,8 +210,17 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
     session.add(src)
     await session.flush()
 
+    prefetched_fit_new: bytes | None = None
+    try:
+        prefetched_fit_new = await _download_fit_cdn_first(
+            access_token, norm.external_id, cdn_fit_url
+        )
+    except Exception:
+        prefetched_fit_new = None
+
     await _populate_activity(
-        activity, src, norm, _wahoo_client, access_token, athlete, session, team_id=team_id
+        activity, src, norm, _wahoo_client, access_token, athlete, session, team_id=team_id,
+        prefetched_fit=prefetched_fit_new
     )
 
     if activity.start_time:

@@ -204,6 +204,71 @@ async def _bg_recalculate(athlete_id: str, from_date: date, team_id: str) -> Non
         await recalculate_from(athlete_id, from_date, session)
 
 
+async def _bg_attach_fit_and_reprocess(
+    file_path: str, activity_id: str, team_id: str, global_user_id: str,
+) -> None:
+    """After attaching a user-uploaded FIT to an existing synced activity,
+    replace its intervals with lap data from the device file."""
+    import io as _io
+    from sqlalchemy import delete as sa_delete
+    from openkoutsi.fit import extractIntervals
+    from openkoutsi.fit_processing import (
+        auto_interval_s, build_auto_intervals, compute_interval_stats,
+    )
+    from backend.app.core.file_encryption import encrypt_file
+    from backend.app.models.team_orm import ActivityStream
+
+    async with get_team_session_factory(team_id)() as session:
+        act_result = await session.execute(select(Activity).where(Activity.id == activity_id))
+        activity = act_result.scalar_one_or_none()
+        if activity is None:
+            return
+
+        raw = extractIntervals(file_path)
+        is_auto = len(raw) <= 1
+        if is_auto:
+            duration_s = activity.duration_s or 0
+            stream_length = 0
+            streams_result = await session.execute(
+                select(ActivityStream).where(ActivityStream.activity_id == activity_id)
+            )
+            for s in streams_result.scalars():
+                if s.data:
+                    stream_length = max(stream_length, len(s.data))
+            actual_duration = max(duration_s, stream_length)
+            if actual_duration:
+                interval_s = auto_interval_s(actual_duration)
+                raw = build_auto_intervals(activity.start_time, actual_duration, interval_s)
+
+        if raw and activity.start_time:
+            streams_result = await session.execute(
+                select(ActivityStream).where(ActivityStream.activity_id == activity_id)
+            )
+            stream_map = {s.stream_type: s.data for s in streams_result.scalars()}
+            intervals_data = compute_interval_stats(raw, activity.start_time, stream_map, is_auto)
+
+            await session.execute(
+                sa_delete(ActivityInterval).where(ActivityInterval.activity_id == activity_id)
+            )
+            for iv in intervals_data:
+                session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity_id, **iv))
+
+        try:
+            src_result = await session.execute(
+                select(ActivitySource).where(
+                    ActivitySource.activity_id == activity_id,
+                    ActivitySource.provider == "upload",
+                )
+            )
+            upload_src = src_result.scalar_one()
+            encrypt_file(Path(file_path), team_id, global_user_id)
+            upload_src.fit_file_encrypted = True
+        except Exception:
+            log.warning("Failed to encrypt attached FIT file %s", file_path, exc_info=True)
+
+        await session.commit()
+
+
 @router.post("/upload", response_model=ActivityResponse, status_code=201)
 @limiter.limit("30/hour")
 async def upload_activity(
@@ -251,11 +316,26 @@ async def upload_activity(
         )
         duplicate = dupe_result.scalar_one_or_none()
         if duplicate is not None:
-            file_path.unlink(missing_ok=True)
-            raise HTTPException(
-                status_code=409,
-                detail="An activity starting at this time already exists.",
+            already_uploaded = any(s.provider == "upload" for s in duplicate.sources)
+            if already_uploaded:
+                file_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=409,
+                    detail="An activity starting at this time already exists.",
+                )
+            # Existing activity from a sync source — attach this FIT and reprocess intervals.
+            upload_src = ActivitySource(
+                activity_id=duplicate.id,
+                provider="upload",
+                fit_file_path=str(file_path),
             )
+            session.add(upload_src)
+            await session.commit()
+            background_tasks.add_task(
+                _bg_attach_fit_and_reprocess,
+                str(file_path), duplicate.id, ctx.team_id, ctx.user_id,
+            )
+            return ActivityResponse.model_validate(duplicate)
 
     activity = Activity(
         id=str(uuid.uuid4()),

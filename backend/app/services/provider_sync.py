@@ -350,9 +350,10 @@ async def _populate_activity(
     session: AsyncSession,
     *,
     team_id: str,
+    prefetched_fit=_NOTFETCHED,
 ) -> None:
     """Populate a new Activity's metrics, streams and bests from src's data."""
-    await _fill_from_source(activity, src, norm, client, access_token, athlete, session, team_id=team_id)
+    await _fill_from_source(activity, src, norm, client, access_token, athlete, session, team_id=team_id, prefetched_fit=prefetched_fit)
 
 
 async def _repopulate_activity(
@@ -383,6 +384,9 @@ async def _repopulate_activity(
         delete(ActivityDistanceBest).where(
             ActivityDistanceBest.activity_id == activity.id
         )
+    )
+    await session.execute(
+        delete(ActivityInterval).where(ActivityInterval.activity_id == activity.id)
     )
     await session.flush()
     await _fill_from_source(

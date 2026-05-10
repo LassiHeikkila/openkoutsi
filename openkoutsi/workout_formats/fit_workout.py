@@ -36,31 +36,6 @@ _INTENSITY = {
 }
 
 
-def _zone_midpoint_w(zone_number: int, power_zones: list[dict] | None, ftp: int) -> int:
-    """Return the midpoint of a power zone in watts."""
-    if power_zones and 1 <= zone_number <= len(power_zones):
-        z = power_zones[zone_number - 1]
-        low = z.get("low", 0)
-        high = z.get("high", low)
-        return int((low + high) / 2.0)
-    fallback_pct = {1: 0.55, 2: 0.65, 3: 0.80, 4: 0.92, 5: 1.05, 6: 1.20, 7: 1.50}
-    return int(ftp * fallback_pct.get(zone_number, 0.75))
-
-
-def _spec_to_watts(spec: dict, ftp: int, power_zones: list[dict] | None) -> int:
-    """Resolve a target spec to an absolute watt value."""
-    t = spec.get("type")
-    if t == "pct_ftp":
-        return int(ftp * spec["pct"] / 100.0)
-    if t == "absolute":
-        return int(spec["value"])
-    if t == "range":
-        return int((spec["low"] + spec["high"]) / 2.0)
-    if t == "zone":
-        return _zone_midpoint_w(spec["zone_number"], power_zones, ftp)
-    return 0
-
-
 def _flatten_steps(steps: list[dict]) -> list[dict]:
     """
     Linearise the step tree into a flat list suitable for FIT message encoding.
@@ -93,8 +68,6 @@ def _flatten_steps(steps: list[dict]) -> list[dict]:
 def _build_fit_bytes(
     flat_steps: list[dict],
     workout_name: str,
-    ftp: int,
-    power_zones: list[dict] | None,
 ) -> bytes:
     builder = FitFileBuilder()
 
@@ -131,10 +104,28 @@ def _build_fit_bytes(
             msg.duration_value = 0
 
         target = step.get("target")
-        if target and target.get("metric") == "power" and ftp:
+        if target and target.get("metric") == "power":
+            spec = target.get("spec", {})
+            spec_type = spec.get("type")
             msg.target_type = WorkoutStepTarget.POWER
-            watts = _spec_to_watts(target["spec"], ftp, power_zones)
-            msg.target_value = watts + 1000  # FIT power target offset
+            if spec_type == "zone":
+                # Zone number (1-7) goes in target_power_zone; device shows the zone label
+                msg.target_power_zone = spec["zone_number"]
+            elif spec_type == "pct_ftp":
+                # Store percentage directly (no +1000 offset); values <1000 are unambiguous
+                # since absolute watts always use the watts+1000 convention (>=1001).
+                pct = int(spec["pct"])
+                msg.custom_target_power_low = pct
+                msg.custom_target_power_high = pct
+            elif spec_type == "absolute":
+                watts = int(spec["value"])
+                msg.custom_target_power_low = watts + 1000
+                msg.custom_target_power_high = watts + 1000
+            elif spec_type == "range":
+                msg.custom_target_power_low = int(spec["low"]) + 1000
+                msg.custom_target_power_high = int(spec["high"]) + 1000
+            else:
+                msg.target_type = WorkoutStepTarget.OPEN
         elif target and target.get("metric") == "hr":
             msg.target_type = WorkoutStepTarget.HEART_RATE
             spec = target["spec"]
@@ -177,6 +168,5 @@ class FitWorkoutExporter(AbstractWorkoutExporter):
                 "fit-tool is not installed. Add 'fit-tool>=0.9' to pyproject.toml and run 'uv sync'."
             )
 
-        ftp = athlete_ftp or 0
         flat = _flatten_steps(steps)
-        return _build_fit_bytes(flat, workout_name, ftp, athlete_power_zones)
+        return _build_fit_bytes(flat, workout_name)

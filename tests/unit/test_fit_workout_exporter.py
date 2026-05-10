@@ -1,17 +1,11 @@
 """Tests for the FIT workout exporter."""
+import io
+import fitdecode
 import pytest
 from openkoutsi.workout_formats.fit_workout import (
-    _zone_midpoint_w,
-    _spec_to_watts,
     _flatten_steps,
     FitWorkoutExporter,
 )
-
-POWER_ZONES = [
-    {"low": 0, "high": 150},    # Z1
-    {"low": 151, "high": 210},  # Z2
-    {"low": 211, "high": 250},  # Z3
-]
 
 
 def _step(step_type="active", duration_type="time", seconds=300, spec=None, notes=None):
@@ -31,34 +25,15 @@ def _repeat(count, steps):
     return {"kind": "repeat", "repeat_count": count, "steps": steps}
 
 
-class TestZoneMidpointW:
-    def test_uses_provided_zones(self):
-        # Z1: 0-150W → midpoint 75W
-        assert _zone_midpoint_w(1, POWER_ZONES, 250) == 75
-
-    def test_uses_fallback_when_no_zones(self):
-        # Z1 fallback 55% of FTP=250 → 137W
-        assert _zone_midpoint_w(1, None, 250) == int(250 * 0.55)
-
-    def test_uses_fallback_for_out_of_range(self):
-        assert _zone_midpoint_w(99, POWER_ZONES, 250) == int(250 * 0.75)
-
-
-class TestSpecToWatts:
-    def test_pct_ftp(self):
-        assert _spec_to_watts({"type": "pct_ftp", "pct": 90}, 250, None) == int(250 * 0.9)
-
-    def test_absolute(self):
-        assert _spec_to_watts({"type": "absolute", "value": 230}, 250, None) == 230
-
-    def test_range_uses_midpoint(self):
-        assert _spec_to_watts({"type": "range", "low": 200, "high": 300}, 250, None) == 250
-
-    def test_zone(self):
-        assert _spec_to_watts({"type": "zone", "zone_number": 1}, 250, POWER_ZONES) == 75
-
-    def test_unknown_returns_zero(self):
-        assert _spec_to_watts({"type": "unknown"}, 250, None) == 0
+def _decode_steps(data: bytes) -> list[dict]:
+    """Return decoded workout_step field dicts from a FIT bytes blob."""
+    steps = []
+    with fitdecode.FitReader(io.BytesIO(data)) as fit:
+        for frame in fit:
+            if isinstance(frame, fitdecode.FitDataMessage) and frame.name == "workout_step":
+                fields = {f.name: f.value for f in frame.fields}
+                steps.append(fields)
+    return steps
 
 
 class TestFlattenSteps:
@@ -112,14 +87,65 @@ class TestFitWorkoutExporter:
     def test_export_starts_with_fit_magic(self):
         exporter = FitWorkoutExporter()
         result = exporter.export([_step()], "W", None, 250, None)
-        # FIT files start with 14-byte header; check it's a valid byte sequence
         assert len(result) >= 14
 
-    def test_export_with_power_spec(self):
+    def test_zone_target_encodes_as_zone_number(self):
+        exporter = FitWorkoutExporter()
+        step = _step(spec={"type": "zone", "zone_number": 3})
+        data = exporter.export([step], "Zone Test", None, 250, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "power"
+        assert decoded[0]["target_power_zone"] == 3
+
+    def test_pct_ftp_target_uses_custom_power_fields_as_percentage(self):
         exporter = FitWorkoutExporter()
         step = _step(spec={"type": "pct_ftp", "pct": 100})
-        result = exporter.export([step], "Power Test", None, 250, None)
-        assert isinstance(result, bytes)
+        data = exporter.export([step], "Power Test", None, 250, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "power"
+        # Stored as percentage directly (no +1000 offset); device uses its own FTP
+        assert decoded[0]["custom_target_power_low"] == 100
+        assert decoded[0]["custom_target_power_high"] == 100
+
+    def test_pct_ftp_does_not_require_ftp(self):
+        exporter = FitWorkoutExporter()
+        step = _step(spec={"type": "pct_ftp", "pct": 90})
+        data = exporter.export([step], "No FTP", None, None, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "power"
+        assert decoded[0]["custom_target_power_low"] == 90
+        assert decoded[0]["custom_target_power_high"] == 90
+
+    def test_absolute_power_target_uses_custom_power_fields(self):
+        exporter = FitWorkoutExporter()
+        step = _step(spec={"type": "absolute", "value": 200})
+        data = exporter.export([step], "Absolute Power", None, 250, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "power"
+        assert decoded[0]["custom_target_power_low"] == 1200
+        assert decoded[0]["custom_target_power_high"] == 1200
+
+    def test_range_power_target_uses_custom_power_fields(self):
+        exporter = FitWorkoutExporter()
+        step = _step(spec={"type": "range", "low": 200, "high": 250})
+        data = exporter.export([step], "Range Power", None, 250, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "power"
+        assert decoded[0]["custom_target_power_low"] == 1200
+        assert decoded[0]["custom_target_power_high"] == 1250
+
+    def test_intensity_encoded_correctly(self):
+        exporter = FitWorkoutExporter()
+        steps = [
+            _step(step_type="warmup"),
+            _step(step_type="active"),
+            _step(step_type="cooldown"),
+        ]
+        data = exporter.export(steps, "Intensity Test", None, 250, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["intensity"] == "warmup"
+        assert decoded[1]["intensity"] == "active"
+        assert decoded[2]["intensity"] == "cooldown"
 
     def test_export_with_repeat(self):
         exporter = FitWorkoutExporter()

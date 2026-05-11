@@ -102,11 +102,10 @@ export default function ActivityDetailPage({ params }: Props) {
   const [powerBestsOpen, setPowerBestsOpen] = useState(false)
   const [distanceBestsOpen, setDistanceBestsOpen] = useState(false)
 
-  async function handleReprocessIntervals() {
+  async function handleReprocess() {
     setReprocessing(true)
     try {
-      const updated = await apiFetch(`/api/activities/${id}/reprocess-intervals`, { method: 'POST' }) as ActivityDetail
-      await apiFetch(`/api/activities/${id}/recalculate-category`, { method: 'POST' })
+      const updated = await apiFetch(`/api/activities/${id}/reprocess`, { method: 'POST' }) as ActivityDetail
       await mutate(updated, false)
       await mutate()
     } catch {
@@ -318,7 +317,7 @@ export default function ActivityDetailPage({ params }: Props) {
             <Button
               variant="outline"
               size="icon"
-              onClick={handleReprocessIntervals}
+              onClick={handleReprocess}
               disabled={reprocessing}
               title={t('detail.reprocessIntervals')}
             >

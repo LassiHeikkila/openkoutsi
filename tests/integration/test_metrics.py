@@ -108,6 +108,49 @@ class TestGetFitnessCurrent:
         assert resp.status_code == 401
 
 
+class TestCatchUp:
+    async def test_creates_today_metric_when_missing(self, client, auth_headers, session):
+        ath_resp = await client.get("/api/athlete/", headers=auth_headers)
+        athlete_id = ath_resp.json()["id"]
+        today = date.today()
+
+        # Seed yesterday so CTL/ATL can be inherited
+        session.add(DailyMetric(
+            athlete_id=athlete_id,
+            date=today - timedelta(days=1),
+            ctl=40.0, atl=50.0, tsb=-10.0, tss_day=80.0,
+        ))
+        await session.commit()
+
+        resp = await client.post("/api/metrics/catch-up", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["updated"] is True
+
+        # Today's DailyMetric should now exist
+        resp2 = await client.get("/api/metrics/fitness/current", headers=auth_headers)
+        assert resp2.json()["date"] == str(today)
+
+    async def test_returns_not_updated_when_already_current(self, client, auth_headers, session):
+        ath_resp = await client.get("/api/athlete/", headers=auth_headers)
+        athlete_id = ath_resp.json()["id"]
+        today = date.today()
+
+        session.add(DailyMetric(
+            athlete_id=athlete_id,
+            date=today,
+            ctl=30.0, atl=35.0, tsb=-5.0, tss_day=60.0,
+        ))
+        await session.commit()
+
+        resp = await client.post("/api/metrics/catch-up", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["updated"] is False
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.post("/api/metrics/catch-up")
+        assert resp.status_code == 401
+
+
 class TestRecalculate:
     async def test_returns_202_immediately(self, client, auth_headers):
         resp = await client.post("/api/metrics/recalculate", headers=auth_headers)

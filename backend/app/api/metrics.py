@@ -9,6 +9,7 @@ from backend.app.core.deps import get_ctx_and_session
 from backend.app.db.team_session import get_team_session_factory
 from backend.app.models.team_orm import Activity, ActivityStream, Athlete, DailyMetric
 from backend.app.schemas.metrics import FitnessCurrentResponse, FitnessMetricResponse
+from backend.app.services.metrics_engine import catch_up_metrics
 from openkoutsi.zones import Zones
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
@@ -127,6 +128,15 @@ async def get_ftp_history(ctx_session=Depends(get_ctx_and_session)):
     ctx, session = ctx_session
     athlete = await _get_athlete(ctx.user_id, session)
     return athlete.ftp_tests or []
+
+
+@router.post("/catch-up", status_code=200)
+async def catch_up(ctx_session=Depends(get_ctx_and_session)):
+    """Fill missing DailyMetric rows using stored TSS. Called on dashboard load."""
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+    updated = await catch_up_metrics(athlete.id, session)
+    return {"updated": updated}
 
 
 @router.post("/recalculate", status_code=202)

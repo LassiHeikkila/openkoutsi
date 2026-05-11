@@ -1,19 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/auth'
 import { fetcher, apiFetch } from '@/lib/api'
 import type { FitnessPoint, FitnessCurrent, TrainingPlan } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { FitnessChart } from '@/components/charts/FitnessChart'
 import { WeeklyTssBar } from '@/components/charts/WeeklyTssBar'
 import { ActivityCalendar } from '@/components/activities/ActivityCalendar'
 import { aggregatePlannedTssByWeek } from '@/lib/planUtils'
-import { toast } from '@/components/ui/use-toast'
-import { RefreshCw, HelpCircle } from 'lucide-react'
+import { HelpCircle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -90,7 +88,6 @@ function FormBadge({ form }: { form: FitnessCurrent['form'] }) {
 export default function DashboardPage() {
   const t = useTranslations('dashboard')
   const { athlete } = useAuth()
-  const [recalculating, setRecalculating] = useState(false)
   const [days, setDays] = useState(90)
   const { data: current, mutate: mutateCurrent } = useSWR<FitnessCurrent>('/api/metrics/fitness/current', fetcher)
   const { data: history, mutate: mutateHistory } = useSWR<FitnessPoint[]>(
@@ -101,58 +98,26 @@ export default function DashboardPage() {
   const _rawPlanned = plans ? aggregatePlannedTssByWeek(plans) : undefined
   const plannedByWeek = _rawPlanned?.size ? _rawPlanned : undefined
 
-  async function handleRecalculate() {
-    setRecalculating(true)
-    try {
-      await apiFetch('/api/metrics/recalculate', { method: 'POST' })
-      toast({ title: t('recalcStarted'), description: t('recalcStartedDesc') })
-
-      // The backend processes in the background (202), so we poll until the
-      // returned data differs from the pre-recalculate snapshot, then stop.
-      // Give up after 30 s regardless so the spinner doesn't spin forever.
-      const baseline = JSON.stringify({ current, history })
-      const deadline = Date.now() + 30_000
-
-      const poll = async () => {
-        const [newCurrent, newHistory] = await Promise.all([
-          mutateCurrent(),
-          mutateHistory(),
-        ])
-        const changed = JSON.stringify({ current: newCurrent, history: newHistory }) !== baseline
-        if (changed || Date.now() >= deadline) {
-          setRecalculating(false)
-        } else {
-          setTimeout(poll, 2000)
+  // Automatically fill missing DailyMetric rows (e.g. after a new day begins)
+  useEffect(() => {
+    apiFetch<{ updated: boolean }>('/api/metrics/catch-up', { method: 'POST' })
+      .then(({ updated }) => {
+        if (updated) {
+          mutateCurrent()
+          mutateHistory()
         }
-      }
-      setTimeout(poll, 2000)
-    } catch (err) {
-      toast({
-        title: t('recalcFailed'),
-        description: err instanceof Error ? err.message : 'Unknown error',
-        variant: 'destructive',
       })
-      setRecalculating(false)
-    }
-  }
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          {athlete?.name && (
-            <p className="text-muted-foreground">{t('welcomeBack', { name: athlete.name })}</p>
-          )}
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRecalculate}
-          disabled={recalculating}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${recalculating ? 'animate-spin' : ''}`} />
-          {recalculating ? t('recalculating') : t('recalculate')}
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">{t('title')}</h1>
+        {athlete?.name && (
+          <p className="text-muted-foreground">{t('welcomeBack', { name: athlete.name })}</p>
+        )}
       </div>
 
       {/* Current metrics */}

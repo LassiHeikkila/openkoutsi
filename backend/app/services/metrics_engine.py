@@ -7,6 +7,35 @@ from backend.app.models.team_orm import Activity, DailyMetric
 from openkoutsi.fatigue_metrics import compute_daily_metrics
 
 
+async def catch_up_metrics(athlete_id: str, session: AsyncSession) -> bool:
+    """Fill missing DailyMetric rows up to today using stored Activity.tss.
+
+    Returns True if rows were written, False if already up to date.
+    No stream reprocessing — uses stored TSS values only.
+    """
+    today = date.today()
+    existing = await session.execute(
+        select(DailyMetric).where(
+            DailyMetric.athlete_id == athlete_id,
+            DailyMetric.date == today,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        return False
+
+    last = await session.execute(
+        select(DailyMetric)
+        .where(DailyMetric.athlete_id == athlete_id)
+        .order_by(DailyMetric.date.desc())
+        .limit(1)
+    )
+    last_metric = last.scalar_one_or_none()
+    from_date = (last_metric.date + timedelta(days=1)) if last_metric else today
+
+    await recalculate_from(athlete_id, from_date, session)
+    return True
+
+
 async def recalculate_from(
     athlete_id: str, from_date: date, session: AsyncSession
 ) -> None:

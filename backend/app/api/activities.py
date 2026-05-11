@@ -573,18 +573,21 @@ async def download_fit_file(
     )
 
 
-@router.post("/{activity_id}/reprocess-intervals", response_model=ActivityDetailResponse)
-async def reprocess_intervals(
+@router.post("/{activity_id}/reprocess", response_model=ActivityDetailResponse)
+async def reprocess_activity(
     activity_id: str,
     ctx_session=Depends(get_ctx_and_session),
 ):
+    """Recompute NP/TSS/IF/bests/intervals from stored streams using current athlete settings."""
     import io
     from sqlalchemy import delete as sa_delete
+    from openkoutsi.training_math import normalized_power, compute_power_bests, compute_distance_bests
     from openkoutsi.fit_processing import (
         auto_interval_s,
         build_auto_intervals,
         compute_interval_stats,
     )
+    from openkoutsi.fit import extractIntervals
 
     ctx, session = ctx_session
     athlete = await _get_athlete(ctx.user_id, session)
@@ -601,7 +604,60 @@ async def reprocess_intervals(
         select(ActivityStream).where(ActivityStream.activity_id == activity_id)
     )
     stream_map = {s.stream_type: s.data for s in streams_result.scalars()}
+    power_data: list[float] = stream_map.get("power") or []
+    speed_data: list[float] = stream_map.get("speed") or []
 
+    # Recompute NP, TSS, IF from stored streams using current athlete FTP/max_HR
+    np = (
+        normalized_power(power_data)
+        if len(power_data) >= 30
+        else (activity.avg_power)
+    )
+    tss, intensity_factor = calculate_tss(
+        activity.duration_s or 0,
+        np,
+        activity.avg_hr,
+        athlete.ftp,
+        athlete.max_hr,
+    )
+    activity.tss = tss
+    activity.intensity_factor = intensity_factor
+    if np is not None:
+        activity.normalized_power = np
+
+    # Rebuild power bests
+    if power_data:
+        await session.execute(
+            sa_delete(ActivityPowerBest).where(ActivityPowerBest.activity_id == activity_id)
+        )
+        for duration_s, power_w in compute_power_bests(power_data).items():
+            session.add(
+                ActivityPowerBest(
+                    activity_id=activity_id,
+                    athlete_id=athlete.id,
+                    duration_s=duration_s,
+                    power_w=power_w,
+                    activity_start_time=activity.start_time,
+                )
+            )
+
+    # Rebuild distance bests
+    if speed_data:
+        await session.execute(
+            sa_delete(ActivityDistanceBest).where(ActivityDistanceBest.activity_id == activity_id)
+        )
+        for distance_m, time_s in compute_distance_bests(speed_data).items():
+            session.add(
+                ActivityDistanceBest(
+                    activity_id=activity_id,
+                    athlete_id=athlete.id,
+                    distance_m=distance_m,
+                    time_s=time_s,
+                    activity_start_time=activity.start_time,
+                )
+            )
+
+    # Re-extract intervals from FIT file or auto-split
     fileish = None
     fit_sources = [s for s in (activity.sources or []) if s.fit_file_path]
     if fit_sources:
@@ -614,7 +670,6 @@ async def reprocess_intervals(
             else:
                 fileish = str(fit_path)
 
-    from openkoutsi.fit import extractIntervals
     raw = extractIntervals(fileish) if fileish is not None else []
     is_auto = len(raw) <= 1
 
@@ -623,9 +678,8 @@ async def reprocess_intervals(
         stream_length = max((len(v) for v in stream_map.values() if v), default=duration_s)
         actual_duration = max(duration_s, stream_length)
         interval_s = auto_interval_s(actual_duration)
-        start_time = activity.start_time
-        if start_time and actual_duration:
-            raw = build_auto_intervals(start_time, actual_duration, interval_s)
+        if activity.start_time and actual_duration:
+            raw = build_auto_intervals(activity.start_time, actual_duration, interval_s)
 
     intervals_data: list[dict] = []
     if raw and activity.start_time:
@@ -636,7 +690,26 @@ async def reprocess_intervals(
     )
     for iv in intervals_data:
         session.add(ActivityInterval(id=str(uuid.uuid4()), activity_id=activity_id, **iv))
+
+    # Recalculate workout category
+    vi = (
+        (activity.normalized_power / activity.avg_power)
+        if (activity.normalized_power and activity.avg_power)
+        else None
+    )
+    category = classify_workout(activity.intensity_factor, vi)
+    activity.workout_category = category.value if category else None
+
     await session.commit()
+
+    # Update fitness metrics from this activity's date forward
+    if activity.start_time is not None:
+        act_date = (
+            activity.start_time.date()
+            if hasattr(activity.start_time, "date")
+            else activity.start_time
+        )
+        await recalculate_from(athlete.id, act_date, session)
 
     bests_result = await session.execute(
         select(ActivityPowerBest).where(ActivityPowerBest.activity_id == activity_id)
@@ -658,32 +731,6 @@ async def reprocess_intervals(
     return ActivityDetailResponse.from_orm_and_streams(
         activity, stream_map, power_bests, distance_bests, intervals
     )
-
-
-@router.post("/{activity_id}/recalculate-category", response_model=ActivityResponse)
-async def recalculate_category(
-    activity_id: str,
-    ctx_session=Depends(get_ctx_and_session),
-):
-    ctx, session = ctx_session
-    athlete = await _get_athlete(ctx.user_id, session)
-    result = await session.execute(
-        select(Activity).where(Activity.id == activity_id, Activity.athlete_id == athlete.id)
-    )
-    activity = result.scalar_one_or_none()
-    if activity is None:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    vi = (
-        (activity.normalized_power / activity.avg_power)
-        if (activity.normalized_power and activity.avg_power)
-        else None
-    )
-    category = classify_workout(activity.intensity_factor, vi)
-    activity.workout_category = category.value if category else None
-    await session.commit()
-    await session.refresh(activity)
-    return ActivityResponse.model_validate(activity)
 
 
 @router.patch("/{activity_id}", response_model=ActivityResponse)

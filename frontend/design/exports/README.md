@@ -45,7 +45,3 @@ Or paste the SVG markup directly into your HTML and style with CSS — change `s
   width: 160px; height: 160px;
 }
 ```
-
-## License
-
-Yours — use however you like (commercial, OSS, fork, modify). No attribution required.

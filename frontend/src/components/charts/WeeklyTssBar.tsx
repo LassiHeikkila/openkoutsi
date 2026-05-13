@@ -3,7 +3,7 @@
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { useTranslations } from 'next-intl'
 import type { FitnessPoint } from '@/lib/types'
-import { format, eachWeekOfInterval, subWeeks } from 'date-fns'
+import { format, eachWeekOfInterval, subWeeks, addDays } from 'date-fns'
 
 interface Props {
   data: FitnessPoint[]
@@ -24,12 +24,10 @@ export function WeeklyTssBar({ data, weeks = 12, plannedByWeek }: Props) {
   const weekly = weeks_.map((weekStart) => {
     let total = 0
     for (let i = 0; i < 7; i++) {
-      const d = new Date(weekStart)
-      d.setDate(d.getDate() + i)
-      const key = d.toISOString().slice(0, 10)
+      const key = format(addDays(weekStart, i), 'yyyy-MM-dd')
       total += byDate.get(key) ?? 0
     }
-    const wKey = weekStart.toISOString().slice(0, 10)
+    const wKey = format(weekStart, 'yyyy-MM-dd')
     return {
       week: format(weekStart, 'MMM d'),
       tss: Math.round(total),

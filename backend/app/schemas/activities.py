@@ -113,6 +113,8 @@ class ActivityDetailResponse(ActivityResponse):
     streams: dict[str, list[Any]] = {}
     power_bests: dict[int, float] = {}
     distance_bests: dict[int, int] = {}
+    power_pr_badges: dict[int, dict[str, str]] = {}
+    distance_pr_badges: dict[int, dict[str, str]] = {}
     intervals: list[IntervalResponse] = []
     analysis_status: Optional[str] = None
     analysis: Optional[str] = None
@@ -125,6 +127,8 @@ class ActivityDetailResponse(ActivityResponse):
         power_bests: dict[int, float] | None = None,
         distance_bests: dict[int, int] | None = None,
         intervals: list[IntervalResponse] | None = None,
+        power_pr_badges: dict[int, dict[str, str]] | None = None,
+        distance_pr_badges: dict[int, dict[str, str]] | None = None,
     ) -> "ActivityDetailResponse":
         return cls(
             id=activity.id,
@@ -149,6 +153,8 @@ class ActivityDetailResponse(ActivityResponse):
             streams=streams,
             power_bests=power_bests or {},
             distance_bests=distance_bests or {},
+            power_pr_badges=power_pr_badges or {},
+            distance_pr_badges=distance_pr_badges or {},
             intervals=intervals or [],
             analysis_status=activity.analysis_status,
             analysis=activity.analysis,

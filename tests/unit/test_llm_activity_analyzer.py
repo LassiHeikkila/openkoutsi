@@ -135,6 +135,31 @@ class TestBuildPrompt:
         prompt = _build_prompt(act, _make_athlete())
         assert "Interval 1" in prompt
 
+    def test_pr_section_present_when_badges_exist(self):
+        act = _make_activity()
+        prompt = _build_prompt(
+            act,
+            _make_athlete(),
+            power_pr_badges={300: {"all_time": "gold", "12mo": "gold"}},
+            distance_pr_badges={5000: {"6mo": "silver"}},
+        )
+        assert "Personal Records" in prompt
+        assert "5min power" in prompt
+        assert "all-time gold" in prompt
+        assert "12-month gold" in prompt
+        assert "5km distance" in prompt
+        assert "6-month silver" in prompt
+
+    def test_pr_section_absent_when_no_badges(self):
+        act = _make_activity()
+        prompt = _build_prompt(act, _make_athlete(), power_pr_badges={}, distance_pr_badges={})
+        assert "Personal Records" not in prompt
+
+    def test_pr_section_absent_when_badges_none(self):
+        act = _make_activity()
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Personal Records" not in prompt
+
 
 # ── _stream_analysis ──────────────────────────────────────────────────────────
 
@@ -278,6 +303,8 @@ class TestAnalyzeActivityBg:
                   return_value=lambda: _factory()),
             patch("backend.app.services.llm_activity_analyzer._stream_analysis",
                   side_effect=_canned_stream),
+            patch("backend.app.services.llm_activity_analyzer.detect_pr_badges",
+                  new=AsyncMock(return_value=({}, {}))),
         ):
             await analyze_activity_bg("act-1", "ath-1", "team-1")
 
@@ -323,6 +350,8 @@ class TestAnalyzeActivityBg:
                   return_value=lambda: _factory()),
             patch("backend.app.services.llm_activity_analyzer._stream_analysis",
                   side_effect=_failing_stream),
+            patch("backend.app.services.llm_activity_analyzer.detect_pr_badges",
+                  new=AsyncMock(return_value=({}, {}))),
         ):
             await analyze_activity_bg("act-1", "ath-1", "team-1")
 

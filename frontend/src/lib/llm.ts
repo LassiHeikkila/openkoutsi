@@ -135,10 +135,38 @@ function buildAnalysisSystemPrompt(locale?: string): string {
   return `${ANALYSIS_SYSTEM_PROMPT_BASE} Respond in ${language}.`
 }
 
+const PR_WINDOW_LABELS: Record<string, string> = {
+  all_time: 'all-time',
+  '12mo': '12-month',
+  '6mo': '6-month',
+  '3mo': '3-month',
+}
+
+function _formatPrDuration(duration_s: number): string {
+  if (duration_s < 60) return `${duration_s}s`
+  const mins = Math.floor(duration_s / 60)
+  if (mins < 60) return `${mins}min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h}h${String(m).padStart(2, '0')}min` : `${h}h`
+}
+
+function _formatPrDistance(distance_m: number): string {
+  if (distance_m < 1000) return `${distance_m}m`
+  const km = distance_m / 1000
+  return Number.isInteger(km) ? `${km}km` : `${km}km`
+}
+
+export interface PrBadges {
+  power: Record<number, Record<string, string>>
+  distance: Record<number, Record<string, string>>
+}
+
 function buildAnalysisPrompt(
   activity: ActivityDetail,
   athlete: AthleteProfile,
   fatigue?: FatigueContext,
+  prBadges?: PrBadges,
 ): string {
   const lines: string[] = [
     `Workout summary for a ${activity.sport_type || 'unknown sport'} session:`,
@@ -180,6 +208,26 @@ function buildAnalysisPrompt(
     lines.push(`  Form (TSB): ${fatigue.tsb.toFixed(1)} (${fatigue.form})`)
   }
 
+  const prLines: string[] = []
+  for (const [key, badges] of Object.entries(prBadges?.power ?? {})) {
+    const label = _formatPrDuration(Number(key))
+    const parts = Object.entries(badges)
+      .filter(([w]) => PR_WINDOW_LABELS[w])
+      .map(([w, tier]) => `${PR_WINDOW_LABELS[w]} ${tier}`)
+    if (parts.length) prLines.push(`  ${label} power: ${parts.join(', ')}`)
+  }
+  for (const [key, badges] of Object.entries(prBadges?.distance ?? {})) {
+    const label = _formatPrDistance(Number(key))
+    const parts = Object.entries(badges)
+      .filter(([w]) => PR_WINDOW_LABELS[w])
+      .map(([w, tier]) => `${PR_WINDOW_LABELS[w]} ${tier}`)
+    if (parts.length) prLines.push(`  ${label} distance: ${parts.join(', ')}`)
+  }
+  if (prLines.length) {
+    lines.push('', 'Personal Records in this activity:')
+    lines.push(...prLines)
+  }
+
   return lines.join('\n')
 }
 
@@ -195,12 +243,13 @@ export async function streamAnalysis(
   signal?: AbortSignal,
   locale?: string,
   fatigue?: FatigueContext,
+  prBadges?: PrBadges,
 ): Promise<string> {
   const resp = await _proxyFetch(
     {
       messages: [
         { role: 'system', content: buildAnalysisSystemPrompt(locale) },
-        { role: 'user', content: buildAnalysisPrompt(activity, athlete, fatigue) },
+        { role: 'user', content: buildAnalysisPrompt(activity, athlete, fatigue, prBadges) },
       ],
       temperature: 0.7,
       stream: true,

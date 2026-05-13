@@ -39,6 +39,7 @@ from backend.app.schemas.activities import (
 from backend.app.core.limiter import limiter
 from backend.app.services.fit_processor import process_fit_file, read_fit_start_time
 from backend.app.services.metrics_engine import recalculate_from
+from backend.app.services.pr_detection import detect_pr_badges
 from backend.app.services.provider_sync import _source_priority
 from openkoutsi.training_math import calculate_tss
 from openkoutsi.categorization import WorkoutCategory, classify_workout
@@ -500,8 +501,14 @@ async def get_activity(
         for iv in ivs_result.scalars()
     ]
 
+    power_pr_badges, distance_pr_badges = await detect_pr_badges(
+        athlete.id, activity_id, activity.start_time, activity.sport_type, session
+    )
+
     return ActivityDetailResponse.from_orm_and_streams(
-        activity, streams, power_bests, distance_bests, intervals
+        activity, streams, power_bests, distance_bests, intervals,
+        power_pr_badges=power_pr_badges,
+        distance_pr_badges=distance_pr_badges,
     )
 
 
@@ -728,8 +735,13 @@ async def reprocess_activity(
         IntervalResponse.model_validate(iv, from_attributes=True)
         for iv in ivs_result.scalars()
     ]
+    power_pr_badges, distance_pr_badges = await detect_pr_badges(
+        athlete.id, activity_id, activity.start_time, activity.sport_type, session
+    )
     return ActivityDetailResponse.from_orm_and_streams(
-        activity, stream_map, power_bests, distance_bests, intervals
+        activity, stream_map, power_bests, distance_bests, intervals,
+        power_pr_badges=power_pr_badges,
+        distance_pr_badges=distance_pr_badges,
     )
 
 

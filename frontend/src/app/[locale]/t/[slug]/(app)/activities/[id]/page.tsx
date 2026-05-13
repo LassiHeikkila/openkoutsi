@@ -7,7 +7,7 @@ import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from '@/navigation'
 import { fetcher, apiFetch, apiDownload } from '@/lib/api'
 import type { ActivityDetail, AthleteProfile, FitnessCurrent } from '@/lib/types'
-import { getLlmConfig, streamAnalysis, type FatigueContext } from '@/lib/llm'
+import { getLlmConfig, streamAnalysis, type FatigueContext, type PrBadges } from '@/lib/llm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,6 +32,21 @@ import { WorkoutCategoryBadge } from '@/components/activities/WorkoutCategoryBad
 import { formatDate, formatDuration, formatDistance, formatPower, formatHR, formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 import { formatDuration as formatPeriod } from '@/components/charts/PowerCurveChart'
 import { ArrowLeft, ChevronDown, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+
+const PR_WINDOW_ORDER = ['all_time', '12mo', '6mo', '3mo'] as const
+
+function PrBadgeRow({ badges }: { badges: Record<string, string> }) {
+  const topWindow = PR_WINDOW_ORDER.find((w) => badges[w])
+  if (!topWindow) return null
+  return (
+    <img
+      src={`/badges/chip-${topWindow.replace('_', '-')}-${badges[topWindow]}.svg`}
+      alt={`${topWindow} ${badges[topWindow]}`}
+      title={`${topWindow} ${badges[topWindow]}`}
+      className="w-5 h-5 mt-1"
+    />
+  )
+}
 
 const KOUTSI_AVATAR: Record<string, string> = {
   cheer: '/koutsi/koutsi-cheer.svg',
@@ -205,6 +220,10 @@ export default function ActivityDetailPage({ params }: Props) {
       abortRef.current = new AbortController()
       setStreamingText('')
       try {
+        const prBadges: PrBadges = {
+          power: activity.power_pr_badges ?? {},
+          distance: activity.distance_pr_badges ?? {},
+        }
         const full = await streamAnalysis(
           activity,
           athlete,
@@ -212,6 +231,7 @@ export default function ActivityDetailPage({ params }: Props) {
           abortRef.current.signal,
           locale,
           fatigue,
+          prBadges,
         )
         // Persist result to backend
         await apiFetch(`/api/activities/${id}/analysis`, {
@@ -465,6 +485,9 @@ export default function ActivityDetailPage({ params }: Props) {
                       <span className="font-semibold text-sm mt-0.5 tabular-nums">
                         {Math.round(power_w)} W
                       </span>
+                      {activity.power_pr_badges?.[duration_s] && (
+                        <PrBadgeRow badges={activity.power_pr_badges[duration_s]} />
+                      )}
                     </div>
                   ))}
               </div>
@@ -503,6 +526,9 @@ export default function ActivityDetailPage({ params }: Props) {
                       <span className="text-xs text-muted-foreground tabular-nums">
                         ({formatSpeedKmh(distance_m, time_s)})
                       </span>
+                      {activity.distance_pr_badges?.[distance_m] && (
+                        <PrBadgeRow badges={activity.distance_pr_badges[distance_m]} />
+                      )}
                     </div>
                   ))}
               </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Link } from '@/navigation'
 import useSWR from 'swr'
@@ -7,6 +8,8 @@ import { useTranslations } from 'next-intl'
 import { fetcher } from '@/lib/api'
 import type { AllTimeDistanceBests, DistanceBestEntry } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import { formatDistanceLabel, formatTime, formatSpeedKmh } from '@/lib/utils'
 
 // All 20 standard distances (metres)
@@ -60,7 +63,9 @@ const MEDAL_HEADERS = [
 
 export default function RecordsPage() {
   const t = useTranslations('app')
-  const { data: distanceData, isLoading } = useSWR<AllTimeDistanceBests>('/api/distance/bests', fetcher)
+  const [includeVirtual, setIncludeVirtual] = useState(false)
+  const url = includeVirtual ? '/api/distance/bests?include_virtual=true' : '/api/distance/bests'
+  const { data: distanceData, isLoading } = useSWR<AllTimeDistanceBests>(url, fetcher)
 
   const byDistance = new Map<number, Map<number, DistanceBestEntry>>()
   for (const entry of distanceData?.bests ?? []) {
@@ -73,8 +78,18 @@ export default function RecordsPage() {
       <h1 className="text-2xl font-semibold">{t('records.title')}</h1>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-base">{t('records.bestTimes')}</CardTitle>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="include-virtual"
+              checked={includeVirtual}
+              onCheckedChange={setIncludeVirtual}
+            />
+            <Label htmlFor="include-virtual" className="text-sm text-muted-foreground cursor-pointer">
+              {t('records.includeVirtual')}
+            </Label>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (

@@ -23,20 +23,30 @@ async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
 
 
 @router.get("/bests", response_model=AllTimeDistanceBestsResponse)
-async def get_distance_bests(ctx_session=Depends(get_ctx_and_session)):
+async def get_distance_bests(
+    include_virtual: bool = False,
+    ctx_session=Depends(get_ctx_and_session),
+):
     """
     Return the top-3 all-time best times for each standard distance,
     ordered by (distance_m asc, rank asc).  Distances with no data are omitted.
+
+    By default only real (non-virtual) rides are included. Pass
+    include_virtual=true to include all ride types.
     """
     ctx, session = ctx_session
     athlete = await _get_athlete(ctx.user_id, session)
 
-    rows = await session.execute(
+    query = (
         select(ActivityDistanceBest, Activity.name)
         .join(Activity, Activity.id == ActivityDistanceBest.activity_id)
         .where(ActivityDistanceBest.athlete_id == athlete.id)
-        .order_by(ActivityDistanceBest.distance_m, ActivityDistanceBest.time_s)
     )
+    if not include_virtual:
+        query = query.where(~Activity.sport_type.startswith("Virtual"))
+    query = query.order_by(ActivityDistanceBest.distance_m, ActivityDistanceBest.time_s)
+
+    rows = await session.execute(query)
     records = rows.all()
 
     entries: list[DistanceBestEntry] = []

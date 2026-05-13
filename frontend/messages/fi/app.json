@@ -14,7 +14,8 @@
     "bestTimes": "Parhaat ajat",
     "distance": "Matka",
     "loading": "Ladataan…",
-    "noData": "Ei matkadataa vielä. Lataa harjoitus GPS-seurannalla nähdäksesi ennätyksesi."
+    "noData": "Ei matkadataa vielä. Lataa harjoitus GPS-seurannalla nähdäksesi ennätyksesi.",
+    "includeVirtual": "Sisällytä virtuaaliajot"
   },
   "goals": {
     "title": "Tavoitteet",

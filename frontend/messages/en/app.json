@@ -14,7 +14,8 @@
     "bestTimes": "Best Times",
     "distance": "Distance",
     "loading": "Loading\u2026",
-    "noData": "No distance data yet. Upload a workout with a GPS track to see your records."
+    "noData": "No distance data yet. Upload a workout with a GPS track to see your records.",
+    "includeVirtual": "Include virtual rides"
   },
   "goals": {
     "title": "Goals",

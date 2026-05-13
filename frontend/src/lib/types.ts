@@ -118,6 +118,8 @@ export interface ActivityDetail extends Activity {
   streams: Record<string, number[]>
   power_bests: Record<number, number>
   distance_bests: Record<number, number>
+  power_pr_badges: Record<number, Record<string, string>>
+  distance_pr_badges: Record<number, Record<string, string>>
   intervals: Interval[]
   zone_breakdown?: ZoneBreakdown[]
   analysis_status?: string | null

@@ -27,6 +27,7 @@ from ..db.registry import _RegistrySessionLocal
 from ..db.team_session import get_team_session_factory
 from ..models.registry_orm import Team
 from ..models.team_orm import Activity, Athlete, DailyMetric
+from .pr_detection import detect_pr_badges
 
 if TYPE_CHECKING:
     pass
@@ -77,8 +78,36 @@ def _build_system_prompt(locale: str | None = None) -> str:
     return prompt
 
 
+_WINDOW_LABELS: dict[str, str] = {
+    "all_time": "all-time",
+    "12mo": "12-month",
+    "6mo": "6-month",
+    "3mo": "3-month",
+}
+
+
+def _format_duration_label(duration_s: int) -> str:
+    if duration_s < 60:
+        return f"{duration_s}s"
+    mins = duration_s // 60
+    if mins < 60:
+        return f"{mins}min"
+    return f"{mins // 60}h{mins % 60:02d}min" if mins % 60 else f"{mins // 60}h"
+
+
+def _format_distance_label(distance_m: int) -> str:
+    if distance_m < 1000:
+        return f"{distance_m}m"
+    km = distance_m / 1000
+    return f"{km:.0f}km" if km == int(km) else f"{km}km"
+
+
 def _build_prompt(
-    activity: Activity, athlete: Athlete, fatigue: DailyMetric | None = None
+    activity: Activity,
+    athlete: Athlete,
+    fatigue: DailyMetric | None = None,
+    power_pr_badges: dict | None = None,
+    distance_pr_badges: dict | None = None,
 ) -> str:
     lines = [f"Workout summary for a {activity.sport_type or 'unknown sport'} session:"]
 
@@ -134,6 +163,29 @@ def _build_prompt(
                 line += " (auto-split)"
             lines.append(line)
 
+    pr_lines: list[str] = []
+    for duration_s, badges in (power_pr_badges or {}).items():
+        label = _format_duration_label(int(duration_s))
+        parts = [
+            f"{_WINDOW_LABELS.get(w, w)} {tier}"
+            for w, tier in badges.items()
+            if w in _WINDOW_LABELS
+        ]
+        if parts:
+            pr_lines.append(f"  {label} power: {', '.join(parts)}")
+    for distance_m, badges in (distance_pr_badges or {}).items():
+        label = _format_distance_label(int(distance_m))
+        parts = [
+            f"{_WINDOW_LABELS.get(w, w)} {tier}"
+            for w, tier in badges.items()
+            if w in _WINDOW_LABELS
+        ]
+        if parts:
+            pr_lines.append(f"  {label} distance: {', '.join(parts)}")
+    if pr_lines:
+        lines.append("\nPersonal Records in this activity:")
+        lines.extend(pr_lines)
+
     return "\n".join(lines)
 
 
@@ -143,6 +195,8 @@ async def _stream_analysis(
     team_id: str,
     fatigue: DailyMetric | None = None,
     locale: str | None = None,
+    power_pr_badges: dict | None = None,
+    distance_pr_badges: dict | None = None,
 ) -> AsyncIterator[str]:
     """Yield text chunks from the LLM via streaming SSE."""
     # Fetch team for LLM config
@@ -173,7 +227,7 @@ async def _stream_analysis(
         "model": model,
         "messages": [
             {"role": "system", "content": _build_system_prompt(locale)},
-            {"role": "user", "content": _build_prompt(activity, athlete, fatigue)},
+            {"role": "user", "content": _build_prompt(activity, athlete, fatigue, power_pr_badges, distance_pr_badges)},
         ],
         "temperature": 0.7,
         "stream": True,
@@ -239,13 +293,18 @@ async def analyze_activity_bg(
             )
             fatigue = fat_res.scalar_one_or_none()
 
+        power_pr_badges, distance_pr_badges = await detect_pr_badges(
+            athlete.id, activity.id, activity.start_time, activity.sport_type, session
+        )
+
         buffer: list[str] = []
         last_flush = time.monotonic()
         accumulated = ""
 
         try:
             async for chunk in _stream_analysis(
-                activity, athlete, team_id, fatigue=fatigue, locale=resolved_locale
+                activity, athlete, team_id, fatigue=fatigue, locale=resolved_locale,
+                power_pr_badges=power_pr_badges, distance_pr_badges=distance_pr_badges,
             ):
                 buffer.append(chunk)
                 if time.monotonic() - last_flush >= 0.5:

@@ -1,4 +1,4 @@
-<img src="frontend/design/exports/frame-wheels-black.svg" alt="openkoutsi" width="120">
+<img src="frontend/design/exports-horizontal/openkoutsi-horizontal-white.svg" alt="openkoutsi">
 
 # openkoutsi
 

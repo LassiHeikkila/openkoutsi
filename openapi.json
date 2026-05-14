@@ -1380,6 +1380,24 @@
         ],
         "parameters": [
           {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Fuzzy search on activity name",
+              "title": "Q"
+            },
+            "description": "Fuzzy search on activity name"
+          },
+          {
             "name": "start",
             "in": "query",
             "required": false,
@@ -1428,6 +1446,154 @@
               ],
               "title": "Sport Type"
             }
+          },
+          {
+            "name": "workout_category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workout Category"
+            }
+          },
+          {
+            "name": "min_duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum duration in seconds",
+              "title": "Min Duration"
+            },
+            "description": "Minimum duration in seconds"
+          },
+          {
+            "name": "max_duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Maximum duration in seconds",
+              "title": "Max Duration"
+            },
+            "description": "Maximum duration in seconds"
+          },
+          {
+            "name": "min_distance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum distance in meters",
+              "title": "Min Distance"
+            },
+            "description": "Minimum distance in meters"
+          },
+          {
+            "name": "max_distance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Maximum distance in meters",
+              "title": "Max Distance"
+            },
+            "description": "Maximum distance in meters"
+          },
+          {
+            "name": "min_tss",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum TSS",
+              "title": "Min Tss"
+            },
+            "description": "Minimum TSS"
+          },
+          {
+            "name": "max_tss",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Maximum TSS",
+              "title": "Max Tss"
+            },
+            "description": "Maximum TSS"
+          },
+          {
+            "name": "has_power",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only activities with power data",
+              "title": "Has Power"
+            },
+            "description": "Only activities with power data"
           },
           {
             "name": "wahoo_device_only",
@@ -1719,13 +1885,14 @@
         }
       }
     },
-    "/api/activities/{activity_id}/reprocess-intervals": {
+    "/api/activities/{activity_id}/reprocess": {
       "post": {
         "tags": [
           "activities"
         ],
-        "summary": "Reprocess Intervals",
-        "operationId": "reprocess_intervals_api_activities__activity_id__reprocess_intervals_post",
+        "summary": "Reprocess Activity",
+        "description": "Recompute NP/TSS/IF/bests/intervals from stored streams using current athlete settings.",
+        "operationId": "reprocess_activity_api_activities__activity_id__reprocess_post",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -1766,53 +1933,6 @@
         }
       }
     },
-    "/api/activities/{activity_id}/recalculate-category": {
-      "post": {
-        "tags": [
-          "activities"
-        ],
-        "summary": "Recalculate Category",
-        "operationId": "recalculate_category_api_activities__activity_id__recalculate_category_post",
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "activity_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Activity Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ActivityResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/activities/{activity_id}/analyze": {
       "post": {
         "tags": [
@@ -1836,6 +1956,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeBody",
+                "default": {}
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -2404,6 +2534,31 @@
         ]
       }
     },
+    "/api/metrics/catch-up": {
+      "post": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Catch Up",
+        "description": "Fill missing DailyMetric rows using stored TSS. Called on dashboard load.",
+        "operationId": "catch_up_api_metrics_catch_up_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/metrics/recalculate": {
       "post": {
         "tags": [
@@ -2604,8 +2759,25 @@
           "distance"
         ],
         "summary": "Get Distance Bests",
-        "description": "Return the top-3 all-time best times for each standard distance,\nordered by (distance_m asc, rank asc).  Distances with no data are omitted.",
+        "description": "Return the top-3 all-time best times for each standard distance,\nordered by (distance_m asc, rank asc).  Distances with no data are omitted.\n\nBy default only real (non-virtual) rides are included. Pass\ninclude_virtual=true to include all ride types.",
         "operationId": "get_distance_bests_api_distance_bests_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "include_virtual",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Virtual"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2616,13 +2788,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/power/bests": {
@@ -2930,6 +3107,33 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/llm/test-connection": {
+      "post": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Test Llm Connection",
+        "description": "Test the team's configured LLM connection. Admin-only.\n\nCalls GET {base_url}/models on the team's saved LLM config and checks\nwhether the configured model appears in the response.",
+        "operationId": "test_llm_connection_api_llm_test_connection_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmTestResponse"
+                }
               }
             }
           }
@@ -3738,6 +3942,28 @@
             "title": "Distance Bests",
             "default": {}
           },
+          "power_pr_badges": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Power Pr Badges",
+            "default": {}
+          },
+          "distance_pr_badges": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Distance Pr Badges",
+            "default": {}
+          },
           "intervals": {
             "items": {
               "$ref": "#/components/schemas/IntervalResponse"
@@ -4071,6 +4297,23 @@
           "bests"
         ],
         "title": "AllTimePowerBestsResponse"
+      },
+      "AnalyzeBody": {
+        "properties": {
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale"
+          }
+        },
+        "type": "object",
+        "title": "AnalyzeBody"
       },
       "AthleteResponse": {
         "properties": {
@@ -5143,6 +5386,82 @@
           "messages"
         ],
         "title": "LlmChatRequest"
+      },
+      "LlmTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model_configured": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Configured"
+          },
+          "models_available": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models Available"
+          },
+          "model_found": {
+            "type": "boolean",
+            "title": "Model Found",
+            "default": false
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "LlmTestResponse"
       },
       "LoginRequest": {
         "properties": {

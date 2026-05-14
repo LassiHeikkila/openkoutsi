@@ -416,9 +416,18 @@ async def create_manual_activity(
 
 @router.get("/", response_model=ActivityListResponse)
 async def list_activities(
+    q: Optional[str] = Query(None, description="Fuzzy search on activity name"),
     start: Optional[date] = Query(None),
     end: Optional[date] = Query(None),
     sport_type: Optional[str] = Query(None),
+    workout_category: Optional[str] = Query(None),
+    min_duration: Optional[int] = Query(None, ge=0, description="Minimum duration in seconds"),
+    max_duration: Optional[int] = Query(None, ge=0, description="Maximum duration in seconds"),
+    min_distance: Optional[float] = Query(None, ge=0, description="Minimum distance in meters"),
+    max_distance: Optional[float] = Query(None, ge=0, description="Maximum distance in meters"),
+    min_tss: Optional[float] = Query(None, ge=0, description="Minimum TSS"),
+    max_tss: Optional[float] = Query(None, ge=0, description="Maximum TSS"),
+    has_power: Optional[bool] = Query(None, description="Only activities with power data"),
     wahoo_device_only: bool = Query(False, alias="wahoo_device_only"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -428,12 +437,32 @@ async def list_activities(
     athlete = await _get_athlete(ctx.user_id, session)
 
     base_query = select(Activity).where(Activity.athlete_id == athlete.id)
+    if q:
+        base_query = base_query.where(Activity.name.ilike(f"%{q}%"))
     if start:
         base_query = base_query.where(Activity.start_time >= datetime.combine(start, time.min))
     if end:
         base_query = base_query.where(Activity.start_time <= datetime.combine(end, time.max))
     if sport_type:
         base_query = base_query.where(Activity.sport_type == sport_type)
+    if workout_category:
+        base_query = base_query.where(Activity.workout_category == workout_category)
+    if min_duration is not None:
+        base_query = base_query.where(Activity.duration_s >= min_duration)
+    if max_duration is not None:
+        base_query = base_query.where(Activity.duration_s <= max_duration)
+    if min_distance is not None:
+        base_query = base_query.where(Activity.distance_m >= min_distance)
+    if max_distance is not None:
+        base_query = base_query.where(Activity.distance_m <= max_distance)
+    if min_tss is not None:
+        base_query = base_query.where(Activity.tss >= min_tss)
+    if max_tss is not None:
+        base_query = base_query.where(Activity.tss <= max_tss)
+    if has_power is True:
+        base_query = base_query.where(Activity.avg_power.isnot(None))
+    elif has_power is False:
+        base_query = base_query.where(Activity.avg_power.is_(None))
     if wahoo_device_only:
         non_wahoo_exists = (
             select(ActivitySource.id)

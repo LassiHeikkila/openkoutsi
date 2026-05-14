@@ -610,3 +610,122 @@ class TestFitUploadEdgeCases:
             headers=auth_headers,
         )
         assert resp.status_code == 400
+
+
+# ── Search & filter ────────────────────────────────────────────────────────────
+
+class TestActivitySearchAndFilter:
+    async def _create(self, client, auth_headers, **kwargs):
+        defaults = {"sport_type": "Ride", "start_time": "2025-06-01T10:00:00Z", "duration_s": 3600}
+        defaults.update(kwargs)
+        resp = await client.post("/api/activities/", json=defaults, headers=auth_headers)
+        assert resp.status_code == 201
+        return resp.json()
+
+    async def test_search_by_name_matches(self, client, auth_headers):
+        await self._create(client, auth_headers, name="Morning Ride", start_time="2025-06-01T08:00:00Z")
+        await self._create(client, auth_headers, name="Evening Run", sport_type="Run", start_time="2025-06-02T18:00:00Z")
+        resp = await client.get("/api/activities/?q=morning", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "Morning Ride"
+
+    async def test_search_case_insensitive(self, client, auth_headers):
+        await self._create(client, auth_headers, name="Zwift Race", start_time="2025-06-01T10:00:00Z")
+        resp = await client.get("/api/activities/?q=ZWIFT", headers=auth_headers)
+        assert resp.json()["total"] == 1
+
+    async def test_search_no_match_returns_empty(self, client, auth_headers):
+        await self._create(client, auth_headers, name="Morning Ride", start_time="2025-06-01T08:00:00Z")
+        resp = await client.get("/api/activities/?q=nonexistent", headers=auth_headers)
+        assert resp.json()["total"] == 0
+
+    async def test_min_duration_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, duration_s=1800, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, duration_s=7200, start_time="2025-06-02T10:00:00Z")
+        resp = await client.get("/api/activities/?min_duration=3600", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["duration_s"] == 7200
+
+    async def test_max_duration_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, duration_s=1800, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, duration_s=7200, start_time="2025-06-02T10:00:00Z")
+        resp = await client.get("/api/activities/?max_duration=3600", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["duration_s"] == 1800
+
+    async def test_min_distance_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, distance_m=5000, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, distance_m=50000, start_time="2025-06-02T10:00:00Z")
+        resp = await client.get("/api/activities/?min_distance=10000", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["distance_m"] == 50000
+
+    async def test_max_distance_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, distance_m=5000, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, distance_m=50000, start_time="2025-06-02T10:00:00Z")
+        resp = await client.get("/api/activities/?max_distance=10000", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["distance_m"] == 5000
+
+    async def test_min_tss_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, tss=40.0, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, tss=120.0, start_time="2025-06-02T10:00:00Z")
+        resp = await client.get("/api/activities/?min_tss=100", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["tss"] == 120.0
+
+    async def test_max_tss_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, tss=40.0, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, tss=120.0, start_time="2025-06-02T10:00:00Z")
+        resp = await client.get("/api/activities/?max_tss=100", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["tss"] == 40.0
+
+    async def test_workout_category_filter(self, client, auth_headers):
+        r1 = await self._create(client, auth_headers, start_time="2025-06-01T10:00:00Z")
+        r2 = await self._create(client, auth_headers, start_time="2025-06-02T10:00:00Z")
+        # Set categories directly via PATCH
+        await client.patch(
+            f"/api/activities/{r1['id']}",
+            json={"workout_category": "endurance"},
+            headers=auth_headers,
+        )
+        await client.patch(
+            f"/api/activities/{r2['id']}",
+            json={"workout_category": "recovery"},
+            headers=auth_headers,
+        )
+        resp = await client.get("/api/activities/?workout_category=endurance", headers=auth_headers)
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["workout_category"] == "endurance"
+
+    async def test_has_power_true_filter(self, client, auth_headers):
+        # Manual activities don't get avg_power set by default
+        await self._create(client, auth_headers, start_time="2025-06-01T10:00:00Z")
+        resp = await client.get("/api/activities/?has_power=true", headers=auth_headers)
+        assert resp.json()["total"] == 0
+
+    async def test_has_power_false_filter(self, client, auth_headers):
+        await self._create(client, auth_headers, start_time="2025-06-01T10:00:00Z")
+        resp = await client.get("/api/activities/?has_power=false", headers=auth_headers)
+        assert resp.json()["total"] == 1
+
+    async def test_combined_filters(self, client, auth_headers):
+        await self._create(client, auth_headers, sport_type="Run", duration_s=1800, start_time="2025-06-01T10:00:00Z")
+        await self._create(client, auth_headers, sport_type="Ride", duration_s=7200, start_time="2025-06-02T10:00:00Z")
+        await self._create(client, auth_headers, sport_type="Ride", duration_s=1800, start_time="2025-06-03T10:00:00Z")
+        resp = await client.get(
+            "/api/activities/?sport_type=Ride&min_duration=3600",
+            headers=auth_headers,
+        )
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["items"][0]["duration_s"] == 7200

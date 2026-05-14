@@ -88,6 +88,7 @@ def _build_fit_bytes(
             msg.duration_type = WorkoutStepDuration.REPEAT_UNTIL_STEPS_CMPLT
             msg.duration_value = step["steps_back"]
             msg.target_type = WorkoutStepTarget.OPEN
+            msg.target_value = step["repeat_count"]
             msg.intensity = Intensity.ACTIVE
             builder.add(msg)
             continue

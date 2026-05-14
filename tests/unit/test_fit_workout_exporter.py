@@ -156,6 +156,18 @@ class TestFitWorkoutExporter:
         result = exporter.export([block], "Intervals", None, 250, None)
         assert isinstance(result, bytes)
 
+    def test_repeat_count_encoded(self):
+        exporter = FitWorkoutExporter()
+        block = _repeat(3, [
+            _step(seconds=1200, spec={"type": "pct_ftp", "pct": 90}),
+            _step(step_type="recovery", seconds=600),
+        ])
+        data = exporter.export([block], "3x20", None, 250, None)
+        decoded = _decode_steps(data)
+        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
+        assert repeat_step.get("repeat_steps") == 3
+        assert repeat_step.get("duration_step") == 2
+
     def test_export_distance_duration(self):
         exporter = FitWorkoutExporter()
         step = {"kind": "step", "step_type": "active", "duration": {"type": "distance", "meters": 1000}}

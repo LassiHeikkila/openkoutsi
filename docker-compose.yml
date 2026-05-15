@@ -27,6 +27,19 @@ services:
       - "8084:8084"
     restart: unless-stopped
 
+  wahoo_bridge:
+    build:
+      context: wahoo_bridge
+      dockerfile: Dockerfile
+    env_file: wahoo_bridge/.env
+    environment:
+      DATABASE_PATH: /data/bridge.db
+    volumes:
+      - wahoo_bridge_data:/data
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+
   frontend:
     build:
       context: frontend
@@ -43,3 +56,4 @@ services:
 volumes:
   backend_data:
   bridge_data:
+  wahoo_bridge_data:

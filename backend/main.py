@@ -17,16 +17,23 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from backend.app.api.strava import strava_bridge_poller
+    from backend.app.api.wahoo import wahoo_bridge_poller
 
     await init_registry_db()
 
-    poller = asyncio.create_task(strava_bridge_poller())
+    strava_poller = asyncio.create_task(strava_bridge_poller())
+    wahoo_poller = asyncio.create_task(wahoo_bridge_poller())
 
     yield
 
-    poller.cancel()
+    strava_poller.cancel()
+    wahoo_poller.cancel()
     try:
-        await poller
+        await strava_poller
+    except asyncio.CancelledError:
+        pass
+    try:
+        await wahoo_poller
     except asyncio.CancelledError:
         pass
 

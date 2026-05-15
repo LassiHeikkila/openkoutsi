@@ -40,9 +40,11 @@ STRAVA_CLIENT_SECRET=
 BRIDGE_URL=
 BRIDGE_SECRET=
 
-# Wahoo (register at developers.wahooligan.com)
+# Wahoo (register at developers.wahooligan.com — see "Wahoo Bridge" section)
 WAHOO_CLIENT_ID=
 WAHOO_CLIENT_SECRET=
+WAHOO_BRIDGE_URL=                  # public URL of the Wahoo bridge, e.g. https://wahoo-bridge.your-domain
+WAHOO_BRIDGE_SECRET=               # shared secret — must match BRIDGE_SECRET in wahoo_bridge/.env
 
 # Server-side LLM (OpenAI-compatible) — fallback when no team LLM is configured
 LLM_BASE_URL=                      # e.g. http://localhost:11434/v1 or https://api.openai.com/v1
@@ -176,7 +178,7 @@ Create `strava_bridge/.env`:
 
 ```env
 STRAVA_CLIENT_SECRET=<same as main app>
-BRIDGE_SECRET=<same random string as BRIDGE_SECRET in main .env>
+BRIDGE_SECRET=<same random string as BRIDGE_SECRET in main .env>   # python -c "import secrets; print(secrets.token_hex(32))"
 DATABASE_PATH=bridge.db
 ```
 
@@ -202,7 +204,46 @@ A `{"id": N}` response confirms the subscription. Keep the ID to manage the subs
 
 ---
 
-## 5. systemd Services
+## 5. Wahoo Bridge (optional)
+
+The bridge is a separate service that receives Wahoo webhooks. Wahoo requires a **public HTTPS URL**.
+
+### Setup
+
+```bash
+cd wahoo_bridge
+uv sync
+```
+
+Create `wahoo_bridge/.env`:
+
+```env
+BRIDGE_SECRET=<same random string as WAHOO_BRIDGE_SECRET in main .env>   # python -c "import secrets; print(secrets.token_hex(32))"
+WAHOO_WEBHOOK_TOKEN=<token you define in the Wahoo developer portal>      # python -c "import secrets; print(secrets.token_hex(32))"
+DATABASE_PATH=bridge.db
+```
+
+### Run
+
+```bash
+uv run uvicorn main:app --host 0.0.0.0 --port 8085
+```
+
+Expose it via your reverse proxy (e.g. `wahoo-bridge.your-domain`).
+
+### Register webhook with Wahoo (one-time)
+
+In the [Wahoo developer portal](https://developers.wahooligan.com), set the webhook URL to:
+
+```
+https://wahoo-bridge.your-domain/webhook
+```
+
+Set the webhook token to the same value as `WAHOO_WEBHOOK_TOKEN` in `wahoo_bridge/.env`. Wahoo will start sending `workout_summary` events to the bridge immediately.
+
+---
+
+## 6. systemd Services
 
 Service files are provided in the `systemd/` directory as [template units](https://www.freedesktop.org/software/systemd/man/systemd.unit.html#Description). The `@username` suffix at enable time fills in the user and home directory automatically.
 
@@ -212,6 +253,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now openkoutsi-backend@$(whoami) openkoutsi-frontend@$(whoami)
 # Only needed if using the Strava bridge:
 sudo systemctl enable --now openkoutsi-bridge@$(whoami)
+# Only needed if using the Wahoo bridge:
+sudo systemctl enable --now openkoutsi-wahoo-bridge@$(whoami)
 ```
 
 The frontend service uses a hardcoded nvm Node path. If you upgrade Node, update the `ExecStart` line in `systemd/openkoutsi-frontend@.service` and re-copy the file.
@@ -230,6 +273,7 @@ Check logs with `journalctl -u openkoutsi-backend@$(whoami) -f` (replace the uni
 - [ ] TLS termination in place for both frontend and API
 - [ ] Completed first-run setup wizard (creates first team + admin account)
 - [ ] Strava app callback domain updated to production domain (if using Strava)
+- [ ] Wahoo webhook URL registered in the developer portal (if using Wahoo)
 
 ### Upgrading: zone sync (added in this release)
 

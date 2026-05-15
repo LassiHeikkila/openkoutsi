@@ -14,8 +14,9 @@
   --density:       0.7;
 
   /* image helpers */
-  --lp-logo-filter:  brightness(0);
-  --lp-wahoo-filter: none;
+  --lp-logo-filter:   brightness(0);
+  --lp-wahoo-filter:  none;
+  --lp-strava-filter: none;
 
   /* code snippet string color */
   --lp-snippet-string: oklch(0.45 0.14 120);

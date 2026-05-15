@@ -198,7 +198,7 @@ export default async function RootPage() {
                 <div className="feat-logos">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/strava/api_logo_cptblWith_strava_stack_white.svg"
+                    src="/strava/api_logo_cptblWith_strava_stack_black.svg"
                     alt="Compatible with Strava"
                     className="feat-logo-strava"
                   />

@@ -450,6 +450,7 @@
 .lp .feat-logo-strava {
   height: 40px;
   width: auto;
+  filter: var(--lp-strava-filter);
 }
 
 .lp .feat-logo-wahoo {

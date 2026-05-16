@@ -25,6 +25,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     }
   }, [athlete, loading, router, slug])
 
+  useEffect(() => {
+    if (!loading && athlete) {
+      const done = (athlete.app_settings as Record<string, unknown>)?.onboarding_completed
+      if (!done && !pathname.includes('/onboarding')) {
+        router.replace(`/t/${slug}/onboarding?step=0`)
+      }
+    }
+  }, [athlete, loading, pathname, router, slug])
+
   // Persist locale in app_settings so backend jobs (auto-analysis) can use it
   useEffect(() => {
     if (athlete && (athlete.app_settings as Record<string, unknown>)?.locale !== locale) {

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import settings
 from backend.app.db.registry import get_registry_session
-from backend.app.models.registry_orm import Team, TeamMembership
+from backend.app.models.registry_orm import DataConsent, Team, TeamMembership
 from backend.app.schemas.teams import SuperadminTeamResponse
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
@@ -31,6 +31,12 @@ async def list_teams(
     )
     counts = {row.team_id: row.n for row in counts_result}
 
+    consent_counts_result = await session.execute(
+        select(DataConsent.team_id, func.count().label("n"))
+        .group_by(DataConsent.team_id)
+    )
+    consent_counts = {row.team_id: row.n for row in consent_counts_result}
+
     return [
         SuperadminTeamResponse(
             id=t.id,
@@ -39,6 +45,7 @@ async def list_teams(
             status=t.status,
             created_at=t.created_at,
             member_count=counts.get(t.id, 0),
+            consented_count=consent_counts.get(t.id, 0),
         )
         for t in teams
     ]

@@ -9,6 +9,8 @@
     "username": "Username",
     "roles": "Roles",
     "joinedAt": "Joined",
+    "consent": "Consent",
+    "noConsent": "Not accepted",
     "actions": "Actions",
     "editRoles": "Edit roles",
     "saveRoles": "Save",

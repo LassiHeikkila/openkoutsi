@@ -8,6 +8,8 @@ export interface MemberResponse {
   username: string
   roles: string[]
   joined_at: string
+  consented_at: string | null
+  consent_version: string | null
 }
 
 export interface InvitationResponse {

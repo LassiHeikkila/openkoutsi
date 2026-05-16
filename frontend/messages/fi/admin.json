@@ -9,6 +9,8 @@
     "username": "Käyttäjätunnus",
     "roles": "Roolit",
     "joinedAt": "Liittynyt",
+    "consent": "Suostumus",
+    "noConsent": "Ei hyväksytty",
     "actions": "Toiminnot",
     "editRoles": "Muokkaa rooleja",
     "saveRoles": "Tallenna",

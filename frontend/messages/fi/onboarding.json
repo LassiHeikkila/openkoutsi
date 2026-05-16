@@ -1,0 +1,98 @@
+{
+  "wizard": {
+    "skipStep": "Ohita tämä vaihe",
+    "skipAll": "Ohita asetukset",
+    "back": "Takaisin",
+    "next": "Seuraava",
+    "finish": "Valmis – siirry etusivulle",
+    "stepOf": "Vaihe {current}/{total}"
+  },
+  "consent": {
+    "title": "Ennen kuin aloitat",
+    "subtitle": "Tämä palvelu käsittelee henkilö- ja terveystietojasi. Lue ja hyväksy ehdot ennen jatkamista.",
+    "dataTitle": "Tallennettavat ja käsiteltävät tiedot",
+    "dataItems": {
+      "account": "Tilitiedot: käyttäjänimi ja näyttönimi",
+      "profile": "Profiilikuva (jos haluat lisätä sellaisen)",
+      "health": "Terveysdata: paino, sykkeen harjoitusalueet, tehon harjoitusalueet",
+      "activities": "Harjoitukset ja suoritusdata",
+      "providers": "Harjoitusdata yhdistetyistä palveluista (Strava, Wahoo) – jos haluat yhdistää ne",
+      "ai": "Harjoitusten tekoälyanalyysi – jos haluat ottaa sen käyttöön"
+    },
+    "checkboxLabel": "Hyväksyn, että palvelu tallentaa ja käsittelee henkilö- ja terveystietojani yllä kuvatulla tavalla.",
+    "accept": "Hyväksy ja jatka",
+    "decline": "Kieltäydy",
+    "declineNote": "Palvelun käyttö edellyttää hyväksyntää. Voit kirjautua ulos, jos et halua jatkaa."
+  },
+  "step1": {
+    "title": "Aseta profiilisi",
+    "subtitle": "Kerro hieman itsestäsi. Voit muuttaa näitä tietoja myöhemmin profiiliasetuksissa.",
+    "name": "Näyttönimi",
+    "namePlaceholder": "Nimesi",
+    "weight": "Paino (kg)",
+    "weightPlaceholder": "70",
+    "picture": "Profiilikuva",
+    "uploadPicture": "Lataa kuva",
+    "removePicture": "Poista"
+  },
+  "step2": {
+    "title": "Harjoitusalueet",
+    "subtitle": "Aseta syke- ja tehon harjoitusalueet. Niitä käytetään harjoituskuorman analysoinnissa.",
+    "hrTitle": "Sykealueet",
+    "powerTitle": "Tehon harjoitusalueet",
+    "maxHr": "Maksimisyke (bpm)",
+    "maxHrPlaceholder": "185",
+    "populateHr": "Luo alueet maksimisykkeestä",
+    "ftp": "FTP (wattia)",
+    "ftpPlaceholder": "250",
+    "populatePower": "Luo alueet FTP:stä"
+  },
+  "step3": {
+    "title": "Yhdistä palvelut",
+    "subtitle": "Yhdistä Strava tai Wahoo tuodaksesi harjoituksesi automaattisesti. Tämä vaihe on vapaaehtoinen – voit yhdistää ne myöhemmin profiilissasi."
+  },
+  "step4": {
+    "title": "Automaattinen tekoälyanalyysi",
+    "subtitle": "Kun tämä on käytössä, uudet harjoitukset analysoidaan automaattisesti tekoälyllä latauksen jälkeen. Voit muuttaa tätä asetusta milloin tahansa profiilissasi.",
+    "toggle": "Ota automaattinen analyysi käyttöön",
+    "toggleDesc": "Analysoi jokainen uusi harjoitus automaattisesti tekoälyllä."
+  },
+  "step5": {
+    "title": "Aseta tavoite",
+    "subtitle": "Tavoitteet auttavat sinua pysymään motivoituneena. Voit lisätä lisää tavoitteita myöhemmin.",
+    "titleLabel": "Tavoitteen nimi",
+    "titlePlaceholder": "esim. Pyöräile sata kilometriä",
+    "description": "Kuvaus (vapaaehtoinen)",
+    "descriptionPlaceholder": "Kuvaile tavoitettasi…",
+    "targetDate": "Tavoitepäivämäärä (vapaaehtoinen)",
+    "addAnother": "Lisää toinen tavoite",
+    "goalAdded": "Tavoite lisätty"
+  },
+  "step6": {
+    "title": "Luo harjoitussuunnitelma",
+    "subtitle": "Luo jäsennelty harjoitusaikataulu. Voit luoda tai muokata suunnitelmia myöhemmin.",
+    "nameLabel": "Suunnitelman nimi",
+    "namePlaceholder": "esim. Peruskunto 2026",
+    "startDate": "Aloituspäivämäärä",
+    "weeks": "Kesto (viikkoa)",
+    "goal": "Tavoitetapahtuma (vapaaehtoinen)",
+    "goalPlaceholder": "esim. Gran Fondo",
+    "method": "Luontitapa",
+    "methodStructured": "Jäsennelty",
+    "methodAi": "Tekoälyn luoma",
+    "trainingDays": "Harjoituspäivät",
+    "days": {
+      "mon": "Ma",
+      "tue": "Ti",
+      "wed": "Ke",
+      "thu": "To",
+      "fri": "Pe",
+      "sat": "La",
+      "sun": "Su"
+    },
+    "periodization": "Periodisaatio",
+    "intensity": "Intensiteetti",
+    "aiDescription": "Kuvaile harjoitustavoitteesi ja mieltymyksesi",
+    "aiDescriptionPlaceholder": "esim. Haluan rakentaa aerobista pohjaa syksyn Gran Fondoa varten. Voin harjoitella 5 päivänä viikossa, mieluiten aamuisin."
+  }
+}

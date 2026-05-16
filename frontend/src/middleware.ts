@@ -9,6 +9,7 @@ const intlMiddleware = createMiddleware(routing)
 const PROTECTED_SUFFIXES = [
   '/dashboard', '/activities', '/power', '/records',
   '/goals', '/plan', '/profile', '/settings', '/admin',
+  '/onboarding',
 ]
 
 // Auth-page suffixes that are public

@@ -13,7 +13,7 @@ from backend.app.core.config import settings
 from backend.app.core.file_encryption import decrypt_team_secret, encrypt_team_secret
 from backend.app.core.limiter import limiter
 from backend.app.db.registry import get_registry_session
-from backend.app.models.registry_orm import Invitation, PasswordResetToken, Team, TeamMembership, User
+from backend.app.models.registry_orm import DataConsent, Invitation, PasswordResetToken, Team, TeamMembership, User
 from backend.app.schemas.teams import (
     InvitationCreate,
     InvitationResponse,
@@ -63,12 +63,20 @@ async def list_members(
         .order_by(TeamMembership.joined_at)
     )
     rows = result.all()
+
+    consent_result = await session.execute(
+        select(DataConsent).where(DataConsent.team_id == team.id)
+    )
+    consents = {c.user_id: c for c in consent_result.scalars().all()}
+
     return [
         MemberResponse(
             user_id=user.id,
             username=user.username,
             roles=json.loads(membership.roles),
             joined_at=membership.joined_at,
+            consented_at=consents[user.id].consented_at if user.id in consents else None,
+            consent_version=consents[user.id].consent_version if user.id in consents else None,
         )
         for membership, user in rows
     ]

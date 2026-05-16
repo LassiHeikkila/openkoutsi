@@ -35,7 +35,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(username, password, inviteToken)
-      router.replace(`/t/${slug}/dashboard`)
+      router.replace(`/t/${slug}/onboarding?step=0`)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('register.failed'))
     } finally {

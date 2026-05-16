@@ -1,0 +1,98 @@
+{
+  "wizard": {
+    "skipStep": "Skip this step",
+    "skipAll": "Skip setup",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish & go to dashboard",
+    "stepOf": "Step {current} of {total}"
+  },
+  "consent": {
+    "title": "Before you begin",
+    "subtitle": "This service processes your personal and health-related data. Please read and accept the terms before continuing.",
+    "dataTitle": "Data we store and process",
+    "dataItems": {
+      "account": "Account data: username and display name",
+      "profile": "Profile picture (if you choose to upload one)",
+      "health": "Health metrics: weight, heart rate zones, power zones",
+      "activities": "Training activities and performance data",
+      "providers": "Activity data from connected services (Strava, Wahoo) — if you choose to connect them",
+      "ai": "AI analysis of your workouts — if you choose to enable it"
+    },
+    "checkboxLabel": "I accept that this service stores and processes my personal and health-related data as described above.",
+    "accept": "Accept & continue",
+    "decline": "Decline",
+    "declineNote": "You must accept to use this service. You can log out if you do not wish to proceed."
+  },
+  "step1": {
+    "title": "Set up your profile",
+    "subtitle": "Tell us a bit about yourself. You can change all of this later in your profile settings.",
+    "name": "Display name",
+    "namePlaceholder": "Your name",
+    "weight": "Weight (kg)",
+    "weightPlaceholder": "70",
+    "picture": "Profile picture",
+    "uploadPicture": "Upload photo",
+    "removePicture": "Remove"
+  },
+  "step2": {
+    "title": "Training zones",
+    "subtitle": "Set your heart rate and power zones. These are used for training load analysis.",
+    "hrTitle": "Heart rate zones",
+    "powerTitle": "Power zones",
+    "maxHr": "Max heart rate (bpm)",
+    "maxHrPlaceholder": "185",
+    "populateHr": "Generate zones from max HR",
+    "ftp": "FTP (watts)",
+    "ftpPlaceholder": "250",
+    "populatePower": "Generate zones from FTP"
+  },
+  "step3": {
+    "title": "Connect services",
+    "subtitle": "Connect Strava or Wahoo to automatically import your workouts. This step is optional — you can connect them later in your profile."
+  },
+  "step4": {
+    "title": "Automatic AI analysis",
+    "subtitle": "When enabled, new workouts will be automatically analysed by AI after upload. You can change this at any time in your profile.",
+    "toggle": "Enable auto-analysis",
+    "toggleDesc": "Automatically analyse each new workout with AI."
+  },
+  "step5": {
+    "title": "Set a goal",
+    "subtitle": "Goals help you stay focused on what you are training for. You can add more goals later.",
+    "titleLabel": "Goal title",
+    "titlePlaceholder": "e.g. Complete a century ride",
+    "description": "Description (optional)",
+    "descriptionPlaceholder": "Describe your goal…",
+    "targetDate": "Target date (optional)",
+    "addAnother": "Add another goal",
+    "goalAdded": "Goal added"
+  },
+  "step6": {
+    "title": "Create a training plan",
+    "subtitle": "Set up a structured training schedule. You can create or modify plans later.",
+    "nameLabel": "Plan name",
+    "namePlaceholder": "e.g. Base building 2026",
+    "startDate": "Start date",
+    "weeks": "Duration (weeks)",
+    "goal": "Goal event (optional)",
+    "goalPlaceholder": "e.g. Gran Fondo",
+    "method": "Generation method",
+    "methodStructured": "Structured",
+    "methodAi": "AI generated",
+    "trainingDays": "Training days",
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "periodization": "Periodization",
+    "intensity": "Intensity preference",
+    "aiDescription": "Describe your training goals and preferences",
+    "aiDescriptionPlaceholder": "e.g. I want to build aerobic base for a century ride in August. I can train 5 days a week, prefer morning rides."
+  }
+}

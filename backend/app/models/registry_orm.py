@@ -110,6 +110,19 @@ class Invitation(RegistryBase):
     team: Mapped["Team"] = relationship("Team", back_populates="invitations")
 
 
+class DataConsent(RegistryBase):
+    """Records that a user has accepted the data processing terms for a team."""
+
+    __tablename__ = "data_consents"
+    __table_args__ = (UniqueConstraint("user_id", "team_id"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"))
+    team_id: Mapped[str] = mapped_column(String, ForeignKey("teams.id", ondelete="CASCADE"))
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    consent_version: Mapped[str] = mapped_column(String, nullable=False, default="1.0")
+
+
 class ProviderConnection(RegistryBase):
     """OAuth connections belong to the user globally, not to a specific team.
 

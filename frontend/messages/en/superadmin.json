@@ -10,6 +10,8 @@
     "slug": "Slug",
     "status": "Status",
     "members": "Members",
+    "consent": "Consent",
+    "consentPending": "pending",
     "created": "Created",
     "actions": "Actions"
   },
@@ -17,6 +19,14 @@
     "pending": "Pending",
     "active": "Active",
     "rejected": "Rejected"
+  },
+  "usersTitle": "Users",
+  "noUsers": "No users found.",
+  "users": {
+    "registered": "Registered",
+    "noTeams": "Not a member of any team",
+    "consentAccepted": "Accepted",
+    "noConsent": "No consent"
   },
   "approve": "Approve",
   "delete": "Delete",

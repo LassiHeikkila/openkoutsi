@@ -118,6 +118,23 @@ class SuperadminTeamResponse(BaseModel):
     consented_count: int = 0
 
 
+class SuperadminUserTeam(BaseModel):
+    team_id: str
+    team_slug: str
+    team_name: str
+    roles: list[str]
+    joined_at: datetime
+    consented_at: Optional[datetime] = None
+    consent_version: Optional[str] = None
+
+
+class SuperadminUserResponse(BaseModel):
+    id: str
+    username: str
+    created_at: datetime
+    teams: list[SuperadminUserTeam]
+
+
 class SetupStatusResponse(BaseModel):
     needs_setup: bool
 

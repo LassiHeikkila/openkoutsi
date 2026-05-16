@@ -10,6 +10,8 @@
     "slug": "Tunniste",
     "status": "Tila",
     "members": "Jäsenet",
+    "consent": "Suostumus",
+    "consentPending": "odottaa",
     "created": "Luotu",
     "actions": "Toiminnot"
   },
@@ -17,6 +19,14 @@
     "pending": "Odottaa",
     "active": "Aktiivinen",
     "rejected": "Hylätty"
+  },
+  "usersTitle": "Käyttäjät",
+  "noUsers": "Käyttäjiä ei löydy.",
+  "users": {
+    "registered": "Rekisteröitynyt",
+    "noTeams": "Ei jäsenyyksiä",
+    "consentAccepted": "Hyväksytty",
+    "noConsent": "Ei suostumusta"
   },
   "approve": "Hyväksy",
   "delete": "Poista",

@@ -21,8 +21,20 @@
     },
     "checkboxLabel": "Hyväksyn, että palvelu tallentaa ja käsittelee henkilö- ja terveystietojani yllä kuvatulla tavalla.",
     "accept": "Hyväksy ja jatka",
-    "decline": "Kieltäydy",
-    "declineNote": "Palvelun käyttö edellyttää hyväksyntää. Voit kirjautua ulos, jos et halua jatkaa."
+    "decline": {
+      "button": "Kieltäydy",
+      "title": "Kieltäydyit ehdoista",
+      "body": "Et voi käyttää palvelua hyväksymättä tietojen käsittelyelhtoja. Voit ladata kopion tiedoistasi, poistaa tilisi pysyvästi tai kirjautua ulos.",
+      "exportData": "Lataa tietoni",
+      "deleteAccount": "Poista tilini",
+      "deleteConfirmBody": "Tämä poistaa tilisi ja kaikki siihen liittyvät tiedot pysyvästi. Vahvista kirjoittamalla salasanasi.",
+      "passwordLabel": "Salasanasi",
+      "cancelDelete": "Peruuta",
+      "confirmDelete": "Poista tili",
+      "deleteError": "Väärä salasana",
+      "goBack": "Takaisin",
+      "logOut": "Kirjaudu ulos"
+    }
   },
   "step1": {
     "title": "Aseta profiilisi",

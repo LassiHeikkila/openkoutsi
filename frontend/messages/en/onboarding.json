@@ -21,8 +21,20 @@
     },
     "checkboxLabel": "I accept that this service stores and processes my personal and health-related data as described above.",
     "accept": "Accept & continue",
-    "decline": "Decline",
-    "declineNote": "You must accept to use this service. You can log out if you do not wish to proceed."
+    "decline": {
+      "button": "Decline",
+      "title": "You declined the terms",
+      "body": "You cannot use the service without accepting the data processing terms. You can download a copy of your data, permanently delete your account, or simply log out.",
+      "exportData": "Download my data",
+      "deleteAccount": "Delete my account",
+      "deleteConfirmBody": "This will permanently delete your account and all associated data. Enter your password to confirm.",
+      "passwordLabel": "Your password",
+      "cancelDelete": "Cancel",
+      "confirmDelete": "Delete account",
+      "deleteError": "Incorrect password",
+      "goBack": "Go back",
+      "logOut": "Log out"
+    }
   },
   "step1": {
     "title": "Set up your profile",

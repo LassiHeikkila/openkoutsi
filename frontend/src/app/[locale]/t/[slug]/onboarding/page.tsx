@@ -50,17 +50,23 @@ export default function OnboardingPage() {
     next()
   }
 
-  // Redirect if already completed onboarding
+  // Redirect if already completed onboarding and consent is current
   useEffect(() => {
     if (athlete) {
       const done = (athlete.app_settings as Record<string, unknown>)?.onboarding_completed
-      if (done) router.replace(`/t/${slug}/dashboard`)
+      if (done && athlete.consent_accepted) router.replace(`/t/${slug}/dashboard`)
     }
   }, [athlete, router, slug])
 
+  const isReConsent =
+    athlete?.consent_accepted === false &&
+    !!(athlete?.app_settings as Record<string, unknown>)?.onboarding_completed
+
   return (
     <>
-      {step === 0 && <Step0Consent onAccepted={() => goTo(1)} />}
+      {step === 0 && (
+        <Step0Consent onAccepted={isReConsent ? completeOnboarding : () => goTo(1)} />
+      )}
       {step === 1 && <Step1Profile onNext={next} onSkip={skip} />}
       {step === 2 && <Step2Zones onNext={next} onBack={back} onSkip={skip} />}
       {step === 3 && <Step3Providers onNext={next} onBack={back} onSkip={skip} />}

@@ -31,6 +31,7 @@ class AthleteResponse(BaseModel):
     connected_providers: list[str] = []
     app_settings: dict = {}
     avatar_url: Optional[str] = None
+    consent_accepted: bool = False
     created_at: datetime
     updated_at: datetime
 

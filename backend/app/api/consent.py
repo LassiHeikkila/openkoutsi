@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+CURRENT_CONSENT_VERSION = "1.0"
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,12 +43,12 @@ async def record_consent(
             user_id=ctx.user_id,
             team_id=team.id,
             consented_at=now,
-            consent_version=body.consent_version,
+            consent_version=body.consent_version or CURRENT_CONSENT_VERSION,
         )
         session.add(consent)
     else:
         consent.consented_at = now
-        consent.consent_version = body.consent_version
+        consent.consent_version = body.consent_version or CURRENT_CONSENT_VERSION
 
     await session.commit()
     await session.refresh(consent)

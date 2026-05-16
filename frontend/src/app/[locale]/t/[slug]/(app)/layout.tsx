@@ -26,10 +26,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [athlete, loading, router, slug])
 
   useEffect(() => {
-    if (!loading && athlete) {
-      const done = (athlete.app_settings as Record<string, unknown>)?.onboarding_completed
-      if (!done && !pathname.includes('/onboarding')) {
+    if (!loading && athlete && !pathname.includes('/onboarding')) {
+      if (!athlete.consent_accepted) {
         router.replace(`/t/${slug}/onboarding?step=0`)
+      } else if (!(athlete.app_settings as Record<string, unknown>)?.onboarding_completed) {
+        router.replace(`/t/${slug}/onboarding?step=1`)
       }
     }
   }, [athlete, loading, pathname, router, slug])

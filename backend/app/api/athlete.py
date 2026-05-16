@@ -14,7 +14,8 @@ from backend.app.core.config import settings
 from backend.app.core.deps import get_ctx_and_session
 from backend.app.core.file_encryption import decrypt_file
 from backend.app.db.registry import get_registry_session
-from backend.app.models.registry_orm import ProviderConnection, User
+from backend.app.api.consent import CURRENT_CONSENT_VERSION
+from backend.app.models.registry_orm import DataConsent, ProviderConnection, User
 from backend.app.models.team_orm import Activity, Athlete, WeightLog
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
 
@@ -42,7 +43,7 @@ def _safe_app_settings(athlete: Athlete) -> dict:
 
 
 def _athlete_response(
-    athlete: Athlete, connected_providers: list[str], team_id: str
+    athlete: Athlete, connected_providers: list[str], team_id: str, consent_accepted: bool = False
 ) -> AthleteResponse:
     avatar_url = (
         f"{settings.api_url}/api/public/teams/{team_id}/avatar/{athlete.id}"
@@ -66,6 +67,7 @@ def _athlete_response(
         avatar_url=avatar_url,
         created_at=athlete.created_at,
         updated_at=athlete.updated_at,
+        consent_accepted=consent_accepted,
     )
 
 
@@ -78,6 +80,19 @@ async def _get_connected_providers(
     return [c.provider for c in result.scalars().all()]
 
 
+async def _get_consent_accepted(
+    user_id: str, team_id: str, registry_session: AsyncSession
+) -> bool:
+    result = await registry_session.execute(
+        select(DataConsent).where(
+            DataConsent.user_id == user_id,
+            DataConsent.team_id == team_id,
+        )
+    )
+    consent = result.scalar_one_or_none()
+    return consent is not None and consent.consent_version == CURRENT_CONSENT_VERSION
+
+
 @router.get("/", response_model=AthleteResponse)
 async def get_athlete(
     ctx_session=Depends(get_ctx_and_session),
@@ -86,7 +101,8 @@ async def get_athlete(
     ctx, session = ctx_session
     athlete = await _get_athlete(ctx.user_id, session)
     providers = await _get_connected_providers(ctx.user_id, registry_session)
-    return _athlete_response(athlete, providers, ctx.team_id)
+    consent_ok = await _get_consent_accepted(ctx.user_id, ctx.team_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id, consent_accepted=consent_ok)
 
 
 @router.put("/", response_model=AthleteResponse)
@@ -171,7 +187,8 @@ async def update_athlete(
     await session.commit()
     await session.refresh(athlete)
     providers = await _get_connected_providers(ctx.user_id, registry_session)
-    return _athlete_response(athlete, providers, ctx.team_id)
+    consent_ok = await _get_consent_accepted(ctx.user_id, ctx.team_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id, consent_accepted=consent_ok)
 
 
 @router.post("/avatar", response_model=AthleteResponse)
@@ -213,7 +230,8 @@ async def upload_avatar(
     await session.commit()
     await session.refresh(athlete)
     providers = await _get_connected_providers(ctx.user_id, registry_session)
-    return _athlete_response(athlete, providers, ctx.team_id)
+    consent_ok = await _get_consent_accepted(ctx.user_id, ctx.team_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id, consent_accepted=consent_ok)
 
 
 @router.delete("/avatar", response_model=AthleteResponse)
@@ -230,7 +248,8 @@ async def delete_avatar(
         await session.commit()
         await session.refresh(athlete)
     providers = await _get_connected_providers(ctx.user_id, registry_session)
-    return _athlete_response(athlete, providers, ctx.team_id)
+    consent_ok = await _get_consent_accepted(ctx.user_id, ctx.team_id, registry_session)
+    return _athlete_response(athlete, providers, ctx.team_id, consent_accepted=consent_ok)
 
 
 @router.get("/{athlete_id}/avatar")

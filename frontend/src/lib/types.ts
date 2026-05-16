@@ -63,6 +63,7 @@ export interface AthleteProfile {
   connected_providers: string[]
   app_settings: Record<string, unknown>
   avatar_url: string | null
+  consent_accepted: boolean
   created_at: string
   updated_at: string
 }

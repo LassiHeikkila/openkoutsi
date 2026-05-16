@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/auth'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, apiDownload } from '@/lib/api'
 import { WizardShell } from '@/components/onboarding/WizardShell'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 interface Props {
@@ -20,7 +21,12 @@ export function Step0Consent({ onAccepted }: Props) {
   const { slug } = useParams<{ slug: string }>()
   const [accepted, setAccepted] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [declined, setDeclined] = useState(false)
+  const [showDeclinePanel, setShowDeclinePanel] = useState(false)
+  const [showDeleteForm, setShowDeleteForm] = useState(false)
+  const [password, setPassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   async function handleAccept() {
     setSaving(true)
@@ -35,7 +41,119 @@ export function Step0Consent({ onAccepted }: Props) {
     }
   }
 
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await apiDownload('/api/athlete/export', 'openkoutsi_export.zip')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      await apiFetch(`/api/teams/${slug}/auth/account`, {
+        method: 'DELETE',
+        body: JSON.stringify({ password }),
+      })
+      logout()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : t('consent.decline.deleteError'))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const dataItems = t.raw('consent.dataItems') as Record<string, string>
+
+  if (showDeclinePanel) {
+    return (
+      <WizardShell step={0} title={t('consent.decline.title')} hideNav>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t('consent.decline.body')}</p>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exporting}
+              onClick={handleExport}
+            >
+              {exporting ? '…' : t('consent.decline.exportData')}
+            </Button>
+
+            {!showDeleteForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                onClick={() => setShowDeleteForm(true)}
+              >
+                {t('consent.decline.deleteAccount')}
+              </Button>
+            ) : (
+              <div className="rounded-md border border-destructive/40 p-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {t('consent.decline.deleteConfirmBody')}
+                </p>
+                <div className="space-y-1">
+                  <Label htmlFor="delete-password" className="text-sm">
+                    {t('consent.decline.passwordLabel')}
+                  </Label>
+                  <Input
+                    id="delete-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                {deleteError && (
+                  <p className="text-sm text-destructive">{deleteError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setShowDeleteForm(false); setPassword(''); setDeleteError('') }}
+                  >
+                    {t('consent.decline.cancelDelete')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={!password || deleting}
+                    onClick={handleDeleteAccount}
+                  >
+                    {deleting ? '…' : t('consent.decline.confirmDelete')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-2 border-t">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowDeclinePanel(false)}
+            >
+              {t('consent.decline.goBack')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={logout}
+            >
+              {t('consent.decline.logOut')}
+            </Button>
+          </div>
+        </div>
+      </WizardShell>
+    )
+  }
 
   return (
     <WizardShell step={0} title={t('consent.title')} hideNav>
@@ -65,22 +183,13 @@ export function Step0Consent({ onAccepted }: Props) {
           </Label>
         </div>
 
-        {declined && (
-          <p className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/20">
-            {t('consent.declineNote')}
-          </p>
-        )}
-
         <div className="flex gap-2 pt-2">
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              setDeclined(true)
-              logout()
-            }}
+            onClick={() => setShowDeclinePanel(true)}
           >
-            {t('consent.decline')}
+            {t('consent.decline.button')}
           </Button>
           <Button
             type="button"

@@ -53,7 +53,7 @@ async def _poll_bridge_once() -> None:
             r.raise_for_status()
             events: list[dict] = r.json()
         except Exception as e:
-            log.warning("Could not fetch events from Wahoo bridge: {e}")
+            log.warning(f"Could not fetch events from Wahoo bridge: {e}")
             return
 
         for event in events:

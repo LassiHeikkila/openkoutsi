@@ -79,6 +79,9 @@
     "testModelFound": "Määritetty malli löytyi",
     "testModelNotFound": "Määritettyä mallia ei löydy saatavilla olevien mallien listalta",
     "testModelsAvailable": "Saatavilla olevat mallit",
-    "testNoBaseUrl": "Tallenna perus-URL ennen testaamista"
+    "testNoBaseUrl": "Tallenna perus-URL ennen testaamista",
+    "analysisContext": "Analyysikonteksti",
+    "analysisContextDesc": "Valinnainen valmennuskonteksti, joka lisätään jokaiseen tämän tiimin aktiviteettianalyysiin. Kuvaile laji, tiimikulttuuri, harjoittelufilosofia tai pysyvät ohjeet tekoälyvalmentajalle.",
+    "analysisContextPlaceholder": "esim. Tämä on eliittitason maantiepyöräilytiimi. Priorisoi tehopohjaiset mittarit ja kynnysharjoittelu. Vastausten tulee olla tiiviitä ja dataan perustuvia."
   }
 }

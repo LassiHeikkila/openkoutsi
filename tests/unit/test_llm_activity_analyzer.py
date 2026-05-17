@@ -173,11 +173,12 @@ def _make_streaming_lines(chunks):
     return _gen()
 
 
-def _make_mock_team(base_url="http://localhost:11434/v1", model="llama3.2"):
+def _make_mock_team(base_url="http://localhost:11434/v1", model="llama3.2", analysis_context=None):
     team = MagicMock()
     team.llm_base_url = base_url
     team.llm_model = model
     team.llm_api_key_enc = None
+    team.llm_analysis_context = analysis_context
     return team
 
 
@@ -271,6 +272,56 @@ class TestStreamAnalysis:
                 collected.append(chunk)
 
         assert collected == ["ok"]
+
+    async def _run_capture_payload(self, team):
+        """Run _stream_analysis and return the captured messages list."""
+        captured: dict = {}
+
+        mock_resp = AsyncMock()
+        mock_resp.aiter_lines = MagicMock(return_value=_make_streaming_lines(["ok"]))
+        mock_resp.raise_for_status = MagicMock()
+
+        @asynccontextmanager
+        async def _mock_stream(method, url, json=None, **kwargs):
+            captured.update(json or {})
+            yield mock_resp
+
+        mock_client = AsyncMock()
+        mock_client.stream = _mock_stream
+
+        @asynccontextmanager
+        async def _mock_httpx(*args, **kwargs):
+            yield mock_client
+
+        with (
+            patch("backend.app.services.llm_activity_analyzer._RegistrySessionLocal",
+                  return_value=_mock_registry_session(team)),
+            patch("httpx.AsyncClient", return_value=_mock_httpx()),
+        ):
+            async for _ in _stream_analysis(_make_activity(), _make_athlete(), "team-1"):
+                pass
+
+        return captured["messages"]
+
+    async def test_analysis_context_injected_as_second_system_message(self):
+        team = _make_mock_team(analysis_context="Focus on running economy.")
+        messages = await self._run_capture_payload(team)
+        assert messages[0]["role"] == "system"
+        assert messages[1] == {"role": "system", "content": "Focus on running economy."}
+        assert messages[2]["role"] == "user"
+
+    async def test_no_analysis_context_omits_second_system_message(self):
+        team = _make_mock_team(analysis_context=None)
+        messages = await self._run_capture_payload(team)
+        system_messages = [m for m in messages if m["role"] == "system"]
+        assert len(system_messages) == 1
+        assert messages[-1]["role"] == "user"
+
+    async def test_whitespace_only_context_not_injected(self):
+        team = _make_mock_team(analysis_context="   \n  ")
+        messages = await self._run_capture_payload(team)
+        system_messages = [m for m in messages if m["role"] == "system"]
+        assert len(system_messages) == 1
 
 
 # ── analyze_activity_bg ───────────────────────────────────────────────────────

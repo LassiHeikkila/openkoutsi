@@ -223,12 +223,18 @@ async def _stream_analysis(
         except Exception:
             log.warning("Could not decrypt team LLM API key for team %s — proceeding without auth", team_id)
 
+    messages: list[dict] = [
+        {"role": "system", "content": _build_system_prompt(locale)},
+    ]
+    analysis_context = getattr(team, "llm_analysis_context", None)
+    if analysis_context and analysis_context.strip():
+        messages.append({"role": "system", "content": analysis_context.strip()})
+    messages.append(
+        {"role": "user", "content": _build_prompt(activity, athlete, fatigue, power_pr_badges, distance_pr_badges)}
+    )
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": _build_system_prompt(locale)},
-            {"role": "user", "content": _build_prompt(activity, athlete, fatigue, power_pr_badges, distance_pr_badges)},
-        ],
+        "messages": messages,
         "temperature": 0.7,
         "stream": True,
     }

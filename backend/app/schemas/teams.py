@@ -59,6 +59,7 @@ class TeamSettingsResponse(BaseModel):
     llm_base_url: Optional[str]
     llm_model: Optional[str]
     llm_api_key_set: bool
+    llm_analysis_context: Optional[str]
 
 
 class TeamSettingsPatch(BaseModel):
@@ -66,6 +67,7 @@ class TeamSettingsPatch(BaseModel):
     llm_model: Optional[str] = None
     llm_api_key: Optional[str] = None
     clear_llm_api_key: bool = False
+    llm_analysis_context: Optional[str] = None
 
 
 class TeamSignupRequest(BaseModel):

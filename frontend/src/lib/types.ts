@@ -28,6 +28,7 @@ export interface TeamSettingsResponse {
   llm_base_url: string | null
   llm_model: string | null
   llm_api_key_set: boolean
+  llm_analysis_context: string | null
 }
 
 export interface User {

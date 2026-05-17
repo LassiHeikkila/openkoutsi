@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   AlertDialog,
@@ -540,6 +541,7 @@ function SettingsTab({ slug }: { slug: string }) {
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [clearKey, setClearKey] = useState(false)
+  const [analysisContext, setAnalysisContext] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<LlmTestResult | null>(null)
@@ -548,6 +550,7 @@ function SettingsTab({ slug }: { slug: string }) {
     if (settings) {
       setBaseUrl(settings.llm_base_url ?? '')
       setModel(settings.llm_model ?? '')
+      setAnalysisContext(settings.llm_analysis_context ?? '')
     }
   }, [settings])
 
@@ -562,6 +565,7 @@ function SettingsTab({ slug }: { slug: string }) {
           llm_model: model || null,
           llm_api_key: apiKey || null,
           clear_llm_api_key: clearKey,
+          llm_analysis_context: analysisContext || null,
         }),
       })
       setApiKey('')
@@ -648,6 +652,18 @@ function SettingsTab({ slug }: { slug: string }) {
                 {t('settings.clearKey')}
               </Button>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="llm-analysis-context">{t('settings.analysisContext')}</Label>
+            <p className="text-xs text-muted-foreground">{t('settings.analysisContextDesc')}</p>
+            <Textarea
+              id="llm-analysis-context"
+              placeholder={t('settings.analysisContextPlaceholder')}
+              value={analysisContext}
+              onChange={(e) => setAnalysisContext(e.target.value)}
+              rows={6}
+              className="font-mono text-sm"
+            />
           </div>
           <div className="flex gap-2">
             <Button type="submit" disabled={saving}>

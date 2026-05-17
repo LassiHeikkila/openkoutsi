@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.core.encryption import EncryptedString
@@ -64,6 +64,7 @@ class Team(RegistryBase):
     llm_base_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     llm_api_key_enc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     llm_model: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    llm_analysis_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     memberships: Mapped[list["TeamMembership"]] = relationship(
         "TeamMembership", back_populates="team", cascade="all, delete-orphan"

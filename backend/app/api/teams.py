@@ -331,6 +331,7 @@ async def get_team_settings(
         llm_base_url=team.llm_base_url,
         llm_model=team.llm_model,
         llm_api_key_set=team.llm_api_key_enc is not None,
+        llm_analysis_context=team.llm_analysis_context,
     )
 
 
@@ -348,6 +349,8 @@ async def update_team_settings(
         team.llm_base_url = body.llm_base_url or None
     if body.llm_model is not None:
         team.llm_model = body.llm_model or None
+    if body.llm_analysis_context is not None:
+        team.llm_analysis_context = body.llm_analysis_context or None
 
     if body.clear_llm_api_key:
         team.llm_api_key_enc = None
@@ -364,4 +367,5 @@ async def update_team_settings(
         llm_base_url=team.llm_base_url,
         llm_model=team.llm_model,
         llm_api_key_set=team.llm_api_key_enc is not None,
+        llm_analysis_context=team.llm_analysis_context,
     )

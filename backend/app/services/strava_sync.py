@@ -19,6 +19,7 @@ from backend.app.models.registry_orm import ProviderConnection, TeamMembership
 from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 from backend.app.services.provider_sync import (
     _DUPLICATE_WINDOW,
+    _get_activity_lock,
     _populate_activity,
     _repopulate_activity,
     _winning_priority,
@@ -163,41 +164,50 @@ async def _process_event_for_team(
             avg_cadence=raw.get("average_cadence"),
         )
 
-        # Check for existing Activity at the same time window
-        existing_result = await session.execute(
-            select(Activity).where(
-                Activity.athlete_id == athlete.id,
-                Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
-                Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
-            )
-        )
-        existing_act = existing_result.scalar_one_or_none()
-
-        if existing_act is not None:
-            new_src = ActivitySource(
-                activity_id=existing_act.id,
-                provider="strava",
-                external_id=strava_activity_id,
-            )
-            session.add(new_src)
-            await session.flush()
-
-            strava_priority = _source_priority("strava", False)
-            if strava_priority < _winning_priority(existing_act):
-                await _repopulate_activity(
-                    existing_act, new_src, norm, _strava_client, access_token,
-                    athlete, session, team_id=team_id,
+        async with _get_activity_lock(team_id, athlete.id):
+            # Check for existing Activity at the same time window
+            existing_result = await session.execute(
+                select(Activity).where(
+                    Activity.athlete_id == athlete.id,
+                    Activity.start_time >= raw_start - _DUPLICATE_WINDOW,
+                    Activity.start_time <= raw_start + _DUPLICATE_WINDOW,
                 )
-                if existing_act.start_time:
-                    start_date = (
-                        existing_act.start_time.date()
-                        if hasattr(existing_act.start_time, "date")
-                        else existing_act.start_time
+            )
+            existing_act = existing_result.scalar_one_or_none()
+
+            # Guard: don't attach a second strava source to an activity that
+            # already has one (two distinct Strava workouts close in time).
+            if existing_act is not None and any(
+                s.provider == "strava" for s in existing_act.sources
+            ):
+                existing_act = None
+
+            if existing_act is not None:
+                new_src = ActivitySource(
+                    activity_id=existing_act.id,
+                    provider="strava",
+                    external_id=strava_activity_id,
+                )
+                session.add(new_src)
+                await session.flush()
+
+                strava_priority = _source_priority("strava", False)
+                if strava_priority < _winning_priority(existing_act):
+                    await _repopulate_activity(
+                        existing_act, new_src, norm, _strava_client, access_token,
+                        athlete, session, team_id=team_id,
                     )
-                    await recalculate_from(athlete.id, start_date, session)
-            else:
-                await session.commit()
-        else:
+                    if existing_act.start_time:
+                        start_date = (
+                            existing_act.start_time.date()
+                            if hasattr(existing_act.start_time, "date")
+                            else existing_act.start_time
+                        )
+                        await recalculate_from(athlete.id, start_date, session)
+                else:
+                    await session.commit()
+                return
+
             activity = Activity(
                 athlete_id=athlete.id,
                 name=norm.name,
@@ -224,26 +234,26 @@ async def _process_event_for_team(
             session.add(src)
             await session.flush()
 
-            await _populate_activity(
-                activity, src, norm, _strava_client, access_token,
-                athlete, session, team_id=team_id,
+        await _populate_activity(
+            activity, src, norm, _strava_client, access_token,
+            athlete, session, team_id=team_id,
+        )
+
+        if activity.start_time:
+            start_date = (
+                activity.start_time.date()
+                if hasattr(activity.start_time, "date")
+                else activity.start_time
             )
+            await recalculate_from(athlete.id, start_date, session)
 
-            if activity.start_time:
-                start_date = (
-                    activity.start_time.date()
-                    if hasattr(activity.start_time, "date")
-                    else activity.start_time
-                )
-                await recalculate_from(athlete.id, start_date, session)
-
-            app_cfg = athlete.app_settings or {}
-            if app_cfg.get("auto_analyze"):
-                import asyncio
-                from backend.app.services.llm_activity_analyzer import analyze_activity_bg
-                activity.analysis_status = "pending"
-                await session.commit()
-                asyncio.create_task(analyze_activity_bg(activity.id, athlete.id, team_id))
+        app_cfg = athlete.app_settings or {}
+        if app_cfg.get("auto_analyze"):
+            import asyncio
+            from backend.app.services.llm_activity_analyzer import analyze_activity_bg
+            activity.analysis_status = "pending"
+            await session.commit()
+            asyncio.create_task(analyze_activity_bg(activity.id, athlete.id, team_id))
 
     elif aspect_type == "delete":
         src_result = await session.execute(

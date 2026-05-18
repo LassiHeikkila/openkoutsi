@@ -16,6 +16,7 @@ from backend.app.models.registry_orm import ProviderConnection, TeamMembership
 from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 from backend.app.services.provider_sync import (
     _DUPLICATE_WINDOW,
+    _get_activity_lock,
     _populate_activity,
     _repopulate_activity,
     _winning_priority,
@@ -139,76 +140,84 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
         log.debug("Wahoo webhook: activity %s already imported — skipping", norm.external_id)
         return
 
-    # Check for existing Activity at the same time window
-    existing_result = await session.execute(
-        select(Activity).where(
-            Activity.athlete_id == athlete.id,
-            Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
-            Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+    async with _get_activity_lock(team_id, athlete.id):
+        # Check for existing Activity at the same time window
+        existing_result = await session.execute(
+            select(Activity).where(
+                Activity.athlete_id == athlete.id,
+                Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
+                Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+            )
         )
-    )
-    existing_act = existing_result.scalar_one_or_none()
+        existing_act = existing_result.scalar_one_or_none()
 
-    if existing_act is not None:
-        new_src = ActivitySource(
-            activity_id=existing_act.id,
+        # Guard: don't attach a second wahoo source to an activity that
+        # already has one (two distinct Wahoo workouts close in time).
+        if existing_act is not None and any(
+            s.provider == "wahoo" for s in existing_act.sources
+        ):
+            existing_act = None
+
+        if existing_act is not None:
+            new_src = ActivitySource(
+                activity_id=existing_act.id,
+                provider="wahoo",
+                external_id=norm.external_id,
+            )
+            session.add(new_src)
+            await session.flush()
+
+            prefetched_fit: bytes | None = None
+            try:
+                prefetched_fit = await _download_fit_cdn_first(
+                    access_token, norm.external_id, cdn_fit_url
+                )
+            except Exception:
+                prefetched_fit = None
+
+            actual_priority = _source_priority("wahoo", prefetched_fit is not None)
+            if actual_priority < _winning_priority(existing_act):
+                await _repopulate_activity(
+                    existing_act, new_src, norm, _wahoo_client, access_token,
+                    athlete, session, team_id=team_id, prefetched_fit=prefetched_fit,
+                )
+                if existing_act.start_time:
+                    start_date = (
+                        existing_act.start_time.date()
+                        if hasattr(existing_act.start_time, "date")
+                        else existing_act.start_time
+                    )
+                    await recalculate_from(athlete.id, start_date, session)
+            else:
+                await session.commit()
+            return
+
+        # New workout — create Activity + ActivitySource
+        activity = Activity(
+            athlete_id=athlete.id,
+            name=norm.name,
+            sport_type=norm.sport_type,
+            start_time=norm.start_time,
+            duration_s=norm.duration_s,
+            distance_m=norm.distance_m,
+            elevation_m=norm.elevation_m,
+            avg_power=norm.avg_power,
+            avg_hr=norm.avg_hr,
+            max_hr=norm.max_hr,
+            avg_speed_ms=norm.avg_speed_ms,
+            avg_cadence=norm.avg_cadence,
+            status="pending",
+        )
+        session.add(activity)
+        await session.flush()
+
+        src = ActivitySource(
+            activity_id=activity.id,
             provider="wahoo",
             external_id=norm.external_id,
         )
-        session.add(new_src)
+        session.add(src)
         await session.flush()
-
-        prefetched_fit: bytes | None = None
-        try:
-            prefetched_fit = await _download_fit_cdn_first(
-                access_token, norm.external_id, cdn_fit_url
-            )
-        except Exception:
-            prefetched_fit = None
-
-        actual_priority = _source_priority("wahoo", prefetched_fit is not None)
-        if actual_priority < _winning_priority(existing_act):
-            await _repopulate_activity(
-                existing_act, new_src, norm, _wahoo_client, access_token,
-                athlete, session, team_id=team_id, prefetched_fit=prefetched_fit,
-            )
-            if existing_act.start_time:
-                start_date = (
-                    existing_act.start_time.date()
-                    if hasattr(existing_act.start_time, "date")
-                    else existing_act.start_time
-                )
-                await recalculate_from(athlete.id, start_date, session)
-        else:
-            await session.commit()
-        return
-
-    # New workout — create Activity + ActivitySource
-    activity = Activity(
-        athlete_id=athlete.id,
-        name=norm.name,
-        sport_type=norm.sport_type,
-        start_time=norm.start_time,
-        duration_s=norm.duration_s,
-        distance_m=norm.distance_m,
-        elevation_m=norm.elevation_m,
-        avg_power=norm.avg_power,
-        avg_hr=norm.avg_hr,
-        max_hr=norm.max_hr,
-        avg_speed_ms=norm.avg_speed_ms,
-        avg_cadence=norm.avg_cadence,
-        status="pending",
-    )
-    session.add(activity)
-    await session.flush()
-
-    src = ActivitySource(
-        activity_id=activity.id,
-        provider="wahoo",
-        external_id=norm.external_id,
-    )
-    session.add(src)
-    await session.flush()
 
     prefetched_fit_new: bytes | None = None
     try:

@@ -59,6 +59,19 @@ _DUPLICATE_WINDOW = timedelta(minutes=5)
 # Sentinel: _fill_from_source uses this to know FIT hasn't been fetched yet
 _NOTFETCHED = object()
 
+# Per-(team_id, athlete_id) lock that serialises the dedup-window-query +
+# create/attach operation. Prevents the race condition where two concurrent
+# syncs both see "no existing activity" and each create a new one for the
+# same real-world workout.
+_activity_creation_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+
+def _get_activity_lock(team_id: str, athlete_id: str) -> asyncio.Lock:
+    key = (team_id, athlete_id)
+    if key not in _activity_creation_locks:
+        _activity_creation_locks[key] = asyncio.Lock()
+    return _activity_creation_locks[key]
+
 
 # ── Priority ──────────────────────────────────────────────────────────────────
 
@@ -204,110 +217,119 @@ async def sync_provider_activities(
                     )
                 continue
 
-            # ── Activity within the time window? ──────────────────────────
-            if norm.start_time is not None:
-                act_result = await session.execute(
-                    select(Activity).where(
-                        Activity.athlete_id == athlete.id,
-                        Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
-                        Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+            # ── Find-or-create under a per-athlete lock ───────────────────
+            # The lock serialises the dedup window query + create/attach so
+            # that two concurrent syncs (e.g. Wahoo webhook + Strava full
+            # sync firing within milliseconds) cannot both see "no existing
+            # activity" and each create a duplicate record.
+            async with _get_activity_lock(team_id, athlete.id):
+                # ── Activity within the time window? ──────────────────────
+                if norm.start_time is not None:
+                    act_result = await session.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete.id,
+                            Activity.start_time >= norm.start_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= norm.start_time + _DUPLICATE_WINDOW,
+                        )
                     )
-                )
-                existing_act = act_result.scalar_one_or_none()
-            else:
-                existing_act = None
-
-            if existing_act is not None:
-                # Guard: if the existing activity already has a source from
-                # this same provider (but a different external_id), these are
-                # two distinct workouts that both fall inside the dedup window
-                # (e.g. a warm-up and a main ride starting 3 min apart, both
-                # on Strava). The (activity_id, provider) unique constraint
-                # would fire if we tried to attach a second source from the
-                # same provider to the same activity. Treat the incoming
-                # activity as a separate workout by clearing existing_act and
-                # falling through to the "new workout" path below.
-                if any(s.provider == provider_name for s in existing_act.sources):
+                    existing_act = act_result.scalar_one_or_none()
+                else:
                     existing_act = None
 
-            if existing_act is not None:
-                # Same real-world workout from a different provider — attach a new source.
-                new_src = ActivitySource(
-                    activity_id=existing_act.id,
+                if existing_act is not None:
+                    # Guard: if the existing activity already has a source from
+                    # this same provider (but a different external_id), these are
+                    # two distinct workouts that both fall inside the dedup window
+                    # (e.g. a warm-up and a main ride starting 3 min apart, both
+                    # on Strava). The (activity_id, provider) unique constraint
+                    # would fire if we tried to attach a second source from the
+                    # same provider to the same activity. Treat the incoming
+                    # activity as a separate workout by clearing existing_act and
+                    # falling through to the "new workout" path below.
+                    if any(s.provider == provider_name for s in existing_act.sources):
+                        existing_act = None
+
+                if existing_act is not None:
+                    # Same real-world workout from a different provider — attach a new source.
+                    new_src = ActivitySource(
+                        activity_id=existing_act.id,
+                        provider=provider_name,
+                        external_id=ext_id,
+                    )
+                    session.add(new_src)
+                    await session.flush()
+
+                    # Pre-fetch FIT to determine actual priority before deciding
+                    # whether to repopulate. This avoids the bug where Wahoo with
+                    # FIT (priority=2) would be skipped because the pessimistic
+                    # priority (no FIT, priority=4) doesn't beat Strava (priority=3).
+                    prefetched_fit: bytes | None = None
+                    try:
+                        prefetched_fit = await client.download_fit_file(
+                            access_token, norm.external_id
+                        )
+                    except Exception:
+                        prefetched_fit = None
+
+                    actual_priority = _source_priority(
+                        provider_name, prefetched_fit is not None
+                    )
+                    if actual_priority < _winning_priority(existing_act):
+                        await _repopulate_activity(
+                            existing_act,
+                            new_src,
+                            norm,
+                            client,
+                            access_token,
+                            athlete,
+                            session,
+                            team_id=team_id,
+                            prefetched_fit=prefetched_fit,
+                        )
+                        count += 1
+                        if existing_act.start_time:
+                            day = (
+                                existing_act.start_time.date()
+                                if hasattr(existing_act.start_time, "date")
+                                else existing_act.start_time
+                            )
+                            if earliest is None or day < earliest:
+                                earliest = day
+                    else:
+                        # Lower priority — just record the source, don't touch metrics.
+                        await session.commit()
+                    continue
+
+                # ── New workout — create Activity + ActivitySource ─────────
+                activity = Activity(
+                    athlete_id=athlete.id,
+                    name=norm.name,
+                    sport_type=norm.sport_type,
+                    start_time=norm.start_time,
+                    duration_s=norm.duration_s,
+                    distance_m=norm.distance_m,
+                    elevation_m=norm.elevation_m,
+                    avg_power=norm.avg_power,
+                    avg_hr=norm.avg_hr,
+                    max_hr=norm.max_hr,
+                    avg_speed_ms=norm.avg_speed_ms,
+                    avg_cadence=norm.avg_cadence,
+                    status="pending",
+                )
+                session.add(activity)
+                await session.flush()
+
+                src = ActivitySource(
+                    activity_id=activity.id,
                     provider=provider_name,
                     external_id=ext_id,
                 )
-                session.add(new_src)
+                session.add(src)
                 await session.flush()
 
-                # Pre-fetch FIT to determine actual priority before deciding
-                # whether to repopulate. This avoids the bug where Wahoo with
-                # FIT (priority=2) would be skipped because the pessimistic
-                # priority (no FIT, priority=4) doesn't beat Strava (priority=3).
-                prefetched_fit: bytes | None = None
-                try:
-                    prefetched_fit = await client.download_fit_file(
-                        access_token, norm.external_id
-                    )
-                except Exception:
-                    prefetched_fit = None
-
-                actual_priority = _source_priority(
-                    provider_name, prefetched_fit is not None
-                )
-                if actual_priority < _winning_priority(existing_act):
-                    await _repopulate_activity(
-                        existing_act,
-                        new_src,
-                        norm,
-                        client,
-                        access_token,
-                        athlete,
-                        session,
-                        team_id=team_id,
-                        prefetched_fit=prefetched_fit,
-                    )
-                    count += 1
-                    if existing_act.start_time:
-                        day = (
-                            existing_act.start_time.date()
-                            if hasattr(existing_act.start_time, "date")
-                            else existing_act.start_time
-                        )
-                        if earliest is None or day < earliest:
-                            earliest = day
-                else:
-                    # Lower priority — just record the source, don't touch metrics.
-                    await session.commit()
-                continue
-
-            # ── New workout — create Activity + ActivitySource ─────────────
-            activity = Activity(
-                athlete_id=athlete.id,
-                name=norm.name,
-                sport_type=norm.sport_type,
-                start_time=norm.start_time,
-                duration_s=norm.duration_s,
-                distance_m=norm.distance_m,
-                elevation_m=norm.elevation_m,
-                avg_power=norm.avg_power,
-                avg_hr=norm.avg_hr,
-                max_hr=norm.max_hr,
-                avg_speed_ms=norm.avg_speed_ms,
-                avg_cadence=norm.avg_cadence,
-                status="pending",
-            )
-            session.add(activity)
-            await session.flush()
-
-            src = ActivitySource(
-                activity_id=activity.id,
-                provider=provider_name,
-                external_id=ext_id,
-            )
-            session.add(src)
-            await session.flush()
-
+            # FIT download and stream processing happen outside the lock —
+            # they are slow network/IO operations that don't touch the
+            # find-or-create critical section.
             await _populate_activity(
                 activity, src, norm, client, access_token, athlete, session, team_id=team_id
             )

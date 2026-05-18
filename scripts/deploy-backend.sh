@@ -18,8 +18,8 @@ fi
 ssh "${TARGET}" "sudo -S systemctl stop openkoutsi-backend@${USER}.service"
 
 ssh "${TARGET}" "cd projects/openkoutsi && git pull"
-#ssh "${TARGET}" "cd projects/openkoutsi && ~/.local/bin/uv run alembic -c backend/alembic.ini upgrade head"
-#ssh "${TARGET}" -t "cd projects/openkoutsi && ~/.local/bin/uv run python backend/scripts/migrate_teams.py"
+ssh "${TARGET}" "cd projects/openkoutsi && ~/.local/bin/uv run alembic -c backend/alembic-registry.ini upgrade head"
+ssh "${TARGET}" "bash -lc 'cd projects/openkoutsi && ~/.local/bin/uv run python backend/scripts/migrate_teams.py'"
 
 ssh "${TARGET}" "sudo -S systemctl daemon-reload"
 ssh "${TARGET}" "sudo -S systemctl start openkoutsi-backend@${USER}.service"

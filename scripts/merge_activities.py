@@ -16,6 +16,9 @@ Run recalculate afterwards to fix any daily metric double-counting:
 import asyncio
 import sys
 from datetime import date
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import delete, select, update
 

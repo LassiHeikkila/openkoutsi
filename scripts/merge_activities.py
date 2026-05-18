@@ -2,96 +2,88 @@
 Merge two Activity records into one, keeping the higher-priority source's data.
 
 Usage:
-    uv run python scripts/merge_activities.py <team_id> <keep_id> <drop_id>
+    python scripts/merge_activities.py <team.db path> <keep_id> <drop_id>
 
 The activity identified by <keep_id> is preserved with all its existing metrics
 and streams. The ActivitySources from <drop_id> are moved over to <keep_id>
 (skipping any provider that already has a source on <keep_id>). <drop_id> and
 all its associated data are then deleted.
 
-Run recalculate afterwards to fix any daily metric double-counting:
-    uv run python scripts/merge_activities.py <team_id> <keep_id> <drop_id>
+Example:
+    python scripts/merge_activities.py \\
+        data/teams/cf6aeab1-.../team.db \\
+        294be54a-...   \\
+        d9bc6841-...
 """
 
-import asyncio
+import sqlite3
 import sys
-from datetime import date
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sqlalchemy import delete, select, update
-
-from backend.app.db.team_session import get_team_session_factory
-from backend.app.models.team_orm import (
-    Activity,
-    ActivityDistanceBest,
-    ActivityInterval,
-    ActivityPowerBest,
-    ActivitySource,
-    ActivityStream,
-)
-from backend.app.services.metrics_engine import recalculate_from
 
 
-async def merge(team_id: str, keep_id: str, drop_id: str) -> None:
-    async with get_team_session_factory(team_id)() as session:
-        keep_result = await session.execute(select(Activity).where(Activity.id == keep_id))
-        keep = keep_result.scalar_one_or_none()
-        if keep is None:
-            print(f"ERROR: keep activity {keep_id} not found in team {team_id}")
-            sys.exit(1)
+def merge(db_path: str, keep_id: str, drop_id: str) -> None:
+    con = sqlite3.connect(db_path)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA foreign_keys=ON")
 
-        drop_result = await session.execute(select(Activity).where(Activity.id == drop_id))
-        drop = drop_result.scalar_one_or_none()
-        if drop is None:
-            print(f"ERROR: drop activity {drop_id} not found in team {team_id}")
-            sys.exit(1)
+    keep = con.execute("SELECT * FROM activities WHERE id=?", (keep_id,)).fetchone()
+    if keep is None:
+        print(f"ERROR: keep activity {keep_id} not found")
+        sys.exit(1)
 
-        if keep.athlete_id != drop.athlete_id:
-            print("ERROR: activities belong to different athletes")
-            sys.exit(1)
+    drop = con.execute("SELECT * FROM activities WHERE id=?", (drop_id,)).fetchone()
+    if drop is None:
+        print(f"ERROR: drop activity {drop_id} not found")
+        sys.exit(1)
 
-        print(f"Keep : {keep.id}  {keep.start_time}  sources={[s.provider for s in keep.sources]}")
-        print(f"Drop : {drop.id}  {drop.start_time}  sources={[s.provider for s in drop.sources]}")
+    if keep["athlete_id"] != drop["athlete_id"]:
+        print("ERROR: activities belong to different athletes")
+        sys.exit(1)
 
-        keep_providers = {s.provider for s in keep.sources}
+    keep_sources = con.execute(
+        "SELECT provider, external_id FROM activity_sources WHERE activity_id=?", (keep_id,)
+    ).fetchall()
+    drop_sources = con.execute(
+        "SELECT provider, external_id FROM activity_sources WHERE activity_id=?", (drop_id,)
+    ).fetchall()
 
-        # Move sources from drop to keep, skipping provider conflicts
-        drop_sources = list(drop.sources)
+    keep_providers = {r["provider"] for r in keep_sources}
+
+    print(f"Keep : {keep_id}  {keep['start_time']}  sources={list(keep_providers)}")
+    print(f"Drop : {drop_id}  {drop['start_time']}  sources={[r['provider'] for r in drop_sources]}")
+
+    with con:
         for src in drop_sources:
-            if src.provider in keep_providers:
-                print(f"  Skip source '{src.provider}' — keep already has one")
+            if src["provider"] in keep_providers:
+                print(f"  Skip source '{src['provider']}' — keep already has one")
+                con.execute(
+                    "DELETE FROM activity_sources WHERE activity_id=? AND provider=?",
+                    (drop_id, src["provider"]),
+                )
             else:
-                print(f"  Moving source '{src.provider}' ({src.external_id}) to keep")
-                src.activity_id = keep.id
-                keep_providers.add(src.provider)
-        await session.flush()
+                print(f"  Moving source '{src['provider']}' ({src['external_id']}) to keep")
+                con.execute(
+                    "UPDATE activity_sources SET activity_id=? WHERE activity_id=? AND provider=?",
+                    (keep_id, drop_id, src["provider"]),
+                )
 
-        # Delete all data attached to drop
-        for model in (ActivityStream, ActivityPowerBest, ActivityDistanceBest, ActivityInterval):
-            await session.execute(delete(model).where(model.activity_id == drop_id))
-        await session.flush()
+        for table in (
+            "activity_streams",
+            "activity_power_bests",
+            "activity_distance_bests",
+            "activity_intervals",
+        ):
+            n = con.execute(
+                f"DELETE FROM {table} WHERE activity_id=?", (drop_id,)
+            ).rowcount
+            if n:
+                print(f"  Deleted {n} row(s) from {table}")
 
-        # Any sources that couldn't move still point at drop — delete them
-        await session.execute(
-            delete(ActivitySource).where(ActivitySource.activity_id == drop_id)
-        )
-        await session.flush()
+        # Remove any sources still pointing at drop
+        con.execute("DELETE FROM activity_sources WHERE activity_id=?", (drop_id,))
+        con.execute("DELETE FROM activities WHERE id=?", (drop_id,))
 
-        await session.delete(drop)
-        await session.flush()
-
-        start_date: date = (
-            keep.start_time.date()
-            if keep.start_time and hasattr(keep.start_time, "date")
-            else date.today()
-        )
-
-        await session.commit()
-        print("Merge committed. Recalculating daily metrics...")
-        await recalculate_from(keep.athlete_id, start_date, session)
-        print("Done.")
+    print("Done — committed.")
 
 
 if __name__ == "__main__":
@@ -99,5 +91,5 @@ if __name__ == "__main__":
         print(__doc__)
         sys.exit(1)
 
-    _, team_id, keep_id, drop_id = sys.argv
-    asyncio.run(merge(team_id, keep_id, drop_id))
+    _, db_path, keep_id, drop_id = sys.argv
+    merge(db_path, keep_id, drop_id)

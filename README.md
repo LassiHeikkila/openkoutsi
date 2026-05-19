@@ -2,62 +2,49 @@
 
 # openkoutsi
 
-A self-hosted cycling coaching platform. Upload FIT files or sync from Strava, track fitness metrics (CTL/ATL/TSB), and generate periodized training plans — all from your own server.
+A self-hosted cycling coaching platform. Upload FIT files or sync from Strava/Wahoo, track fitness metrics (CTL/ATL/TSB), and generate periodized training plans from your own server.
 
 > **koutsi** (κουτσί) — Finnish for "coach"
 
 ## Why
 
-Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you run it on your own hardware, your data never leaves your control, and you can export or delete everything at any time. Strava sync is a convenience layer on top of the core platform, not a requirement.
+Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you run it on your own hardware, your data stays under your control, and integrations are optional.
 
 ## Features
 
-- **Multi-team support** — isolated teams (clubs, friend groups), each with their own encrypted database and storage; users can belong to multiple teams
-- **Invite-only signup** — administrators generate invite links with configurable roles and expiry; no open registration
-- **Admin dashboard** — manage members (roles, removal, password resets), invitations, and per-team LLM settings
-- **Coach access** — coaches can view any team member's athlete profile and activity list
-- **First-run setup wizard** — fresh deployments guide you through creating the first team and admin account
-- **FIT file ingestion** — upload activity files directly; TSS, normalized power, and zone distributions are calculated automatically
-- **Workout categorization** — automatic classification into Recovery, Endurance, Tempo, Threshold, VO2 Max, Anaerobic, and Sprint based on Coggan's power zone model; manually overridable
-- **Strava sync** — OAuth2 connection with full activity history import and real-time webhook updates
-- **Zone sync** — one-click sync of HR zones, power zones, and FTP from Strava or Wahoo (manual editing still supported)
-- **Fitness metrics** — CTL (fitness), ATL (fatigue), TSB (form) calculated via exponentially weighted averages, displayed as interactive charts
-- **Zone analysis** — power and heart-rate zone distribution per activity
-- **Power curve time ranges** — all-time, 12M, 6M, or 3M rolling windows for the power curve chart
-- **AI coaching analysis** — per-activity LLM analysis and AI-generated training plans; bring your own API key (encrypted at rest, proxied server-side — never exposed to the browser); override the server LLM per team
-- **Training plan generation** — periodized plans (Base → Build → Peak → Taper) generated from your goals, availability, and current fitness
-- **Structured workouts** — create interval workouts with per-step power/HR/cadence targets (absolute watts, % FTP, zones, or ranges); export to Zwift (.zwo) or FIT workout files (.fit) for Wahoo ELEMNT and Garmin bike computers
-- **Privacy-first** — full data export (JSON + FIT files) and account deletion at any time
-- **Self-hostable** — runs as a single Docker container or bare `uv` + `pnpm` processes; no public URL required
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+- **Multi-team support** — isolated teams with separate databases/storage; users can belong to multiple teams
+- **Invite-only signup + team requests** — setup wizard creates the first team/admin; later team creation requests can be approved via superadmin
+- **Admin dashboard** — manage members, invitations, password resets, and per-team LLM settings
+- **Coach access** — coaches can view athlete profiles and activity lists inside their team
+- **FIT file ingestion** — upload activities directly with automatic TSS, normalized power, and zone distribution analysis
+- **Workout categorization** — automatic Coggan-style zone classification with manual override
+- **Strava + Wahoo sync** — OAuth integrations with history import and webhook updates through bridge services
+- **Zone sync** — sync HR/power zones and FTP from connected providers
+- **Fitness metrics** — CTL/ATL/TSB computed and shown as interactive charts
+- **Training plan generation** — periodized plans (Base → Build → Peak → Taper)
+- **Structured workouts** — create interval workouts and export as Zwift `.zwo` or FIT workout files for head units
+- **AI coaching analysis** — per-activity analysis and plan support with OpenAI-compatible backends
+- **Privacy-first** — export your data and delete your account at any time
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Next.js frontend  (TypeScript · Tailwind · Recharts)│
-│──────────────────────────────────────────────────────│
-│  FastAPI backend   (Python · SQLAlchemy · Alembic)   │
-│──────────────────────────────────────────────────────│
-│  data/registry.db   ← global users & team registry  │
-│  data/teams/{id}/team.db  ← per-team athletic data  │
-│  data/teams/{id}/uploads/ ← FIT files (encrypted)   │
-│                                                      │
-│  Self-hosted — no public URL needed                  │
-└──────────────────────────────────────────────────────┘
-              ↕ polls for events
-┌──────────────────────────────────────────────────────┐
-│  Strava Bridge  (tiny FastAPI service, cloud-hosted) │
-│  Receives Strava webhooks · queues events            │
-└──────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  Next.js frontend (TypeScript · Tailwind · Recharts)              │
+│  FastAPI backend (Python · SQLAlchemy · Alembic)                  │
+│                                                                    │
+│  data/registry.db                 global users + team registry     │
+│  data/teams/{id}/team.db          per-team athletic data           │
+│  data/teams/{id}/uploads/         encrypted FIT files              │
+└────────────────────────────────────────────────────────────────────┘
+                 ↕ polls for events
+       ┌──────────────────────────────┐     ┌──────────────────────────────┐
+       │ Strava Bridge (FastAPI)      │     │ Wahoo Bridge (FastAPI)       │
+       │ public webhook endpoint       │     │ public webhook endpoint       │
+       └──────────────────────────────┘     └──────────────────────────────┘
 ```
 
-The Strava Bridge is a small separate service (~150 lines) that must be publicly reachable for Strava's webhook API. The main app polls it for events — this means your main app can sit behind NAT with no port forwarding required. The bridge can be deployed for free on Fly.io or Railway.
-
-Data is split between a global registry database (user identities, team memberships, invitations) and per-team databases (athletic data). Each team's FIT files and avatar images are stored under `data/teams/{team_id}/`.
+The bridge services are small external webhook receivers. The main app polls them, so the main app can stay private (for example behind NAT) while only bridges are exposed publicly.
 
 ## Stack
 
@@ -65,65 +52,101 @@ Data is split between a global registry database (user identities, team membersh
 |---|---|
 | Backend | Python 3.12 · FastAPI · SQLAlchemy 2 (async) · Alembic |
 | Database | SQLite (WAL mode) |
-| Auth | JWT (python-jose · passlib) |
-| Frontend | Next.js 15 (App Router) · TypeScript · Tailwind CSS · shadcn/ui |
+| Auth | JWT (`python-jose` · `passlib`) |
+| Frontend | Next.js 15 (App Router) · TypeScript · Tailwind CSS |
 | Charts | Recharts |
 | FIT parsing | fitdecode |
-| Package managers | uv (Python) · pnpm (JS) |
+| Package managers | uv (Python) · npm (frontend) |
 
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 20+ and pnpm
+- Node.js 20+
+- npm
 - [uv](https://docs.astral.sh/uv/)
 
 ### Run locally
 
 ```bash
 # 1. Clone
-git clone https://github.com/your-username/openkoutsi.git
+git clone https://github.com/LassiHeikkila/openkoutsi.git
 cd openkoutsi
 
-# 2. Backend
-cp .env.example .env          # fill in SECRET_KEY at minimum
-uv sync
+# 2. Create backend env
+cat > .env <<'ENV'
+SECRET_KEY=<random 256-bit key>
+FRONTEND_URL=http://localhost:3000
+API_URL=http://localhost:8000
+# Optional but recommended if you use encrypted token/file storage features:
+# ENCRYPTION_KEY=<fernet-key>
+ENV
+
+# 3. Install backend deps and run API
+uv sync --group dev
 uv run uvicorn backend.main:app --reload --port 8000
 
-# 3. Frontend (separate terminal)
+# 4. Frontend (separate terminal)
 cd frontend
-pnpm install
-pnpm dev                      # → http://localhost:3000
+npm install
+npm run dev
 
-# 4. First-run setup
-# Open http://localhost:3000 — you will be prompted to create
-# the first team and admin account via the setup wizard.
+# 5. First-run setup
+# Open http://localhost:3000 and complete the setup wizard.
 ```
 
-### Environment variables
+## Environment variables
+
+Main app (`.env`):
 
 ```env
-# Main app (.env)
+# Required
 SECRET_KEY=<random 256-bit key>
-DATA_DIR=data                     # stores registry.db and per-team databases
+
+# Core settings
+DATA_DIR=data
 FRONTEND_URL=http://localhost:3000
+API_URL=http://localhost:8000
+
+# Optional encryption (required for encrypted key/file flows)
+ENCRYPTION_KEY=<fernet-key>
 
 # Strava integration (optional)
 STRAVA_CLIENT_ID=
 STRAVA_CLIENT_SECRET=
-BRIDGE_URL=https://your-bridge-host
-BRIDGE_SECRET=<shared secret>
+BRIDGE_URL=
+BRIDGE_SECRET=
 
-# Frontend (frontend/.env.local)
+# Wahoo integration (optional)
+WAHOO_CLIENT_ID=
+WAHOO_CLIENT_SECRET=
+WAHOO_BRIDGE_URL=
+WAHOO_BRIDGE_SECRET=
+
+# Optional server-side LLM defaults
+LLM_BASE_URL=
+LLM_API_KEY=
+LLM_MODEL=
+LLM_ALLOWED_SERVERS=
+
+# Optional: enables /superadmin for approving pending teams
+SUPERADMIN_SECRET=
+```
+
+Frontend (`frontend/.env.local`):
+
+```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-### Strava integration
+## Integrations
 
-Strava sync is optional. To enable it:
+- **Strava:** configure Strava app credentials in `.env` and deploy `strava_bridge/` to a public HTTPS URL.
+- **Wahoo:** configure Wahoo credentials in `.env` and deploy `wahoo_bridge/` to a public HTTPS URL.
 
-1. Create a Strava API app at <https://www.strava.com/settings/api>
-2. Deploy the Strava Bridge (see [`strava_bridge/`](strava_bridge/)) to any host with a public HTTPS URL
-3. Register the webhook subscription with Strava (instructions in [`TODO.md`](TODO.md))
-4. Add `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `BRIDGE_URL`, and `BRIDGE_SECRET` to `.env`
+Detailed production setup, reverse proxy examples, systemd units, and bridge registration steps are in [DEPLOY.md](DEPLOY.md).
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).

@@ -2,7 +2,7 @@
 
 ## Documentation
 
-When adding features, add a one-liner to the readme.
+When adding or changing features, keep the README up to date (at minimum, add a one-liner summary of the change).
 
 Make sure the deployment guide (DEPLOY.md) is kept up to date.
 

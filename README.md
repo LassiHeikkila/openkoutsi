@@ -71,7 +71,7 @@ The bridge services are small external webhook receivers. The main app polls the
 
 ```bash
 # 1. Clone
-git clone https://github.com/LassiHeikkila/openkoutsi.git
+git clone https://github.com/your-username/openkoutsi.git
 cd openkoutsi
 
 # 2. Create backend env

@@ -8,13 +8,14 @@ import { format, isSameMonth } from 'date-fns'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from '@/navigation'
 import { fetcher } from '@/lib/api'
-import type { Activity, PaginatedActivities } from '@/lib/types'
+import type { Activity, PaginatedActivities, PlannedWorkout, TrainingPlan } from '@/lib/types'
 import {
   getCalendarGrid,
   groupActivitiesByDate,
   monthBounds,
   offsetMonth,
 } from '@/lib/calendarUtils'
+import { groupPlannedWorkoutsByDate } from '@/lib/planUtils'
 import { formatDuration, formatDistance } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -48,7 +49,22 @@ function ActivityListRow({ activity, slug }: { activity: Activity; slug: string 
   )
 }
 
-export function ActivityCalendar() {
+function PlannedWorkoutListRow({ workout }: { workout: PlannedWorkout }) {
+  const parts: string[] = [workout.workout_type]
+  if (workout.duration_min != null) parts.push(`${workout.duration_min} min`)
+  if (workout.target_tss != null) parts.push(`${Math.round(workout.target_tss)} TSS`)
+
+  return (
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+      <p className="text-sm font-medium">{parts.join(' · ')}</p>
+      {workout.description && (
+        <p className="text-xs text-muted-foreground mt-0.5">{workout.description}</p>
+      )}
+    </div>
+  )
+}
+
+export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) {
   const t = useTranslations('dashboard')
   const { slug } = useParams<{ slug: string }>()
 
@@ -65,11 +81,15 @@ export function ActivityCalendar() {
   )
 
   const byDate = groupActivitiesByDate(data?.items ?? [])
+  const plannedByDate = groupPlannedWorkoutsByDate(activePlan)
   const grid = getCalendarGrid(year, month)
   const currentMonthStart = new Date(year, month, 1)
 
   const selectedActivities = selectedDay
     ? (byDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? [])
+    : []
+  const selectedPlanned = selectedDay
+    ? (plannedByDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? [])
     : []
 
   function handlePrev() {
@@ -86,7 +106,7 @@ export function ActivityCalendar() {
 
   function handleDayClick(day: Date) {
     const key = format(day, 'yyyy-MM-dd')
-    if (!byDate.has(key)) return
+    if (!byDate.has(key) && !plannedByDate.has(key)) return
     setSelectedDay(day)
     setDialogOpen(true)
   }
@@ -102,6 +122,16 @@ export function ActivityCalendar() {
             <div className="flex items-center gap-2">
               <CardTitle className="text-base">{t('calendar.title')}</CardTitle>
               {isLoading && <span className="text-xs text-muted-foreground">{t('calendar.loading')}</span>}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-primary/70" />
+                {t('calendar.performed')}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-amber-500/80" />
+                {t('calendar.planned')}
+              </span>
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handlePrev} aria-label="Previous month">
@@ -148,10 +178,14 @@ export function ActivityCalendar() {
             {grid.map((day) => {
                 const key = format(day, 'yyyy-MM-dd')
                 const activities = byDate.get(key) ?? []
+                const planned = plannedByDate.get(key) ?? []
                 const inMonth = isSameMonth(day, currentMonthStart)
                 const hasActivities = activities.length > 0
-                const bars = activities.slice(0, 3)
-                const overflow = activities.length - 3
+                const hasPlanned = planned.length > 0
+                const activityBars = activities.slice(0, 2)
+                const plannedBars = planned.slice(0, 2)
+                const activityOverflow = activities.length - 2
+                const plannedOverflow = planned.length - 2
 
                 return (
                   <div
@@ -162,27 +196,45 @@ export function ActivityCalendar() {
                       inMonth ? '' : 'opacity-35',
                       hasActivities
                         ? 'cursor-pointer bg-primary/10 border border-primary/20 hover:bg-primary/20'
+                        : hasPlanned
+                          ? 'cursor-pointer bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20'
                         : 'border border-transparent',
                     ].join(' ')}
                   >
                     <span className={[
                       'text-xs leading-none font-medium',
-                      hasActivities && inMonth ? 'text-primary' : 'text-muted-foreground',
+                      hasActivities && inMonth
+                        ? 'text-primary'
+                        : hasPlanned && inMonth
+                          ? 'text-amber-700 dark:text-amber-400'
+                          : 'text-muted-foreground',
                     ].join(' ')}>
                       {format(day, 'd')}
                     </span>
-                    {hasActivities && (
+                    {(hasActivities || hasPlanned) && (
                       <div className="flex flex-col gap-0.5 mt-auto">
-                        {bars.map((a) => (
+                        {activityBars.map((a) => (
                           <div
                             key={a.id}
                             className="h-1 w-full rounded-full bg-primary/70"
                             title={a.name}
                           />
                         ))}
-                        {overflow > 0 && (
+                        {plannedBars.map((w) => (
+                          <div
+                            key={w.id}
+                            className="h-1 w-full rounded-full bg-amber-500/80"
+                            title={w.description ?? w.workout_type}
+                          />
+                        ))}
+                        {activityOverflow > 0 && (
                           <span className="text-[9px] text-primary/70 leading-none font-medium">
-                            +{overflow}
+                            +{activityOverflow}
+                          </span>
+                        )}
+                        {plannedOverflow > 0 && (
+                          <span className="text-[9px] text-amber-600 dark:text-amber-400 leading-none font-medium">
+                            +{plannedOverflow}
                           </span>
                         )}
                       </div>
@@ -193,7 +245,7 @@ export function ActivityCalendar() {
           </div>
 
           {/* Empty state */}
-          {!isLoading && data && data.items.length === 0 && (
+          {!isLoading && data && data.items.length === 0 && plannedByDate.size === 0 && (
             <p className="text-xs text-muted-foreground text-center py-2">{t('calendar.noActivities')}</p>
           )}
         </CardContent>
@@ -208,9 +260,22 @@ export function ActivityCalendar() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2 mt-1">
-            {selectedActivities.map((a) => (
-              <ActivityListRow key={a.id} activity={a} slug={slug} />
-            ))}
+            {selectedActivities.length > 0 && (
+              <>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t('calendar.performed')}</p>
+                {selectedActivities.map((a) => (
+                  <ActivityListRow key={a.id} activity={a} slug={slug} />
+                ))}
+              </>
+            )}
+            {selectedPlanned.length > 0 && (
+              <>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">{t('calendar.planned')}</p>
+                {selectedPlanned.map((w) => (
+                  <PlannedWorkoutListRow key={w.id} workout={w} />
+                ))}
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

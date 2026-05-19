@@ -1,5 +1,5 @@
 import { addDays, startOfWeek, format } from 'date-fns'
-import type { TrainingPlan } from './types'
+import type { PlannedWorkout, TrainingPlan } from './types'
 
 /** Computes the calendar Date of a planned workout.
  *  day_of_week: 1=Monday … 7=Sunday (matches backend schema) */
@@ -28,5 +28,19 @@ export function aggregatePlannedTssByWeek(plans: TrainingPlan[]): Map<string, nu
       map.set(key, (map.get(key) ?? 0) + workout.target_tss)
     }
   }
+  return map
+}
+
+/** Groups workouts of the active plan by date key (yyyy-MM-dd). */
+export function groupPlannedWorkoutsByDate(plan: TrainingPlan | undefined): Map<string, PlannedWorkout[]> {
+  const map = new Map<string, PlannedWorkout[]>()
+  if (!plan || plan.status !== 'active') return map
+
+  for (const workout of plan.workouts) {
+    const key = format(workoutDate(plan.start_date, workout.week_number, workout.day_of_week), 'yyyy-MM-dd')
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(workout)
+  }
+
   return map
 }

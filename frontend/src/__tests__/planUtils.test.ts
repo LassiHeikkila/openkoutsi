@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { workoutDate, weekKey, aggregatePlannedTssByWeek } from '@/lib/planUtils'
+import {
+  workoutDate,
+  weekKey,
+  aggregatePlannedTssByWeek,
+  groupPlannedWorkoutsByDate,
+} from '@/lib/planUtils'
 import type { TrainingPlan } from '@/lib/types'
 
 function makePlan(overrides: Partial<TrainingPlan> & { workouts?: TrainingPlan['workouts'] }): TrainingPlan {
@@ -133,5 +138,35 @@ describe('aggregatePlannedTssByWeek', () => {
     })
     const map = aggregatePlannedTssByWeek([plan1, plan2])
     expect(map.get('2025-01-06')).toBe(120) // 50 + 70
+  })
+})
+
+describe('groupPlannedWorkoutsByDate', () => {
+  it('returns empty map when plan is undefined', () => {
+    expect(groupPlannedWorkoutsByDate(undefined).size).toBe(0)
+  })
+
+  it('returns empty map when plan is not active', () => {
+    const plan = makePlan({
+      status: 'archived',
+      workouts: [{ id: 'w1', plan_id: 'p1', week_number: 1, day_of_week: 1, workout_type: 'easy', description: null, duration_min: 60, target_tss: 50, completed_activity_id: null }],
+    })
+    expect(groupPlannedWorkoutsByDate(plan).size).toBe(0)
+  })
+
+  it('groups workouts by computed date key', () => {
+    const plan = makePlan({
+      start_date: '2025-01-06',
+      workouts: [
+        { id: 'w1', plan_id: 'p1', week_number: 1, day_of_week: 1, workout_type: 'easy', description: null, duration_min: 60, target_tss: 50, completed_activity_id: null },
+        { id: 'w2', plan_id: 'p1', week_number: 1, day_of_week: 1, workout_type: 'endurance', description: null, duration_min: 90, target_tss: 80, completed_activity_id: null },
+        { id: 'w3', plan_id: 'p1', week_number: 2, day_of_week: 3, workout_type: 'tempo', description: null, duration_min: 45, target_tss: 40, completed_activity_id: null },
+      ],
+    })
+
+    const map = groupPlannedWorkoutsByDate(plan)
+    expect(map.get('2025-01-06')).toHaveLength(2)
+    expect(map.get('2025-01-15')).toHaveLength(1)
+    expect(map.size).toBe(2)
   })
 })

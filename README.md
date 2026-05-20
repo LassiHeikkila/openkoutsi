@@ -1,4 +1,8 @@
-<img src="frontend/design/exports-horizontal/openkoutsi-horizontal-white.svg" alt="openkoutsi">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="frontend/design/exports-horizontal/openkoutsi-horizontal-white.svg">
+  <source media="(prefers-color-scheme: light)" srcset="frontend/design/exports-horizontal/openkoutsi-horizontal-black.svg">
+  <img src="frontend/design/exports-horizontal/openkoutsi-horizontal-black.svg" alt="openkoutsi">
+</picture>
 
 # openkoutsi
 

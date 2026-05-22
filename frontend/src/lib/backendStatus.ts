@@ -1,7 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { API_URL } from './api'
 
 interface BackendStatusContextValue {
@@ -14,7 +13,7 @@ const BackendStatusContext = createContext<BackendStatusContextValue>({
   recheck: () => {},
 })
 
-export function BackendStatusProvider({ children }: { children: ReactNode }) {
+export function BackendStatusProvider({ children }: { children: React.ReactNode }) {
   const [isBackendDown, setIsBackendDown] = useState(false)
 
   const check = useCallback(async () => {
@@ -38,10 +37,10 @@ export function BackendStatusProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval)
   }, [check])
 
-  return (
-    <BackendStatusContext.Provider value={{ isBackendDown, recheck: check }}>
-      {children}
-    </BackendStatusContext.Provider>
+  return React.createElement(
+    BackendStatusContext.Provider,
+    { value: { isBackendDown, recheck: check } },
+    children,
   )
 }
 

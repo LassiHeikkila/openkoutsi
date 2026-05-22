@@ -21,5 +21,10 @@
   "cancel": "Cancel",
   "delete": "Delete",
   "error": "Error",
-  "unknownError": "Unknown error"
+  "unknownError": "Unknown error",
+  "maintenance": {
+    "title": "Under Maintenance",
+    "description": "The server is temporarily unavailable. Please try again shortly.",
+    "retry": "Try again"
+  }
 }

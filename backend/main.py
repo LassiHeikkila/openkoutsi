@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     from backend.app.api.public import router as public_router
     from backend.app.api.workouts import router as workouts_router
     from backend.app.api.consent import router as consent_router
+    from backend.app.api.health import router as health_router
 
     app = FastAPI(title="openkoutsi API", version="1.0.0", lifespan=lifespan)
 
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(public_router, prefix="/api")
     app.include_router(workouts_router, prefix="/api")
     app.include_router(consent_router, prefix="/api")
+    app.include_router(health_router, prefix="/api")
 
     @app.get("/api/version")
     async def get_version():

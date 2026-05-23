@@ -150,7 +150,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - **Strava:** configure Strava app credentials in `.env` and deploy `strava_bridge/` to a public HTTPS URL.
 - **Wahoo:** configure Wahoo credentials in `.env` and deploy `wahoo_bridge/` to a public HTTPS URL.
 
-Detailed production setup, reverse proxy examples, systemd units, and bridge registration steps are in [DEPLOY.md](DEPLOY.md).
+Detailed production setup, reverse proxy examples, systemd units, bridge registration steps, and GitHub Actions automated deployment are in [DEPLOY.md](DEPLOY.md).
 
 ## License
 

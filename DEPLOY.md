@@ -263,6 +263,37 @@ Check logs with `journalctl -u openkoutsi-backend@$(whoami) -f` (replace the uni
 
 ---
 
+## 7. Automated Deployment (GitHub Actions)
+
+Pushes to `main` trigger automatic deployment via two separate workflows:
+
+- **Deploy Backend** — runs when `backend/`, `openkoutsi/`, `pyproject.toml`, or `uv.lock` change
+- **Deploy Frontend** — runs when `frontend/` changes
+
+### Required GitHub Secrets
+
+Set these under **Settings → Secrets and variables → Actions** in the repository:
+
+| Secret | Description |
+|--------|-------------|
+| `VPS_SSH_PRIVATE_KEY` | Private SSH key whose public key is in `~/.ssh/authorized_keys` on the VPS |
+| `VPS_HOST` | VPS hostname or IP address |
+| `VPS_USER` | Username on the VPS (must match the `@<user>` in the systemd service names) |
+| `NEXT_PUBLIC_API_URL` | API base URL baked into the frontend build (e.g. `https://api.your-domain`) |
+| `NEXT_PUBLIC_BASE_URL` | Frontend base URL baked into the frontend build (e.g. `https://your-domain`) |
+
+### VPS prerequisite: passwordless sudo for systemctl
+
+The deployment scripts run `sudo systemctl` over SSH. The deploy user must be allowed to do so without a password prompt. Create `/etc/sudoers.d/openkoutsi-deploy` on the VPS:
+
+```
+<deploy-user> ALL=(ALL) NOPASSWD: /bin/systemctl stop openkoutsi-backend@*.service, /bin/systemctl start openkoutsi-backend@*.service, /bin/systemctl stop openkoutsi-frontend@*.service, /bin/systemctl start openkoutsi-frontend@*.service, /bin/systemctl daemon-reload
+```
+
+Replace `<deploy-user>` with the actual username. Verify with `sudo visudo -c` after saving.
+
+---
+
 ## Checklist
 
 - [ ] `SECRET_KEY` set to a strong random value
@@ -271,6 +302,8 @@ Check logs with `journalctl -u openkoutsi-backend@$(whoami) -f` (replace the uni
 - [ ] `FRONTEND_URL` and `API_URL` point to real domains
 - [ ] `NEXT_PUBLIC_API_URL` in `frontend/.env.local` points to the API
 - [ ] TLS termination in place for both frontend and API
+- [ ] GitHub Actions secrets set (`VPS_SSH_PRIVATE_KEY`, `VPS_HOST`, `VPS_USER`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_BASE_URL`) if using automated deployment
+- [ ] VPS deploy user has passwordless sudo for systemctl (see section 7)
 - [ ] Completed first-run setup wizard (creates first team + admin account)
 - [ ] Strava app callback domain updated to production domain (if using Strava)
 - [ ] Wahoo webhook URL registered in the developer portal (if using Wahoo)

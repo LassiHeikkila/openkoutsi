@@ -28,11 +28,11 @@ fi
 
 echo "copying to server..."
 
-ssh "${TARGET_SERVER}" "sudo -S systemctl stop openkoutsi-frontend@${USER}.service"
+ssh "${USER}@${TARGET_SERVER}" "sudo -S systemctl stop openkoutsi-frontend@${USER}.service"
 
-rsync -a --delete .next/standalone/ "${TARGET_SERVER}:/home/${USER}/projects/openkoutsi/frontend/.next/standalone/"
+rsync -a --delete .next/standalone/ "${USER}@${TARGET_SERVER}:/home/${USER}/projects/openkoutsi/frontend/.next/standalone/"
 
-ssh "${TARGET_SERVER}" "sudo -S systemctl daemon-reload"
-ssh "${TARGET_SERVER}" "sudo -S systemctl start openkoutsi-frontend@${USER}.service"
+ssh "${USER}@${TARGET_SERVER}" "sudo -S systemctl daemon-reload"
+ssh "${USER}@${TARGET_SERVER}" "sudo -S systemctl start openkoutsi-frontend@${USER}.service"
 
 echo "done..."

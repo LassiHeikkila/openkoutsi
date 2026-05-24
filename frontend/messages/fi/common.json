@@ -24,7 +24,7 @@
   "unknownError": "Tuntematon virhe",
   "maintenance": {
     "title": "Vaihdetaan kasettia",
-    "description": "Teemme pikamekaniikan. Palvelin on pian takaisin radalla.",
+    "description": "Pieni huoltotoimenpide. Palvelimen matka jatkuu pian.",
     "retry": "Yritä uudelleen"
   }
 }

@@ -23,8 +23,8 @@
   "error": "Virhe",
   "unknownError": "Tuntematon virhe",
   "maintenance": {
-    "title": "Huollossa",
-    "description": "Palvelin on tilapäisesti poissa käytöstä. Yritä uudelleen hetken kuluttua.",
+    "title": "Vaihdetaan kasettia",
+    "description": "Teemme pikamekaniikan. Palvelin on pian takaisin radalla.",
     "retry": "Yritä uudelleen"
   }
 }

@@ -9,14 +9,6 @@ export function MaintenanceView() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-6 p-8 text-center">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/maintenance.svg"
-        alt=""
-        aria-hidden="true"
-        className="w-64 h-52"
-      />
-
       <div className="space-y-2 max-w-sm">
         <h1 className="text-2xl font-semibold tracking-tight">{t('maintenance.title')}</h1>
         <p className="text-muted-foreground text-sm">{t('maintenance.description')}</p>

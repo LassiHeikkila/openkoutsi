@@ -21,5 +21,10 @@
   "cancel": "Cancel",
   "delete": "Delete",
   "error": "Error",
-  "unknownError": "Unknown error"
+  "unknownError": "Unknown error",
+  "maintenance": {
+    "title": "Swapping the Cassette",
+    "description": "We're doing a quick mechanical. The server will be back on the road shortly.",
+    "retry": "Try again"
+  }
 }

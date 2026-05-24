@@ -26,5 +26,10 @@
     "title": "Swapping the Cassette",
     "description": "We're doing a quick mechanical. The server will be back on the road shortly.",
     "retry": "Try again"
+  },
+  "notFound": {
+    "title": "Wrong Turn!",
+    "description": "Oops, looks like you took the wrong turn. This route doesn't exist — head back and find the right trail.",
+    "home": "Back to the peloton"
   }
 }

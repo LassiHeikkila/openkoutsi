@@ -26,5 +26,10 @@
     "title": "Vaihdetaan kasettia",
     "description": "Pieni huoltotoimenpide. Palvelimen matka jatkuu pian.",
     "retry": "Yritä uudelleen"
+  },
+  "notFound": {
+    "title": "Väärä käänne!",
+    "description": "Hups, näyttää siltä että ajoit väärään suuntaan. Tätä reittiä ei ole — palaa takaisin oikealle reitille.",
+    "home": "Takaisin pelotoniin"
   }
 }

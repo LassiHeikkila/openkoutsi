@@ -30,6 +30,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Structured workouts** — create interval workouts and export as Zwift `.zwo` or FIT workout files for head units
 - **AI coaching analysis** — per-activity analysis and plan support with OpenAI-compatible backends
 - **Privacy-first** — export your data and delete your account at any time
+- **Cycling-themed 404 page** — localized "Wrong Turn!" not-found page with cycling flavour
 
 ## Architecture
 

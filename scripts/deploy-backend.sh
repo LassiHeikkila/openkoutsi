@@ -15,11 +15,11 @@ if [ -z "$USER" ]; then
     exit 1
 fi
 
-ssh "${TARGET}" "sudo -S systemctl stop openkoutsi-backend@${USER}.service"
+ssh "${USER}@${TARGET}" "sudo -S systemctl stop openkoutsi-backend@${USER}.service"
 
-ssh "${TARGET}" "cd projects/openkoutsi && git pull"
-ssh "${TARGET}" "cd projects/openkoutsi && ~/.local/bin/uv run alembic -c backend/alembic-registry.ini upgrade head"
-ssh "${TARGET}" "bash -lc 'cd projects/openkoutsi && ~/.local/bin/uv run python backend/scripts/migrate_teams.py'"
+ssh "${USER}@${TARGET}" "cd projects/openkoutsi && git pull"
+ssh "${USER}@${TARGET}" "cd projects/openkoutsi && ~/.local/bin/uv run alembic -c backend/alembic-registry.ini upgrade head"
+ssh "${USER}@${TARGET}" "bash -lc 'cd projects/openkoutsi && ~/.local/bin/uv run python backend/scripts/migrate_teams.py'"
 
-ssh "${TARGET}" "sudo -S systemctl daemon-reload"
-ssh "${TARGET}" "sudo -S systemctl start openkoutsi-backend@${USER}.service"
+ssh "${USER}@${TARGET}" "sudo -S systemctl daemon-reload"
+ssh "${USER}@${TARGET}" "sudo -S systemctl start openkoutsi-backend@${USER}.service"

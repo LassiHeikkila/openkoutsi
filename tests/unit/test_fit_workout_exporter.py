@@ -259,6 +259,23 @@ class TestFitWorkoutExporter:
         result = exporter.export([step], "HR", None, 250, None)
         assert isinstance(result, bytes)
 
+    def test_hr_absolute_target_uses_custom_heart_rate_fields(self):
+        # Mirrors the power encoding: custom values must go into custom_target_heart_rate_low/high
+        # with a +100 offset (same convention as custom_target_power_low/high uses +1000).
+        # Storing bpm+100 in target_value is wrong — devices read target_value as a zone number.
+        exporter = FitWorkoutExporter()
+        step = {
+            "kind": "step", "step_type": "active",
+            "duration": {"type": "time", "seconds": 600},
+            "target": {"metric": "hr", "spec": {"type": "absolute", "value": 150}},
+        }
+        data = exporter.export([step], "HR Absolute", None, None, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "heart_rate"
+        # custom_target_heart_rate_low/high must carry the BPM+100 encoded value
+        assert decoded[0]["custom_target_heart_rate_low"] == 250   # 150 + 100
+        assert decoded[0]["custom_target_heart_rate_high"] == 250  # 150 + 100
+
     def test_export_no_ftp(self):
         exporter = FitWorkoutExporter()
         result = exporter.export([_step()], "No FTP", None, None, None)

@@ -14,6 +14,12 @@ from sqlalchemy import select
 TESTDATA = Path(__file__).parent.parent.parent / "testdata"
 SAMPLE_FIT = TESTDATA / "Zwift_Aerobic_Foundation_Forge.fit"
 
+# Minimal valid image headers for magic-byte detection tests
+_JPEG = b"\xff\xd8\xff\xe0"
+_PNG  = b"\x89PNG\r\n\x1a\n"
+_WEBP = b"RIFF\x00\x00\x00\x00WEBP"
+_GIF  = b"GIF89a"
+
 
 class TestGetAthlete:
     async def test_returns_profile_after_registration(self, client, auth_headers):
@@ -273,7 +279,7 @@ class TestAvatar:
         resp = await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.jpg", b"fake-jpeg", "image/jpeg")},
+            files={"file": ("photo.jpg", _JPEG + b"fake-jpeg", "image/jpeg")},
         )
         assert resp.status_code == 200
         url = resp.json()["avatar_url"]
@@ -284,7 +290,7 @@ class TestAvatar:
         resp = await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.png", b"fake-png", "image/png")},
+            files={"file": ("photo.png", _PNG + b"fake-png", "image/png")},
         )
         assert resp.status_code == 200
         assert resp.json()["avatar_url"] is not None
@@ -293,15 +299,25 @@ class TestAvatar:
         resp = await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.webp", b"fake-webp", "image/webp")},
+            files={"file": ("photo.webp", _WEBP + b"fake-webp", "image/webp")},
         )
         assert resp.status_code == 200
 
-    async def test_upload_unsupported_content_type_returns_400(self, client, auth_headers, avatar_dir):
+    async def test_upload_rejects_non_image_content(self, client, auth_headers, avatar_dir):
         resp = await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
             files={"file": ("doc.pdf", b"pdf-bytes", "application/pdf")},
+        )
+        assert resp.status_code == 400
+        assert "Unsupported" in resp.json()["detail"]
+
+    async def test_upload_rejects_svg_with_spoofed_content_type(self, client, auth_headers, avatar_dir):
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        resp = await client.post(
+            "/api/athlete/avatar",
+            headers=auth_headers,
+            files={"file": ("evil.svg", svg, "image/jpeg")},
         )
         assert resp.status_code == 400
         assert "Unsupported" in resp.json()["detail"]
@@ -327,7 +343,7 @@ class TestAvatar:
         await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.jpg", b"image-data", "image/jpeg")},
+            files={"file": ("photo.jpg", _JPEG + b"image-data", "image/jpeg")},
         )
         athlete_id = (await client.get("/api/athlete/", headers=auth_headers)).json()["id"]
         resp = await client.get(f"/api/athlete/{athlete_id}/avatar", headers=auth_headers)
@@ -358,7 +374,7 @@ class TestAvatar:
         await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+            files={"file": ("photo.jpg", _JPEG + b"bytes", "image/jpeg")},
         )
         resp = await client.delete("/api/athlete/avatar", headers=auth_headers)
         assert resp.status_code == 200
@@ -368,7 +384,7 @@ class TestAvatar:
         await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+            files={"file": ("photo.jpg", _JPEG + b"bytes", "image/jpeg")},
         )
         await client.delete("/api/athlete/avatar", headers=auth_headers)
         remaining = list(avatar_dir.glob("*")) if avatar_dir.exists() else []
@@ -387,12 +403,12 @@ class TestAvatar:
         await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("first.jpg", b"first", "image/jpeg")},
+            files={"file": ("first.jpg", _JPEG + b"first", "image/jpeg")},
         )
         await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("second.png", b"second", "image/png")},
+            files={"file": ("second.png", _PNG + b"second", "image/png")},
         )
         files = list(avatar_dir.glob("*"))
         assert len(files) == 1
@@ -403,6 +419,6 @@ class TestAvatar:
         resp = await client.post(
             "/api/athlete/avatar",
             headers=auth_headers,
-            files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+            files={"file": ("photo.jpg", _JPEG + b"bytes", "image/jpeg")},
         )
         assert athlete_id in resp.json()["avatar_url"]

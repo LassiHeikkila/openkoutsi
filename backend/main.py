@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from backend.app.core.config import settings
 from backend.app.core.limiter import limiter
@@ -38,6 +40,13 @@ async def lifespan(app: FastAPI):
         pass
 
 
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+
 def create_app() -> FastAPI:
     from backend.app.api.auth import router as auth_router
     from backend.app.api.setup import router as setup_router
@@ -66,6 +75,7 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+    app.add_middleware(_SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_url],

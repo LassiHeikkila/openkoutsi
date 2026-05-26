@@ -19,8 +19,27 @@ from backend.app.models.registry_orm import DataConsent, ProviderConnection, Use
 from backend.app.models.team_orm import Activity, Athlete, WeightLog
 from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
 
-_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 _MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
+
+_CONTENT_TYPE_TO_EXT = {
+    "image/jpeg": "jpg",
+    "image/png":  "png",
+    "image/gif":  "gif",
+    "image/webp": "webp",
+}
+
+
+def _detect_image_type(data: bytes) -> str | None:
+    """Return MIME type by inspecting magic bytes; None if not a recognised image."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 router = APIRouter(prefix="/athlete", tags=["athlete"])
 
@@ -198,21 +217,18 @@ async def upload_avatar(
     registry_session: AsyncSession = Depends(get_registry_session),
 ):
     ctx, session = ctx_session
-    if file.content_type not in _ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
-        )
 
     data = await file.read(_MAX_AVATAR_BYTES + 1)
     if len(data) > _MAX_AVATAR_BYTES:
         raise HTTPException(status_code=400, detail="Image too large (max 5 MB).")
 
-    ext = (
-        file.filename.rsplit(".", 1)[-1].lower()
-        if file.filename and "." in file.filename
-        else "jpg"
-    )
+    detected_type = _detect_image_type(data)
+    if detected_type is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+        )
+    ext = _CONTENT_TYPE_TO_EXT[detected_type]
     athlete = await _get_athlete(ctx.user_id, session)
 
     avatar_dir = settings.team_avatar_dir(ctx.team_id)

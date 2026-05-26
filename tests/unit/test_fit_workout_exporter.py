@@ -54,12 +54,12 @@ class TestFlattenSteps:
         assert flat[1]["_type"] == "step"
         assert flat[2]["_type"] == "repeat"
         assert flat[2]["repeat_count"] == 3
-        assert flat[2]["steps_back"] == 2
+        assert flat[2]["steps_back"] == 0  # first child is at absolute index 0
 
     def test_repeat_steps_back_correct_for_single_child(self):
         block = _repeat(5, [_step()])
         flat = _flatten_steps([block])
-        assert flat[1]["steps_back"] == 1
+        assert flat[1]["steps_back"] == 0  # first child is at absolute index 0
 
     def test_nested_repeats(self):
         inner = _repeat(2, [_step()])
@@ -74,6 +74,20 @@ class TestFlattenSteps:
     def test_mixed_steps_and_repeat(self):
         flat = _flatten_steps([_step(), _repeat(2, [_step()]), _step()])
         assert len(flat) == 4  # warmup + (1 step + 1 repeat marker) + cooldown
+
+    def test_repeat_steps_back_is_first_child_absolute_index_not_child_count(self):
+        # [step(0), repeat_children_start(1), repeat_child(1), REPEAT_marker]
+        # steps_back must be 1 (first child absolute index), not 1 (coincidence here)
+        # Use a case where they differ: two preceding steps, two children.
+        # Flat: [step(0), step(1), child_a(2), child_b(3), REPEAT]
+        # steps_back (child count) = 2, first_child_idx = 2 — same here too!
+        # Use: [step(0), child_a(1), child_b(2), REPEAT] — preceding=1, children=2.
+        # steps_back (child count) = 2, first_child_idx = 1 — different!
+        flat = _flatten_steps([_step(), _repeat(3, [_step(), _step()])])
+        # flat: [step(0), child_a(1), child_b(2), REPEAT(3)]
+        repeat = flat[3]
+        assert repeat["_type"] == "repeat"
+        assert repeat["steps_back"] == 1  # absolute index of first child, not child count (2)
 
 
 class TestFitWorkoutExporter:
@@ -166,7 +180,56 @@ class TestFitWorkoutExporter:
         decoded = _decode_steps(data)
         repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
         assert repeat_step.get("repeat_steps") == 3
-        assert repeat_step.get("duration_step") == 2
+        assert repeat_step.get("duration_step") == 0  # first child is at absolute index 0
+
+    def test_repeat_only_workout_duration_step_is_zero(self):
+        # Flat layout: [active(0), recovery(1), REPEAT(2)]
+        # The repeat marker must reference step index 0 (where the block starts),
+        # not the child-step count (2). Wahoo uses duration_step as an absolute index.
+        exporter = FitWorkoutExporter()
+        block = _repeat(3, [
+            _step(seconds=60, spec={"type": "pct_ftp", "pct": 120}),
+            _step(step_type="recovery", seconds=30),
+        ])
+        data = exporter.export([block], "Intervals", None, 250, None)
+        decoded = _decode_steps(data)
+        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
+        assert repeat_step["duration_step"] == 0  # first child is at absolute index 0
+
+    def test_repeat_after_warmup_duration_step_is_one(self):
+        # Flat layout: [warmup(0), active(1), recovery(2), REPEAT(3)]
+        # The repeat marker must reference step index 1 (the active step),
+        # not 2 (the child-step count). Offset warmup proves the index is absolute.
+        exporter = FitWorkoutExporter()
+        steps = [
+            _step(step_type="warmup", seconds=600),
+            _repeat(5, [
+                _step(seconds=120, spec={"type": "pct_ftp", "pct": 110}),
+                _step(step_type="recovery", seconds=60),
+            ]),
+        ]
+        data = exporter.export(steps, "Warmup + Intervals", None, 250, None)
+        decoded = _decode_steps(data)
+        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
+        assert repeat_step["duration_step"] == 1  # first child is at absolute index 1
+
+    def test_full_structured_workout_repeat_encodes_correct_step_index(self):
+        # Flat layout: [warmup(0), active(1), recovery(2), REPEAT(3), cooldown(4)]
+        # The repeat marker must reference step index 1, not 2.
+        exporter = FitWorkoutExporter()
+        steps = [
+            _step(step_type="warmup", seconds=600),
+            _repeat(3, [
+                _step(seconds=300, spec={"type": "pct_ftp", "pct": 100}),
+                _step(step_type="recovery", seconds=150),
+            ]),
+            _step(step_type="cooldown", seconds=300),
+        ]
+        data = exporter.export(steps, "Full Workout", None, 250, None)
+        decoded = _decode_steps(data)
+        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
+        assert repeat_step["duration_step"] == 1  # first child is at absolute index 1
+        assert repeat_step["repeat_steps"] == 3
 
     def test_export_distance_duration(self):
         exporter = FitWorkoutExporter()
@@ -195,6 +258,23 @@ class TestFitWorkoutExporter:
         }
         result = exporter.export([step], "HR", None, 250, None)
         assert isinstance(result, bytes)
+
+    def test_hr_absolute_target_uses_custom_heart_rate_fields(self):
+        # Mirrors the power encoding: custom values must go into custom_target_heart_rate_low/high
+        # with a +100 offset (same convention as custom_target_power_low/high uses +1000).
+        # Storing bpm+100 in target_value is wrong — devices read target_value as a zone number.
+        exporter = FitWorkoutExporter()
+        step = {
+            "kind": "step", "step_type": "active",
+            "duration": {"type": "time", "seconds": 600},
+            "target": {"metric": "hr", "spec": {"type": "absolute", "value": 150}},
+        }
+        data = exporter.export([step], "HR Absolute", None, None, None)
+        decoded = _decode_steps(data)
+        assert decoded[0]["target_type"] == "heart_rate"
+        # custom_target_heart_rate_low/high must carry the BPM+100 encoded value
+        assert decoded[0]["custom_target_heart_rate_low"] == 250   # 150 + 100
+        assert decoded[0]["custom_target_heart_rate_high"] == 250  # 150 + 100
 
     def test_export_no_ftp(self):
         exporter = FitWorkoutExporter()

@@ -54,12 +54,10 @@ def _flatten_steps(steps: list[dict]) -> list[dict]:
             children = step.get("steps", [])
             first_child_idx = len(result)
             result.extend(_flatten_steps(children))
-            last_child_idx = len(result) - 1
-            step_count = last_child_idx - first_child_idx + 1
             result.append({
                 "_type": "repeat",
                 "repeat_count": step.get("repeat_count", 1),
-                "steps_back": step_count,
+                "steps_back": first_child_idx,
             })
 
     return result
@@ -131,7 +129,9 @@ def _build_fit_bytes(
             msg.target_type = WorkoutStepTarget.HEART_RATE
             spec = target["spec"]
             if spec.get("type") == "absolute":
-                msg.target_value = int(spec["value"]) + 100  # FIT HR offset
+                bpm = int(spec["value"]) + 100  # FIT HR offset
+                msg.custom_target_heart_rate_low = bpm
+                msg.custom_target_heart_rate_high = bpm
         else:
             msg.target_type = WorkoutStepTarget.OPEN
 

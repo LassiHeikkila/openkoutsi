@@ -23,6 +23,7 @@ import httpx
 from sqlalchemy import select
 
 from ..core.config import settings
+from ..core.ssrf import check_url_safe
 from ..db.registry import _RegistrySessionLocal
 from ..db.team_session import get_team_session_factory
 from ..models.registry_orm import Team
@@ -213,6 +214,7 @@ async def _stream_analysis(
         raise ValueError("LLM base URL and model must be configured in Settings → AI / LLM")
 
     url = f"{base_url.rstrip('/')}/chat/completions"
+    check_url_safe(url)
     headers: dict[str, str] = {"Content-Type": "application/json"}
 
     if team and getattr(team, "llm_api_key_enc", None):

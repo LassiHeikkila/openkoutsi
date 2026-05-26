@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..core.ssrf import check_url_safe
 from ..models.registry_orm import Team
 from ..models.team_orm import TrainingPlan, PlannedWorkout, Athlete, DailyMetric
 from ..schemas.plans import PlanConfig
@@ -215,6 +216,7 @@ async def _call_llm(user_prompt: str, base_url: str, model: str, api_key: str | 
         "temperature": 0.3,
     }
 
+    check_url_safe(f"{base_url.rstrip('/')}/chat/completions")
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
             f"{base_url.rstrip('/')}/chat/completions",

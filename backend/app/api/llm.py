@@ -44,11 +44,8 @@ only) via an out-of-band policy.
 
 from __future__ import annotations
 
-import ipaddress
 import logging
-import socket
 from typing import Any, Optional
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -60,6 +57,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.auth import TeamContext
 from backend.app.core.config import settings
 from backend.app.core.deps import get_ctx_and_session
+from backend.app.core.ssrf import check_url_safe
 from backend.app.db.registry import get_registry_session
 from backend.app.models.registry_orm import Team
 from backend.app.models.team_orm import Athlete
@@ -70,70 +68,6 @@ router = APIRouter(prefix="/llm", tags=["llm"])
 
 # Maximum bytes accepted from an upstream LLM response.
 _MAX_RESPONSE_BYTES = 32 * 1024 * 1024  # 32 MB
-
-# ── SSRF guard ─────────────────────────────────────────────────────────────
-
-_ALLOWED_SCHEMES = {"http", "https"}
-
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network("169.254.0.0/16"),    # IPv4 link-local (AWS/GCP/Azure metadata)
-    ipaddress.ip_network("fe80::/10"),          # IPv6 link-local
-    ipaddress.ip_network("fd00:ec2::254/128"),  # GCP internal metadata (IPv6)
-]
-
-
-def _check_url_safe(url: str) -> tuple[str, int]:
-    """Validate *url* against SSRF risks.
-
-    Returns *(resolved_host, port)* — the caller should connect to this
-    IP directly rather than re-resolving the hostname, to prevent DNS rebinding.
-
-    Raises ``HTTPException(400)`` for disallowed schemes or blocked addresses.
-    """
-    parsed = urlparse(url)
-
-    if parsed.scheme not in _ALLOWED_SCHEMES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"LLM base URL scheme '{parsed.scheme}' is not allowed. Use http or https.",
-        )
-
-    hostname = parsed.hostname
-    if not hostname:
-        raise HTTPException(status_code=400, detail="LLM base URL has no hostname.")
-
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-
-    try:
-        addr_info = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Could not resolve LLM hostname '{hostname}': {exc}",
-        )
-
-    resolved_ip_str = addr_info[0][4][0]
-    try:
-        resolved_ip = ipaddress.ip_address(resolved_ip_str)
-    except ValueError:
-        raise HTTPException(status_code=502, detail="LLM hostname resolved to an unparseable address.")
-
-    for blocked in _BLOCKED_NETWORKS:
-        if resolved_ip in blocked:
-            log.warning(
-                "SSRF guard: blocked request to %s (resolved to %s, in blocked range %s)",
-                url, resolved_ip, blocked,
-            )
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"Requests to {resolved_ip} are not permitted. "
-                    "That address is a cloud-provider metadata range."
-                ),
-            )
-
-    return resolved_ip_str, port
-
 
 # ── Request schema ─────────────────────────────────────────────────────────
 
@@ -202,7 +136,7 @@ async def test_llm_connection(
 
     models_url = f"{base_url.rstrip('/')}/models"
     try:
-        _check_url_safe(models_url)
+        check_url_safe(models_url)
     except HTTPException as exc:
         return LlmTestResponse(ok=False, base_url=base_url, model_configured=model or None, error=exc.detail)
 
@@ -346,7 +280,7 @@ async def llm_chat(
     base_url, model, api_key = await _get_llm_config(athlete, ctx.team_id, ctx.user_id, team)
     upstream_url = f"{base_url.rstrip('/')}/chat/completions"
 
-    _check_url_safe(upstream_url)
+    check_url_safe(upstream_url)
 
     headers: dict[str, str] = {"Content-Type": "application/json"}
     if api_key:

@@ -235,6 +235,10 @@ async def _process_event_for_team(
             session.add(src)
             await session.flush()
 
+            # Commit inside the lock so the Activity is visible to concurrent
+            # sessions before this lock is released (fixes the #76 race condition).
+            await session.commit()
+
         await _populate_activity(
             activity, src, norm, _strava_client, access_token,
             athlete, session, team_id=team_id,

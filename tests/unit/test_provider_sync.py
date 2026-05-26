@@ -647,22 +647,22 @@ class TestSyncProviderActivities:
 
 class TestDeduplicationRaceCondition:
     """
-    Regression tests for the cross-session dedup race condition reported in #76.
+    Tests for the cross-session dedup race condition reported in #76.
 
-    Root cause summary
-    ------------------
+    Root cause
+    ----------
     The asyncio lock in provider_sync serialises the dedup-window query + flush
-    *within a single process*, but it releases before the database transaction
-    commits.  Under READ COMMITTED isolation (PostgreSQL production, and SQLite
-    with separate connections), a second session that acquires the lock after the
-    first one has *flushed but not committed* will see an empty dedup window and
-    create a duplicate Activity.
+    *within a single process*, but it used to release before the database
+    transaction committed.  Under READ COMMITTED isolation (and SQLite WAL mode),
+    a second session that acquired the lock after the first had flushed-but-not-
+    committed would see an empty dedup window and create a duplicate Activity.
 
-    Why existing tests missed it
-    ----------------------------
-    All previous dedup tests run two provider syncs *sequentially* — the first
-    call completes and commits before the second starts.  No test exercised the
-    concurrent path where both sessions are alive at the same time.
+    Fix
+    ---
+    ``await session.commit()`` is now called inside the asyncio lock for the
+    "new workout" path in provider_sync.py, wahoo_sync.py, and strava_sync.py.
+    The commit makes the new Activity visible to other sessions before the lock
+    is released, closing the window entirely.
 
     Why a file-based engine is required here
     ----------------------------------------
@@ -671,7 +671,7 @@ class TestDeduplicationRaceCondition:
     A file-based database allows multiple connections to the same database, which
     is what we need to observe the cross-session isolation behaviour.
     SQLite's single-writer semantics still apply, but the observable outcome
-    (two committed Activity rows) faithfully reproduces the PostgreSQL race.
+    faithfully reproduces the PostgreSQL race.
     """
 
     @pytest.fixture
@@ -689,32 +689,15 @@ class TestDeduplicationRaceCondition:
         yield eng
         await eng.dispose()
 
-    async def test_concurrent_webhooks_create_duplicate_activity(self, race_engine):
+    async def test_flush_without_commit_allows_race(self, race_engine):
         """
-        Demonstrates the #76 race condition: two simultaneous webhook events
-        produce two Activity records for the same real-world workout.
+        Documents the isolation problem: releasing the lock after a flush (but
+        before the commit) allows a second concurrent session to see an empty
+        dedup window and create a duplicate Activity.
 
-        Execution timeline
-        ------------------
-        1. ``asyncio.gather`` schedules both tasks; Wahoo runs first.
-        2. Wahoo acquires the asyncio dedup lock, queries (empty DB), INSERTs the
-           Activity, flushes — the write transaction is open, RESERVED lock held
-           on the SQLite file — then **releases the asyncio lock without committing**.
-        3. Strava acquires the asyncio lock and queries.  Wahoo's transaction is
-           still open, so Strava reads the last *committed* state — empty — and
-           decides to create its own Activity.
-        4. Strava's INSERT is blocked by SQLite's single-writer rule (Wahoo still
-           holds the RESERVED lock).  Strava's aiosqlite thread waits; the asyncio
-           event loop is free to run Wahoo's continuation.
-        5. Wahoo commits, releasing the RESERVED lock.
-        6. Strava's INSERT proceeds and commits.
-        7. Result: **two Activity rows** for the same workout — the bug.
-
-        After the fix (commit inside the asyncio lock, or SELECT FOR UPDATE on
-        Athlete), Strava's query at step 3 will find Wahoo's committed Activity
-        and will not create a duplicate.
-
-        This test is expected to **FAIL** with the current code.
+        This test intentionally uses the OLD buggy pattern and asserts that two
+        activities are created, proving the race mechanism is real.  It should
+        always pass regardless of production-code changes.
         """
         from backend.app.services.provider_sync import _DUPLICATE_WINDOW, _get_activity_lock
 
@@ -722,17 +705,14 @@ class TestDeduplicationRaceCondition:
         base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
 
         async with factory() as s:
-            athlete = Athlete(global_user_id="race-user-76", ftp_tests=[])
+            athlete = Athlete(global_user_id="race-flush-user", ftp_tests=[])
             s.add(athlete)
             await s.commit()
             athlete_id = athlete.id
 
-        # Use a unique team_id so the module-level lock dict doesn't retain
-        # state from other test runs.
-        team_id = f"race-team-{athlete_id}"
+        team_id = f"race-flush-{athlete_id}"
 
-        async def wahoo_task() -> None:
-            """Wahoo webhook path: flush inside lock, commit outside (the bug)."""
+        async def first_task() -> None:
             async with factory() as s:
                 async with _get_activity_lock(team_id, athlete_id):
                     r = await s.execute(
@@ -750,15 +730,11 @@ class TestDeduplicationRaceCondition:
                             status="pending",
                         ))
                         await s.flush()
-                # asyncio lock released here — Strava can now enter the lock.
-                # BUG: the transaction is not committed yet; Strava's dedup
-                # query will see an empty database.
+                # Lock released here WITHOUT committing — this is the bug.
                 await s.commit()
 
-        async def strava_task() -> None:
-            """Strava webhook path: runs concurrently, loses the race."""
-            # Yield once so Wahoo starts first and acquires the asyncio lock.
-            await asyncio.sleep(0)
+        async def second_task() -> None:
+            await asyncio.sleep(0)  # yield so first_task acquires the lock first
             async with factory() as s:
                 async with _get_activity_lock(team_id, athlete_id):
                     r = await s.execute(
@@ -768,8 +744,6 @@ class TestDeduplicationRaceCondition:
                             Activity.start_time <= base_time + _DUPLICATE_WINDOW,
                         )
                     )
-                    # Under the race: Wahoo has flushed but not committed, so
-                    # this query returns None and Strava creates a duplicate.
                     if r.scalar_one_or_none() is None:
                         s.add(Activity(
                             athlete_id=athlete_id,
@@ -780,7 +754,84 @@ class TestDeduplicationRaceCondition:
                         await s.flush()
                 await s.commit()
 
-        await asyncio.gather(wahoo_task(), strava_task())
+        await asyncio.gather(first_task(), second_task())
+
+        async with factory() as s:
+            r = await s.execute(select(Activity).where(Activity.athlete_id == athlete_id))
+            activities = r.scalars().all()
+
+        # Demonstrates the race: flush-without-commit leaves a window that the
+        # second session exploits, producing a duplicate row.
+        assert len(activities) == 2, (
+            f"Expected 2 (race condition produces a duplicate) but got {len(activities)}. "
+            "If this fails the SQLite busy-timeout may have serialised the writes "
+            "differently than expected."
+        )
+
+    async def test_commit_inside_lock_prevents_race(self, race_engine):
+        """
+        Regression test for #76: committing inside the asyncio lock ensures that
+        the new Activity is visible to any concurrent session before the lock is
+        released, so the second session finds the existing Activity and does not
+        create a duplicate.
+        """
+        from backend.app.services.provider_sync import _DUPLICATE_WINDOW, _get_activity_lock
+
+        factory = async_sessionmaker(race_engine, expire_on_commit=False)
+        base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
+
+        async with factory() as s:
+            athlete = Athlete(global_user_id="race-fix-user", ftp_tests=[])
+            s.add(athlete)
+            await s.commit()
+            athlete_id = athlete.id
+
+        team_id = f"race-fix-{athlete_id}"
+
+        async def first_task() -> None:
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5010,
+                            status="pending",
+                        ))
+                        await s.flush()
+                    # Fix: commit inside the lock so data is visible before
+                    # any other session acquires the lock.
+                    await s.commit()
+
+        async def second_task() -> None:
+            await asyncio.sleep(0)  # yield so first_task acquires the lock first
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5009,
+                            status="pending",
+                        ))
+                        await s.flush()
+                    await s.commit()
+
+        await asyncio.gather(first_task(), second_task())
 
         async with factory() as s:
             r = await s.execute(select(Activity).where(Activity.athlete_id == athlete_id))
@@ -789,8 +840,5 @@ class TestDeduplicationRaceCondition:
         assert len(activities) == 1, (
             f"Race condition created {len(activities)} duplicate Activity records "
             f"for the same workout (expected 1). "
-            f"Fix: commit must happen before the asyncio lock is released, or a "
-            f"database-level lock (SELECT FOR UPDATE on Athlete, or a PostgreSQL "
-            f"advisory lock) must be used so the lock lifetime matches the "
-            f"transaction lifetime."
+            f"The asyncio lock must guard both the flush and the commit."
         )

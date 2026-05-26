@@ -54,12 +54,12 @@ class TestFlattenSteps:
         assert flat[1]["_type"] == "step"
         assert flat[2]["_type"] == "repeat"
         assert flat[2]["repeat_count"] == 3
-        assert flat[2]["steps_back"] == 2
+        assert flat[2]["steps_back"] == 0  # first child is at absolute index 0
 
     def test_repeat_steps_back_correct_for_single_child(self):
         block = _repeat(5, [_step()])
         flat = _flatten_steps([block])
-        assert flat[1]["steps_back"] == 1
+        assert flat[1]["steps_back"] == 0  # first child is at absolute index 0
 
     def test_nested_repeats(self):
         inner = _repeat(2, [_step()])
@@ -180,7 +180,7 @@ class TestFitWorkoutExporter:
         decoded = _decode_steps(data)
         repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
         assert repeat_step.get("repeat_steps") == 3
-        assert repeat_step.get("duration_step") == 2
+        assert repeat_step.get("duration_step") == 0  # first child is at absolute index 0
 
     def test_repeat_only_workout_duration_step_is_zero(self):
         # Flat layout: [active(0), recovery(1), REPEAT(2)]

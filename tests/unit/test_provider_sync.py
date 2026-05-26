@@ -698,6 +698,15 @@ class TestDeduplicationRaceCondition:
         This test intentionally uses the OLD buggy pattern and asserts that two
         activities are created, proving the race mechanism is real.  It should
         always pass regardless of production-code changes.
+
+        Two asyncio.Event objects gate the ordering deterministically:
+        - first_released_lock: first_task signals it after releasing the asyncio
+          lock (still holding the SQLite RESERVED lock, before commit).
+        - second_has_read: second_task signals it after executing the dedup SELECT
+          but BEFORE its own flush.  Signalling before flush is critical: the flush
+          will block in the aiosqlite background thread (INSERT waits for the
+          RESERVED lock held by first_task).  Signalling first lets first_task
+          proceed to commit, releasing the RESERVED lock and unblocking the INSERT.
         """
         from backend.app.services.provider_sync import _DUPLICATE_WINDOW, _get_activity_lock
 
@@ -711,6 +720,8 @@ class TestDeduplicationRaceCondition:
             athlete_id = athlete.id
 
         team_id = f"race-flush-{athlete_id}"
+        first_released_lock = asyncio.Event()
+        second_has_read = asyncio.Event()
 
         async def first_task() -> None:
             async with factory() as s:
@@ -730,11 +741,18 @@ class TestDeduplicationRaceCondition:
                             status="pending",
                         ))
                         await s.flush()
-                # Lock released here WITHOUT committing — this is the bug.
+                # Lock released WITHOUT committing (the bug).
+                # Signal second_task to acquire the lock and read.
+                first_released_lock.set()
+                # Wait until second_task has read so its SELECT is guaranteed to
+                # land while first_task's RESERVED lock is still held (uncommitted).
+                await second_has_read.wait()
                 await s.commit()
 
         async def second_task() -> None:
-            await asyncio.sleep(0)  # yield so first_task acquires the lock first
+            # Wait until first_task has released the asyncio lock before trying
+            # to acquire it, so ordering is guaranteed.
+            await first_released_lock.wait()
             async with factory() as s:
                 async with _get_activity_lock(team_id, athlete_id):
                     r = await s.execute(
@@ -744,7 +762,13 @@ class TestDeduplicationRaceCondition:
                             Activity.start_time <= base_time + _DUPLICATE_WINDOW,
                         )
                     )
-                    if r.scalar_one_or_none() is None:
+                    found = r.scalar_one_or_none()
+                    # Signal BEFORE flush: the flush blocks in the aiosqlite
+                    # background thread (INSERT waits for first_task's RESERVED
+                    # lock).  Setting the event here lets the event loop run
+                    # first_task → commit → release RESERVED → unblock INSERT.
+                    second_has_read.set()
+                    if found is None:
                         s.add(Activity(
                             athlete_id=athlete_id,
                             start_time=base_time,
@@ -764,8 +788,7 @@ class TestDeduplicationRaceCondition:
         # second session exploits, producing a duplicate row.
         assert len(activities) == 2, (
             f"Expected 2 (race condition produces a duplicate) but got {len(activities)}. "
-            "If this fails the SQLite busy-timeout may have serialised the writes "
-            "differently than expected."
+            "The asyncio.Event gates should make the ordering deterministic."
         )
 
     async def test_commit_inside_lock_prevents_race(self, race_engine):

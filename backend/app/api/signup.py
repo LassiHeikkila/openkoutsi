@@ -1,11 +1,12 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import hash_password
+from backend.app.core.limiter import limiter
 from backend.app.db.registry import get_registry_session
 from backend.app.db.team_session import init_team_db, get_team_session_factory
 from backend.app.models.registry_orm import Team, TeamMembership, User
@@ -15,7 +16,9 @@ router = APIRouter(prefix="/teams", tags=["signup"])
 
 
 @router.post("", response_model=TeamSignupResponse, status_code=201)
+@limiter.limit("5/hour")
 async def create_team(
+    request: Request,
     body: TeamSignupRequest,
     session: AsyncSession = Depends(get_registry_session),
 ):

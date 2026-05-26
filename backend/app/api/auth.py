@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from jose import JWTError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import (
@@ -299,7 +299,9 @@ async def delete_account(
                 membership.team_id,
             )
 
-    # Hard-delete the user; cascades to memberships, provider connections, reset tokens
+    # Remove all team memberships explicitly before deleting the user
+    await session.execute(delete(TeamMembership).where(TeamMembership.user_id == ctx.user_id))
+    # Hard-delete the user; cascades to provider connections and reset tokens
     await session.delete(user)
     await session.commit()
 

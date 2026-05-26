@@ -428,6 +428,19 @@ class TestDeleteAccount:
         )
         assert result.scalar_one_or_none() is None
 
+    async def test_delete_removes_team_memberships(self, client, auth_headers, registry_session):
+        from backend.app.models.registry_orm import TeamMembership
+        from sqlalchemy import select
+
+        with _mock_delete_account_team_db():
+            resp = await _delete_account(client, auth_headers)
+        assert resp.status_code == 204
+
+        result = await registry_session.execute(
+            select(TeamMembership).where(TeamMembership.user_id == _TEST_USER_ID)
+        )
+        assert result.scalars().all() == []
+
     async def test_delete_revokes_provider_connections(self, client, auth_headers, registry_session):
         from backend.app.models.registry_orm import ProviderConnection
 

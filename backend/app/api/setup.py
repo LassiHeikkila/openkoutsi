@@ -1,11 +1,12 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.auth import create_access_token, create_refresh_token, hash_password
+from backend.app.core.limiter import limiter
 from backend.app.db.registry import get_registry_session
 from backend.app.db.team_session import init_team_db, get_team_session_factory
 from backend.app.models.registry_orm import Team, TeamMembership, User
@@ -23,7 +24,9 @@ async def setup_status(session: AsyncSession = Depends(get_registry_session)):
 
 
 @router.post("", response_model=TokenResponse, status_code=201)
+@limiter.limit("10/hour")
 async def first_run_setup(
+    request: Request,
     body: SetupRequest,
     session: AsyncSession = Depends(get_registry_session),
 ):

@@ -1,4 +1,4 @@
-"""Unit tests for the LLM proxy SSRF guard (_check_url_safe)."""
+"""Unit tests for the LLM SSRF guard (check_url_safe)."""
 import socket
 from unittest.mock import patch
 
@@ -7,8 +7,8 @@ from fastapi import HTTPException
 
 
 def _check(url: str):
-    from backend.app.api.llm import _check_url_safe
-    return _check_url_safe(url)
+    from backend.app.core.ssrf import check_url_safe
+    return check_url_safe(url)
 
 
 class TestSchemeValidation:

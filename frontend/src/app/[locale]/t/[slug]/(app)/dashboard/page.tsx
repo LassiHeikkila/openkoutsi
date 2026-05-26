@@ -5,13 +5,15 @@ import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/auth'
 import { fetcher, apiFetch } from '@/lib/api'
-import type { FitnessPoint, FitnessCurrent, TrainingPlan } from '@/lib/types'
+import type { FitnessPoint, FitnessCurrent, TrainingPlan, TrainingStatus } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { FitnessChart } from '@/components/charts/FitnessChart'
 import { WeeklyTssBar } from '@/components/charts/WeeklyTssBar'
 import { ActivityCalendar } from '@/components/activities/ActivityCalendar'
 import { aggregatePlannedTssByWeek } from '@/lib/planUtils'
-import { HelpCircle } from 'lucide-react'
+import { parseMoodAndParagraphs, KoutsiAvatar, KoutsiBubble } from '@/components/koutsi-chat'
+import { HelpCircle, RefreshCw } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -67,6 +69,98 @@ function MetricsGlossaryDialog() {
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function TrainingStatusCard() {
+  const t = useTranslations('dashboard')
+  const isPending = (status: string | null | undefined) => status === 'pending'
+
+  const { data, mutate } = useSWR<TrainingStatus>(
+    '/api/athlete/training-status',
+    fetcher,
+    { refreshInterval: (data) => (isPending(data?.status) ? 1500 : 0) },
+  )
+
+  async function handleRefresh() {
+    await apiFetch('/api/athlete/training-status', { method: 'POST' })
+    mutate()
+  }
+
+  const status = data?.status ?? null
+  const feedback = data?.feedback ?? null
+  const pending = isPending(status)
+
+  let content: React.ReactNode
+
+  if (status === 'error') {
+    content = (
+      <div className="flex items-start gap-3">
+        <KoutsiAvatar mood="stern" />
+        <div className="flex flex-col gap-2">
+          <KoutsiBubble text={t('trainingStatus.error')} />
+        </div>
+      </div>
+    )
+  } else if (pending || feedback) {
+    const parsed = feedback ? parseMoodAndParagraphs(feedback) : { mood: 'knowing', paragraphs: [] }
+    const { mood, paragraphs } = parsed
+
+    if (pending && paragraphs.length === 0) {
+      content = (
+        <div className="flex items-start gap-3">
+          <KoutsiAvatar mood="knowing" />
+          <KoutsiBubble text={t('trainingStatus.thinking')} isPartial />
+        </div>
+      )
+    } else {
+      content = (
+        <div className="flex flex-col gap-3">
+          {paragraphs.map((para, i) => {
+            const isLast = i === paragraphs.length - 1
+            return (
+              <div key={i} className="flex items-start gap-3">
+                <KoutsiAvatar mood={mood} />
+                <KoutsiBubble text={para} isPartial={pending && isLast} />
+              </div>
+            )
+          })}
+          {pending && paragraphs.length > 0 && (
+            <div className="flex items-start gap-3">
+              <KoutsiAvatar mood={mood} />
+              <KoutsiBubble text="" isPartial />
+            </div>
+          )}
+        </div>
+      )
+    }
+  } else {
+    content = (
+      <div className="flex items-start gap-3">
+        <KoutsiAvatar mood="neutral" />
+        <div className="flex flex-col gap-2 flex-1">
+          <KoutsiBubble text={t('trainingStatus.noFeedback')} />
+          <Button size="sm" variant="outline" className="self-start" onClick={handleRefresh}>
+            {t('trainingStatus.getFeedback')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-base">{t('trainingStatus.title')}</CardTitle>
+        {!pending && (
+          <Button size="sm" variant="ghost" onClick={handleRefresh} className="h-7 px-2">
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="ml-1 text-xs">{t('trainingStatus.refreshFeedback')}</span>
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>{content}</CardContent>
+    </Card>
   )
 }
 
@@ -188,6 +282,9 @@ export default function DashboardPage() {
 
       {/* Activity calendar */}
       <ActivityCalendar activePlan={activePlan} />
+
+      {/* Daily training status feedback */}
+      <TrainingStatusCard />
     </div>
   )
 }

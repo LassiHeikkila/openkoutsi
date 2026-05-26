@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import zipfile
@@ -17,7 +18,7 @@ from backend.app.db.registry import get_registry_session
 from backend.app.api.consent import CURRENT_CONSENT_VERSION
 from backend.app.models.registry_orm import DataConsent, ProviderConnection, User
 from backend.app.models.team_orm import Activity, Athlete, WeightLog
-from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate
+from backend.app.schemas.athlete import AthleteResponse, AthleteUpdate, TrainingStatusBody, TrainingStatusResponse
 
 _MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
 
@@ -282,6 +283,53 @@ async def get_avatar(
     if not path.exists():
         raise HTTPException(status_code=404, detail="Avatar file not found")
     return FileResponse(path)
+
+
+@router.get("/training-status", response_model=TrainingStatusResponse)
+async def get_training_status(
+    ctx_session=Depends(get_ctx_and_session),
+):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+    today = datetime.now(timezone.utc).date()
+
+    app_cfg = athlete.app_settings or {}
+    stale = (
+        athlete.training_status_date is None
+        or athlete.training_status_date < today
+    )
+    if app_cfg.get("auto_training_status") and stale and athlete.training_status_status != "pending":
+        athlete.training_status_status = "pending"
+        athlete.training_status = None
+        await session.commit()
+        from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+        asyncio.create_task(analyze_training_status_bg(athlete.id, ctx.team_id))
+
+    return TrainingStatusResponse(
+        status=athlete.training_status_status,
+        feedback=athlete.training_status,
+        generated_date=athlete.training_status_date,
+    )
+
+
+@router.post("/training-status", status_code=202)
+async def trigger_training_status(
+    body: TrainingStatusBody = TrainingStatusBody(),
+    ctx_session=Depends(get_ctx_and_session),
+):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    if athlete.training_status_status == "pending":
+        return {"status": "pending"}
+
+    athlete.training_status_status = "pending"
+    athlete.training_status = None
+    await session.commit()
+
+    from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+    asyncio.create_task(analyze_training_status_bg(athlete.id, ctx.team_id, body.locale))
+    return {"status": "pending"}
 
 
 @router.get("/weight-log")

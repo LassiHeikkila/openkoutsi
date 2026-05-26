@@ -289,3 +289,9 @@ export interface DistanceBestEntry {
 export interface AllTimeDistanceBests {
   bests: DistanceBestEntry[]
 }
+
+export interface TrainingStatus {
+  status: string | null
+  feedback: string | null
+  generated_date: string | null
+}

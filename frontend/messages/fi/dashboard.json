@@ -39,6 +39,14 @@
     "tired": "väsynyt",
     "overreached": "ylikuormittunut"
   },
+  "trainingStatus": {
+    "title": "Koutsivalmennuksen palaute",
+    "getFeedback": "Hanki palaute",
+    "refreshFeedback": "Päivitä",
+    "thinking": "Koutsi miettii…",
+    "noFeedback": "Saat päivittäistä valmennuspalautetta harjoittelusi tilasta, kuormitustreneistä ja tulevista tavoitteistasi.",
+    "error": "Palautteen haku epäonnistui — yritä uudelleen"
+  },
   "glossary": {
     "ctl": {
       "term": "CTL \u2014 Chronic Training Load",

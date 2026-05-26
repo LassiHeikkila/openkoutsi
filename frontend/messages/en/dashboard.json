@@ -39,6 +39,14 @@
     "tired": "tired",
     "overreached": "overreached"
   },
+  "trainingStatus": {
+    "title": "Koutsi Daily Feedback",
+    "getFeedback": "Get Feedback",
+    "refreshFeedback": "Refresh",
+    "thinking": "Koutsi is thinking…",
+    "noFeedback": "Get daily coaching feedback on your training state, load trends, and upcoming goals.",
+    "error": "Feedback failed — try again"
+  },
   "glossary": {
     "ctl": {
       "term": "CTL \u2014 Chronic Training Load",

@@ -244,6 +244,8 @@
       "title": "Analysis",
       "autoAnalyze": "Auto-analyse workouts",
       "autoAnalyzeDesc": "Automatically generate AI coaching analysis when a workout is uploaded or synced. Requires an LLM configured by your team administrator.",
+      "autoTrainingStatus": "Auto daily coaching feedback",
+      "autoTrainingStatusDesc": "Automatically generate a daily training status overview on the dashboard after uploads and syncs. Requires an LLM configured by your team administrator.",
       "saveFailed": "Failed to save setting"
     }
   }

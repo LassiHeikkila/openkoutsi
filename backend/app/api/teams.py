@@ -35,13 +35,13 @@ async def _resolve_team(slug: str, session: AsyncSession) -> Team:
     return team
 
 
-def _require_admin(ctx: TeamContext) -> None:
-    if not ctx.is_admin:
+def _require_admin(ctx: TeamContext, team: Team) -> None:
+    if ctx.team_id != team.id or not ctx.is_admin:
         raise HTTPException(status_code=403, detail="Administrator role required")
 
 
-def _require_admin_or_coach(ctx: TeamContext) -> None:
-    if not (ctx.is_admin or ctx.is_coach):
+def _require_admin_or_coach(ctx: TeamContext, team: Team) -> None:
+    if ctx.team_id != team.id or not (ctx.is_admin or ctx.is_coach):
         raise HTTPException(status_code=403, detail="Coach or administrator role required")
 
 
@@ -53,8 +53,8 @@ async def list_members(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin_or_coach(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin_or_coach(ctx, team)
 
     result = await session.execute(
         select(TeamMembership, User)
@@ -90,8 +90,8 @@ async def update_member_roles(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     result = await session.execute(
         select(TeamMembership, User)
@@ -125,8 +125,8 @@ async def remove_member(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     result = await session.execute(
         select(TeamMembership).where(
@@ -150,8 +150,8 @@ async def generate_member_password_reset(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     # Verify the user is a member of this team
     mb_result = await session.execute(
@@ -206,8 +206,8 @@ async def create_invitation(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     valid_roles = {"administrator", "coach", "user"}
     invalid = set(body.roles) - valid_roles
@@ -257,8 +257,8 @@ async def list_invitations(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     result = await session.execute(
         select(Invitation).where(Invitation.team_id == team.id).order_by(Invitation.created_at.desc())
@@ -299,8 +299,8 @@ async def revoke_invitation(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     result = await session.execute(
         select(Invitation).where(
@@ -325,8 +325,8 @@ async def get_team_settings(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
     return TeamSettingsResponse(
         llm_base_url=team.llm_base_url,
         llm_model=team.llm_model,
@@ -342,8 +342,8 @@ async def update_team_settings(
     ctx: TeamContext = Depends(get_current_user),
     session: AsyncSession = Depends(get_registry_session),
 ):
-    _require_admin(ctx)
     team = await _resolve_team(slug, session)
+    _require_admin(ctx, team)
 
     if body.llm_base_url is not None:
         team.llm_base_url = body.llm_base_url or None

@@ -4,12 +4,15 @@ Unit tests for backend.app.services.provider_sync.
 Tests ensure_fresh_token and sync_provider_activities in isolation by mocking
 the PROVIDERS registry so no real HTTP calls are made.
 """
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from backend.app.db.base import TeamBase
 from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 from backend.app.models.registry_orm import ProviderConnection
 from backend.app.services.provider_sync import ensure_fresh_token, sync_provider_activities
@@ -637,3 +640,157 @@ class TestSyncProviderActivities:
             select(Activity).where(Activity.athlete_id == athlete.id)
         )).scalar_one()
         assert act.workout_category is None
+
+
+# ── Dedup race condition (issue #76) ──────────────────────────────────────────
+
+
+class TestDeduplicationRaceCondition:
+    """
+    Regression tests for the cross-session dedup race condition reported in #76.
+
+    Root cause summary
+    ------------------
+    The asyncio lock in provider_sync serialises the dedup-window query + flush
+    *within a single process*, but it releases before the database transaction
+    commits.  Under READ COMMITTED isolation (PostgreSQL production, and SQLite
+    with separate connections), a second session that acquires the lock after the
+    first one has *flushed but not committed* will see an empty dedup window and
+    create a duplicate Activity.
+
+    Why existing tests missed it
+    ----------------------------
+    All previous dedup tests run two provider syncs *sequentially* — the first
+    call completes and commits before the second starts.  No test exercised the
+    concurrent path where both sessions are alive at the same time.
+
+    Why a file-based engine is required here
+    ----------------------------------------
+    ``sqlite+aiosqlite:///:memory:`` gives every aiosqlite connection its own
+    private in-memory database, so separate sessions literally cannot share data.
+    A file-based database allows multiple connections to the same database, which
+    is what we need to observe the cross-session isolation behaviour.
+    SQLite's single-writer semantics still apply, but the observable outcome
+    (two committed Activity rows) faithfully reproduces the PostgreSQL race.
+    """
+
+    @pytest.fixture
+    async def race_engine(self, tmp_path):
+        """File-based SQLite engine shared by multiple concurrent sessions."""
+        db_path = tmp_path / "race.db"
+        eng = create_async_engine(
+            f"sqlite+aiosqlite:///{db_path}",
+            # Allow a short busy-wait so the second writer can proceed once the
+            # first session commits rather than failing immediately.
+            connect_args={"timeout": 10},
+        )
+        async with eng.begin() as conn:
+            await conn.run_sync(TeamBase.metadata.create_all)
+        yield eng
+        await eng.dispose()
+
+    async def test_concurrent_webhooks_create_duplicate_activity(self, race_engine):
+        """
+        Demonstrates the #76 race condition: two simultaneous webhook events
+        produce two Activity records for the same real-world workout.
+
+        Execution timeline
+        ------------------
+        1. ``asyncio.gather`` schedules both tasks; Wahoo runs first.
+        2. Wahoo acquires the asyncio dedup lock, queries (empty DB), INSERTs the
+           Activity, flushes — the write transaction is open, RESERVED lock held
+           on the SQLite file — then **releases the asyncio lock without committing**.
+        3. Strava acquires the asyncio lock and queries.  Wahoo's transaction is
+           still open, so Strava reads the last *committed* state — empty — and
+           decides to create its own Activity.
+        4. Strava's INSERT is blocked by SQLite's single-writer rule (Wahoo still
+           holds the RESERVED lock).  Strava's aiosqlite thread waits; the asyncio
+           event loop is free to run Wahoo's continuation.
+        5. Wahoo commits, releasing the RESERVED lock.
+        6. Strava's INSERT proceeds and commits.
+        7. Result: **two Activity rows** for the same workout — the bug.
+
+        After the fix (commit inside the asyncio lock, or SELECT FOR UPDATE on
+        Athlete), Strava's query at step 3 will find Wahoo's committed Activity
+        and will not create a duplicate.
+
+        This test is expected to **FAIL** with the current code.
+        """
+        from backend.app.services.provider_sync import _DUPLICATE_WINDOW, _get_activity_lock
+
+        factory = async_sessionmaker(race_engine, expire_on_commit=False)
+        base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
+
+        async with factory() as s:
+            athlete = Athlete(global_user_id="race-user-76", ftp_tests=[])
+            s.add(athlete)
+            await s.commit()
+            athlete_id = athlete.id
+
+        # Use a unique team_id so the module-level lock dict doesn't retain
+        # state from other test runs.
+        team_id = f"race-team-{athlete_id}"
+
+        async def wahoo_task() -> None:
+            """Wahoo webhook path: flush inside lock, commit outside (the bug)."""
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5010,
+                            status="pending",
+                        ))
+                        await s.flush()
+                # asyncio lock released here — Strava can now enter the lock.
+                # BUG: the transaction is not committed yet; Strava's dedup
+                # query will see an empty database.
+                await s.commit()
+
+        async def strava_task() -> None:
+            """Strava webhook path: runs concurrently, loses the race."""
+            # Yield once so Wahoo starts first and acquires the asyncio lock.
+            await asyncio.sleep(0)
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    # Under the race: Wahoo has flushed but not committed, so
+                    # this query returns None and Strava creates a duplicate.
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5009,
+                            status="pending",
+                        ))
+                        await s.flush()
+                await s.commit()
+
+        await asyncio.gather(wahoo_task(), strava_task())
+
+        async with factory() as s:
+            r = await s.execute(select(Activity).where(Activity.athlete_id == athlete_id))
+            activities = r.scalars().all()
+
+        assert len(activities) == 1, (
+            f"Race condition created {len(activities)} duplicate Activity records "
+            f"for the same workout (expected 1). "
+            f"Fix: commit must happen before the asyncio lock is released, or a "
+            f"database-level lock (SELECT FOR UPDATE on Athlete, or a PostgreSQL "
+            f"advisory lock) must be used so the lock lifetime matches the "
+            f"transaction lifetime."
+        )

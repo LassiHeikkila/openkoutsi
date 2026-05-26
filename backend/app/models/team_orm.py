@@ -47,6 +47,9 @@ class Athlete(TeamBase):
     ftp_tests: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list)
     app_settings: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     avatar_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    training_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    training_status_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    training_status_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(

@@ -255,6 +255,11 @@ async def _process_event_for_team(
             await session.commit()
             asyncio.create_task(analyze_activity_bg(activity.id, athlete.id, team_id))
 
+        if app_cfg.get("auto_training_status"):
+            import asyncio
+            from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+            asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
+
     elif aspect_type == "delete":
         src_result = await session.execute(
             select(ActivitySource)

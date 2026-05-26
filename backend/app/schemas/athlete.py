@@ -57,3 +57,13 @@ class AthleteUpdate(BaseModel):
     hr_zones: Optional[list[ZoneSchema]] = None
     power_zones: Optional[list[ZoneSchema]] = None
     app_settings: Optional[dict] = None
+
+
+class TrainingStatusBody(BaseModel):
+    locale: Optional[str] = None
+
+
+class TrainingStatusResponse(BaseModel):
+    status: Optional[str] = None
+    feedback: Optional[str] = None
+    generated_date: Optional[date] = None

@@ -220,6 +220,24 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAutoTrainingStatusToggle(checked: boolean) {
+    try {
+      await apiFetch('/api/athlete/', {
+        method: 'PUT',
+        body: JSON.stringify({
+          app_settings: { ...(profile?.app_settings ?? {}), auto_training_status: checked },
+        }),
+      })
+      mutateProfile()
+    } catch (err) {
+      toast({
+        title: t('settings.analysis.saveFailed'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    }
+  }
+
   async function handleExport() {
     try {
       await apiDownload('/api/athlete/export', 'openkoutsi_export.zip')
@@ -664,6 +682,19 @@ export default function ProfilePage() {
             <Switch
               checked={Boolean(profile?.app_settings?.auto_analyze)}
               onCheckedChange={handleAutoAnalyzeToggle}
+              disabled={!profile}
+            />
+          </div>
+          <div className="flex items-start justify-between gap-4 mt-4 pt-4 border-t">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">{t('settings.analysis.autoTrainingStatus')}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('settings.analysis.autoTrainingStatusDesc')}
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(profile?.app_settings?.auto_training_status)}
+              onCheckedChange={handleAutoTrainingStatusToggle}
               disabled={!profile}
             />
           </div>

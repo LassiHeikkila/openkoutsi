@@ -73,6 +73,12 @@ def _maybe_auto_analyze(activity_id: str, athlete: Athlete, team_id: str) -> boo
     return False
 
 
+def _maybe_auto_training_status(athlete: Athlete, team_id: str) -> None:
+    if (athlete.app_settings or {}).get("auto_training_status"):
+        from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+        asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
+
+
 async def _bg_process_and_recalculate(
     file_path: str, athlete_id: str, activity_id: str,
     team_id: str, global_user_id: str,
@@ -184,6 +190,7 @@ async def _bg_process_and_recalculate(
             if _maybe_auto_analyze(target_act.id, athlete, team_id):
                 target_act.analysis_status = "pending"
 
+            _maybe_auto_training_status(athlete, team_id)
             await session.commit()
             await recalculate_from(athlete_id, start_date, session)
 

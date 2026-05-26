@@ -422,3 +422,90 @@ class TestAvatar:
             files={"file": ("photo.jpg", _JPEG + b"bytes", "image/jpeg")},
         )
         assert athlete_id in resp.json()["avatar_url"]
+
+
+class TestTrainingStatus:
+    async def test_get_training_status_no_feedback(self, client, auth_headers):
+        resp = await client.get("/api/athlete/training-status", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] is None
+        assert data["feedback"] is None
+        assert data["generated_date"] is None
+
+    async def test_trigger_training_status_sets_pending(self, client, auth_headers):
+        from unittest.mock import AsyncMock
+        with patch(
+            "backend.app.services.llm_training_status_analyzer.analyze_training_status_bg",
+            new_callable=AsyncMock,
+        ):
+            resp = await client.post(
+                "/api/athlete/training-status", json={}, headers=auth_headers
+            )
+        assert resp.status_code == 202
+        assert resp.json()["status"] == "pending"
+
+        status_resp = await client.get("/api/athlete/training-status", headers=auth_headers)
+        assert status_resp.json()["status"] == "pending"
+
+    async def test_trigger_while_pending_returns_pending_immediately(self, client, auth_headers):
+        from unittest.mock import AsyncMock
+        with patch(
+            "backend.app.services.llm_training_status_analyzer.analyze_training_status_bg",
+            new_callable=AsyncMock,
+        ):
+            await client.post(
+                "/api/athlete/training-status", json={}, headers=auth_headers
+            )
+            resp = await client.post(
+                "/api/athlete/training-status", json={}, headers=auth_headers
+            )
+        assert resp.status_code == 202
+        assert resp.json()["status"] == "pending"
+
+    async def test_get_training_status_after_analysis(self, client, auth_headers, session):
+        from datetime import date
+        from backend.app.models.team_orm import Athlete
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(Athlete).where(Athlete.global_user_id == "test-user-00000000")
+        )
+        athlete = result.scalar_one()
+        athlete.training_status = "MOOD:knowing\n\nYou are training well."
+        athlete.training_status_status = "done"
+        athlete.training_status_date = date.today()
+        await session.commit()
+
+        resp = await client.get("/api/athlete/training-status", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "done"
+        assert "training well" in data["feedback"]
+        assert data["generated_date"] is not None
+
+    async def test_auto_training_status_first_access_triggers_analysis(
+        self, client, auth_headers, session
+    ):
+        from datetime import date, timedelta
+        from unittest.mock import AsyncMock
+        from backend.app.models.team_orm import Athlete
+        from sqlalchemy import select
+
+        result = await session.execute(
+            select(Athlete).where(Athlete.global_user_id == "test-user-00000000")
+        )
+        athlete = result.scalar_one()
+        athlete.app_settings = {**(athlete.app_settings or {}), "auto_training_status": True}
+        athlete.training_status_date = date.today() - timedelta(days=1)
+        athlete.training_status_status = None
+        await session.commit()
+
+        with patch(
+            "backend.app.services.llm_training_status_analyzer.analyze_training_status_bg",
+            new_callable=AsyncMock,
+        ):
+            resp = await client.get("/api/athlete/training-status", headers=auth_headers)
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "pending"

@@ -110,6 +110,8 @@ class Activity(TeamBase):
     tss: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     intensity_factor: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     workout_category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    labels: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, default="pending")
     analysis_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

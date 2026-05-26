@@ -131,6 +131,16 @@
       "yoga": "Yoga",
       "cross_training": "Cross-training"
     },
+    "labels": {
+      "title": "Labels",
+      "race": "Race",
+      "commute": "Commute"
+    },
+    "notes": {
+      "title": "Notes",
+      "placeholder": "Add notes about this activity…",
+      "saveFailed": "Failed to save notes"
+    },
     "analysis": {
       "title": "AI Analysis",
       "analyse": "Analyse workout",

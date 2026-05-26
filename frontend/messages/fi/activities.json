@@ -131,6 +131,16 @@
       "yoga": "Jooga",
       "cross_training": "Muu liikunta"
     },
+    "labels": {
+      "title": "Tunnisteet",
+      "race": "Kilpailu",
+      "commute": "Työmatkaliikunta"
+    },
+    "notes": {
+      "title": "Muistiinpanot",
+      "placeholder": "Lisää muistiinpanoja tästä harjoituksesta…",
+      "saveFailed": "Muistiinpanojen tallentaminen epäonnistui"
+    },
     "analysis": {
       "title": "Tekoälyanalyysi",
       "analyse": "Analysoi harjoitus",

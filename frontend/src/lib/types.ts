@@ -86,6 +86,8 @@ export interface Activity {
   tss: number | null
   intensity_factor: number | null
   workout_category: string | null
+  labels: string[]
+  notes: string | null
   has_fit_file: boolean
   status: string
   created_at: string

@@ -82,7 +82,10 @@ function KoutsiBubble({ text, isPartial }: { text: string; isPartial?: boolean }
     </p>
   )
 }
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/use-toast'
+
+const ACTIVITY_LABELS = ['race', 'commute'] as const
 
 interface Props {
   params: Promise<{ id: string }>
@@ -116,6 +119,7 @@ export default function ActivityDetailPage({ params }: Props) {
   const [intervalsOpen, setIntervalsOpen] = useState(false)
   const [powerBestsOpen, setPowerBestsOpen] = useState(false)
   const [distanceBestsOpen, setDistanceBestsOpen] = useState(false)
+  const [notesDraft, setNotesDraft] = useState<string | null>(null)
 
   async function handleReprocess() {
     setReprocessing(true)
@@ -139,6 +143,39 @@ export default function ActivityDetailPage({ params }: Props) {
       await mutate()
     } catch {
       // silently ignore; the select will revert on next render
+    }
+  }
+
+  async function handleLabelToggle(label: string) {
+    const current = activity?.labels ?? []
+    const next = current.includes(label) ? current.filter((l) => l !== label) : [...current, label]
+    try {
+      await apiFetch(`/api/activities/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ labels: next }),
+      })
+      await mutate()
+    } catch {
+      // silently ignore; labels revert on next render
+    }
+  }
+
+  async function handleNotesSave() {
+    const notes = notesDraft?.trim() || null
+    if (notes === (activity?.notes ?? null)) {
+      setNotesDraft(null)
+      return
+    }
+    try {
+      await apiFetch(`/api/activities/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ notes }),
+      })
+      await mutate()
+    } catch {
+      toast({ title: t('detail.notes.saveFailed'), variant: 'destructive' })
+    } finally {
+      setNotesDraft(null)
     }
   }
 
@@ -387,6 +424,44 @@ export default function ActivityDetailPage({ params }: Props) {
           </Card>
         ))}
       </div>
+
+      {/* Labels & Notes */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">{t('detail.labels.title')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {ACTIVITY_LABELS.map((label) => {
+              const active = activity.labels?.includes(label)
+              return (
+                <button
+                  key={label}
+                  onClick={() => handleLabelToggle(label)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${
+                    active
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                  }`}
+                >
+                  {t(`detail.labels.${label}`)}
+                </button>
+              )
+            })}
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground mb-1.5">{t('detail.notes.title')}</p>
+            <Textarea
+              value={notesDraft ?? activity.notes ?? ''}
+              placeholder={t('detail.notes.placeholder')}
+              rows={3}
+              onFocus={() => setNotesDraft(activity.notes ?? '')}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={handleNotesSave}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Zone breakdown — HR and power side by side */}
       {(zonesData?.hr || zonesData?.power) && (

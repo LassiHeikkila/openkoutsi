@@ -477,6 +477,117 @@ class TestRenameActivity:
         assert resp.status_code == 401
 
 
+# ── Activity labels and notes ─────────────────────────────────────────────────
+
+class TestActivityLabelsAndNotes:
+    async def _create(self, client, auth_headers) -> str:
+        resp = await client.post(
+            "/api/activities/",
+            json={"sport_type": "Ride", "start_time": "2025-02-01T10:00:00Z", "duration_s": 3600},
+            headers=auth_headers,
+        )
+        return resp.json()["id"]
+
+    async def test_default_labels_empty(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        resp = await client.get(f"/api/activities/{activity_id}", headers=auth_headers)
+        assert resp.json()["labels"] == []
+
+    async def test_set_valid_label(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"labels": ["race"]},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["labels"] == ["race"]
+
+    async def test_set_multiple_labels(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"labels": ["race", "commute"]},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert sorted(resp.json()["labels"]) == ["commute", "race"]
+
+    async def test_clear_labels(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"labels": ["race"]},
+            headers=auth_headers,
+        )
+        resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"labels": []},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["labels"] == []
+
+    async def test_unknown_label_returns_422(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"labels": ["unknown_label"]},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_labels_persist_on_get(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"labels": ["commute"]},
+            headers=auth_headers,
+        )
+        resp = await client.get(f"/api/activities/{activity_id}", headers=auth_headers)
+        assert resp.json()["labels"] == ["commute"]
+
+    async def test_default_notes_null(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        resp = await client.get(f"/api/activities/{activity_id}", headers=auth_headers)
+        assert resp.json()["notes"] is None
+
+    async def test_set_notes(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"notes": "Finished 3rd overall."},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["notes"] == "Finished 3rd overall."
+
+    async def test_clear_notes(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"notes": "Some notes"},
+            headers=auth_headers,
+        )
+        resp = await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"notes": None},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["notes"] is None
+
+    async def test_notes_persist_on_get(self, client, auth_headers):
+        activity_id = await self._create(client, auth_headers)
+        await client.patch(
+            f"/api/activities/{activity_id}",
+            json={"notes": "Great race, new PB!"},
+            headers=auth_headers,
+        )
+        resp = await client.get(f"/api/activities/{activity_id}", headers=auth_headers)
+        assert resp.json()["notes"] == "Great race, new PB!"
+
+
 # ── Activity raw streams ───────────────────────────────────────────────────────
 
 class TestGetActivityStreams:

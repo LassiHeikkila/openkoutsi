@@ -164,6 +164,11 @@ def _build_prompt(
                 line += " (auto-split)"
             lines.append(line)
 
+    if getattr(activity, "labels", None):
+        lines.append(f"\nActivity labels: {', '.join(activity.labels)}")
+    if getattr(activity, "notes", None) and activity.notes.strip():
+        lines.append(f"\nAthlete notes: {activity.notes.strip()}")
+
     pr_lines: list[str] = []
     for duration_s, badges in (power_pr_badges or {}).items():
         label = _format_duration_label(int(duration_s))

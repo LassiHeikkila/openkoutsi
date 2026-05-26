@@ -9,6 +9,7 @@ process_webhook_event opens its own registry + team sessions so it can be
 called directly from the bridge poller without a pre-existing session.
 """
 
+import asyncio
 import logging
 from datetime import timedelta, timezone
 from datetime import datetime
@@ -249,15 +250,16 @@ async def _process_event_for_team(
 
         app_cfg = athlete.app_settings or {}
         if app_cfg.get("auto_analyze"):
-            import asyncio
             from backend.app.services.llm_activity_analyzer import analyze_activity_bg
             activity.analysis_status = "pending"
             await session.commit()
             asyncio.create_task(analyze_activity_bg(activity.id, athlete.id, team_id))
 
-        if app_cfg.get("auto_training_status"):
-            import asyncio
+        if app_cfg.get("auto_training_status") and athlete.training_status_status != "pending":
             from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+            athlete.training_status_status = "pending"
+            athlete.training_status = None
+            await session.commit()
             asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
 
     elif aspect_type == "delete":

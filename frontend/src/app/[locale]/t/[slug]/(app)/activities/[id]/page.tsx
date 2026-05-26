@@ -48,7 +48,7 @@ function PrBadgeRow({ badges }: { badges: Record<string, string> }) {
   )
 }
 
-import { KOUTSI_AVATAR, parseMoodAndParagraphs, KoutsiAvatar, KoutsiBubble } from '@/components/koutsi-chat'
+import { parseMoodAndParagraphs, KoutsiAvatar, KoutsiBubble } from '@/components/koutsi-chat'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/use-toast'
 

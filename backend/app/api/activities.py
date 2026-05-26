@@ -74,8 +74,10 @@ def _maybe_auto_analyze(activity_id: str, athlete: Athlete, team_id: str) -> boo
 
 
 def _maybe_auto_training_status(athlete: Athlete, team_id: str) -> None:
-    if (athlete.app_settings or {}).get("auto_training_status"):
+    if (athlete.app_settings or {}).get("auto_training_status") and athlete.training_status_status != "pending":
         from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+        athlete.training_status_status = "pending"
+        athlete.training_status = None
         asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
 
 

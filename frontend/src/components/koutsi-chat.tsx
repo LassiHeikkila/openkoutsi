@@ -11,7 +11,7 @@ export function parseMoodAndParagraphs(text: string): { mood: string; paragraphs
   let startIdx = 0
   if (lines[0]?.startsWith('MOOD:')) {
     const candidate = lines[0].slice(5).trim().toLowerCase()
-    if (candidate in KOUTSI_AVATAR) mood = candidate
+    if (Object.prototype.hasOwnProperty.call(KOUTSI_AVATAR, candidate)) mood = candidate
     startIdx = 1
     while (startIdx < lines.length && lines[startIdx].trim() === '') startIdx++
   }

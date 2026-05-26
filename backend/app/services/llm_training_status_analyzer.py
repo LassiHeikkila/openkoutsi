@@ -329,4 +329,5 @@ async def analyze_training_status_bg(
         except Exception:
             log.exception("Training status analysis failed for athlete %s", athlete_id)
             athlete.training_status_status = "error"
+            athlete.training_status_date = today
             await session.commit()

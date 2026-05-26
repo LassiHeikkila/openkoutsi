@@ -37,6 +37,7 @@ export function groupPlannedWorkoutsByDate(plan: TrainingPlan | undefined): Map<
   if (!plan || plan.status !== 'active') return map
 
   for (const workout of plan.workouts) {
+    if (workout.workout_type === 'rest') continue
     const key = format(workoutDate(plan.start_date, workout.week_number, workout.day_of_week), 'yyyy-MM-dd')
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(workout)

@@ -169,4 +169,19 @@ describe('groupPlannedWorkoutsByDate', () => {
     expect(map.get('2025-01-15')).toHaveLength(1)
     expect(map.size).toBe(2)
   })
+
+  it('excludes rest days from the map', () => {
+    const plan = makePlan({
+      start_date: '2025-01-06',
+      workouts: [
+        { id: 'w1', plan_id: 'p1', week_number: 1, day_of_week: 1, workout_type: 'rest', description: null, duration_min: null, target_tss: null, completed_activity_id: null },
+        { id: 'w2', plan_id: 'p1', week_number: 1, day_of_week: 2, workout_type: 'endurance', description: null, duration_min: 90, target_tss: 80, completed_activity_id: null },
+      ],
+    })
+
+    const map = groupPlannedWorkoutsByDate(plan)
+    expect(map.size).toBe(1)
+    expect(map.get('2025-01-06')).toBeUndefined()
+    expect(map.get('2025-01-07')).toHaveLength(1)
+  })
 })

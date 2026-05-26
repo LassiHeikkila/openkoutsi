@@ -89,7 +89,7 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
     ? (byDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? [])
     : []
   const selectedPlanned = selectedDay
-    ? (plannedByDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? [])
+    ? (plannedByDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? []).filter((w) => w.completed_activity_id == null)
     : []
 
   function handlePrev() {
@@ -129,7 +129,7 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
                 {t('calendar.performed')}
               </span>
               <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-amber-500/80" />
+                <span className="h-2 w-2 rounded-full border border-amber-500/80" />
                 {t('calendar.planned')}
               </span>
             </div>
@@ -181,11 +181,12 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
                 const planned = plannedByDate.get(key) ?? []
                 const inMonth = isSameMonth(day, currentMonthStart)
                 const hasActivities = activities.length > 0
-                const hasPlanned = planned.length > 0
+                const pendingPlanned = planned.filter((w) => w.completed_activity_id == null)
+                const hasPlanned = pendingPlanned.length > 0
                 const activityBars = activities.slice(0, 2)
-                const plannedBars = planned.slice(0, 2)
+                const plannedBars = pendingPlanned.slice(0, 2)
                 const activityOverflow = activities.length - 2
-                const plannedOverflow = planned.length - 2
+                const plannedOverflow = pendingPlanned.length - 2
 
                 return (
                   <div
@@ -216,14 +217,14 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
                         {activityBars.map((a) => (
                           <div
                             key={a.id}
-                            className="h-1 w-full rounded-full bg-primary/70"
+                            className="h-1.5 w-full rounded-full bg-primary/70"
                             title={a.name}
                           />
                         ))}
                         {plannedBars.map((w) => (
                           <div
                             key={w.id}
-                            className="h-1 w-full rounded-full bg-amber-500/80"
+                            className="h-1.5 w-full rounded-full border border-amber-500/80"
                             title={w.description ?? w.workout_type}
                           />
                         ))}

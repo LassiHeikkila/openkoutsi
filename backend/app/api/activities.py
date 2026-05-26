@@ -47,6 +47,7 @@ from openkoutsi.categorization import WorkoutCategory, classify_workout
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _FIT_MAGIC = b".FIT"
 _DUPLICATE_WINDOW = timedelta(minutes=5)
+_VALID_LABELS = {"race", "commute"}
 
 log = logging.getLogger(__name__)
 
@@ -803,6 +804,14 @@ async def update_activity(
                     status_code=422,
                     detail=f"Unknown workout category: {payload.workout_category}",
                 )
+    if "labels" in payload.model_fields_set:
+        labels = payload.labels or []
+        bad = [lbl for lbl in labels if lbl not in _VALID_LABELS]
+        if bad:
+            raise HTTPException(status_code=422, detail=f"Unknown labels: {bad}")
+        activity.labels = labels
+    if "notes" in payload.model_fields_set:
+        activity.notes = payload.notes
 
     await session.commit()
     await session.refresh(activity)

@@ -33,6 +33,8 @@ def _make_activity(**kwargs):
     act.avg_hr = kwargs.get("avg_hr", 155)
     act.max_hr = kwargs.get("max_hr", 178)
     act.intervals = kwargs.get("intervals", [])
+    act.labels = kwargs.get("labels", [])
+    act.notes = kwargs.get("notes", None)
     act.analysis = None
     act.analysis_status = None
     return act
@@ -159,6 +161,45 @@ class TestBuildPrompt:
         act = _make_activity()
         prompt = _build_prompt(act, _make_athlete())
         assert "Personal Records" not in prompt
+
+    def test_labels_included_when_present(self):
+        act = _make_activity()
+        act.labels = ["race", "commute"]
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Activity labels" in prompt
+        assert "race" in prompt
+        assert "commute" in prompt
+
+    def test_labels_absent_when_empty(self):
+        act = _make_activity()
+        act.labels = []
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Activity labels" not in prompt
+
+    def test_labels_absent_when_none(self):
+        act = _make_activity()
+        act.labels = None
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Activity labels" not in prompt
+
+    def test_notes_included_when_present(self):
+        act = _make_activity()
+        act.notes = "Finished 3rd overall. Official time: 1:23:45."
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Athlete notes" in prompt
+        assert "Finished 3rd overall" in prompt
+
+    def test_notes_absent_when_none(self):
+        act = _make_activity()
+        act.notes = None
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Athlete notes" not in prompt
+
+    def test_notes_absent_when_whitespace_only(self):
+        act = _make_activity()
+        act.notes = "   "
+        prompt = _build_prompt(act, _make_athlete())
+        assert "Athlete notes" not in prompt
 
 
 # ── _stream_analysis ──────────────────────────────────────────────────────────

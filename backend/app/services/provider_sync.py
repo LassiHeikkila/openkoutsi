@@ -37,6 +37,7 @@ from backend.app.models.team_orm import (
     ActivityStream,
     Athlete,
 )
+from openkoutsi.categorization import classify_workout
 from openkoutsi.fit_processing import (
     resolve_sport_type,
     auto_interval_s,
@@ -518,6 +519,10 @@ async def _fill_from_source(
             activity.intensity_factor = intensity_factor
             activity.status = "processed"
 
+            vi = (np_val / activity.avg_power) if (np_val and activity.avg_power) else None
+            category = classify_workout(intensity_factor, vi)
+            activity.workout_category = category.value if category else None
+
             _add_streams(
                 activity, session, power_data, hr_data, cadence_data, speed_ms, alt_data
             )
@@ -587,6 +592,10 @@ async def _fill_from_source(
     activity.tss = tss
     activity.intensity_factor = intensity_factor
     activity.status = "processed"
+
+    vi = (np_val / activity.avg_power) if (np_val and activity.avg_power) else None
+    category = classify_workout(intensity_factor, vi)
+    activity.workout_category = category.value if category else None
 
     _add_streams(
         activity, session, power_data, hr_data, cadence_data, speed_data, altitude_data

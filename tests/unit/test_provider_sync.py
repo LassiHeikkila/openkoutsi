@@ -539,3 +539,101 @@ class TestSyncProviderActivities:
 
         assert count == 3
         assert mock_client.list_activities.call_count == 3
+
+    async def test_auto_category_assigned_from_stream_data(self, session):
+        """workout_category is auto-assigned when power streams are available."""
+        athlete = await _make_athlete(session, user_id="user-11")
+        athlete.ftp = 250
+        await session.commit()
+
+        conn = _make_connection(athlete)
+
+        mock_client = MagicMock()
+        mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        # 3600 samples at 200 W → IF = 200/250 = 0.80 → "tempo"
+        mock_client.get_activity_streams = AsyncMock(
+            return_value={"power": [200] * 3600}
+        )
+        mock_cls = MagicMock(return_value=mock_client)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
+            await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
+
+        act = (await session.execute(
+            select(Activity).where(Activity.athlete_id == athlete.id)
+        )).scalar_one()
+        assert act.workout_category == "tempo"
+
+    async def test_auto_category_assigned_from_fit_file(self, session):
+        """workout_category is auto-assigned when a FIT file is processed during sync."""
+        athlete = await _make_athlete(session, user_id="user-12")
+        athlete.ftp = 250
+        await session.commit()
+
+        conn = _make_connection(athlete, provider="wahoo")
+        base_time = datetime(2024, 8, 1, 9, 0, tzinfo=timezone.utc)
+
+        fit_bytes = b"fakeFITdata"
+        wahoo_mock = MagicMock()
+        wahoo_mock.list_activities = AsyncMock(side_effect=[[_norm("wahoo-1", "wahoo", base_time)], []])
+        wahoo_mock.download_fit_file = AsyncMock(return_value=fit_bytes)
+        wahoo_cls = MagicMock(return_value=wahoo_mock)
+
+        fake_profile = MagicMock()
+        # 3600 samples at 225 W → IF = 225/250 = 0.90 → "threshold"
+        fake_profile.power = [225] * 3600
+        fake_profile.heartRate = []
+        fake_profile.cadence = []
+        fake_profile.speed = []
+        fake_profile.altitude = []
+        fake_profile.avgHeartRate = None
+        fake_profile.peakHR = None
+        fake_profile.avgPower = 225.0
+        fake_profile.avgCadence = 0
+        fake_profile.avgSpeed = 0
+        fake_profile.duration = 3600
+        fake_profile.distance = 50000
+        fake_profile.elevationGain = 500
+        fake_profile.start_time = base_time
+        fake_profile.sport_type = "cycling"
+
+        with (
+            patch("backend.app.services.provider_sync.PROVIDERS", {"wahoo": wahoo_cls}),
+            patch("backend.app.services.provider_sync.summarizeWorkout", return_value=fake_profile),
+            patch("backend.app.services.provider_sync.encrypt_file"),
+        ):
+            await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
+
+        act = (await session.execute(
+            select(Activity).where(Activity.athlete_id == athlete.id)
+        )).scalar_one()
+        assert act.workout_category == "threshold"
+
+    async def test_no_category_when_no_power_data(self, session):
+        """workout_category stays None when there is no power data to classify from."""
+        athlete = await _make_athlete(session, user_id="user-13")
+        athlete.ftp = 250
+        await session.commit()
+
+        conn = _make_connection(athlete)
+
+        mock_client = MagicMock()
+        mock_client.list_activities = AsyncMock(side_effect=[[_norm()], []])
+        mock_client.download_fit_file = AsyncMock(side_effect=Exception("no FIT"))
+        mock_client.get_activity_streams = AsyncMock(return_value={})  # no power
+        mock_cls = MagicMock(return_value=mock_client)
+
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
+            await sync_provider_activities(
+                athlete, conn, session, team_id=_TEAM_ID, access_token=_ACCESS_TOKEN
+            )
+
+        act = (await session.execute(
+            select(Activity).where(Activity.athlete_id == athlete.id)
+        )).scalar_one()
+        assert act.workout_category is None

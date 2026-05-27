@@ -220,6 +220,10 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
         session.add(src)
         await session.flush()
 
+        # Commit inside the lock so the Activity is visible to concurrent
+        # sessions before this lock is released (fixes the #76 race condition).
+        await session.commit()
+
     prefetched_fit_new: bytes | None = None
     try:
         prefetched_fit_new = await _download_fit_cdn_first(

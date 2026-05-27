@@ -219,10 +219,16 @@ async def sync_provider_activities(
                 continue
 
             # ── Find-or-create under a per-athlete lock ───────────────────
-            # The lock serialises the dedup window query + create/attach so
-            # that two concurrent syncs (e.g. Wahoo webhook + Strava full
-            # sync firing within milliseconds) cannot both see "no existing
-            # activity" and each create a duplicate record.
+            # The lock serialises the dedup window query + commit so that two
+            # concurrent syncs (e.g. Wahoo webhook + Strava full sync firing
+            # within milliseconds) cannot both see "no existing activity" and
+            # each create a duplicate record.
+            #
+            # Critical invariant: the new Activity row must be COMMITTED before
+            # this lock is released.  A flush alone is not sufficient — under
+            # READ COMMITTED isolation (and SQLite WAL mode) another session
+            # that acquires the lock after the flush but before the commit will
+            # still see an empty dedup window and create a duplicate.
             async with _get_activity_lock(team_id, athlete.id):
                 # ── Activity within the time window? ──────────────────────
                 if norm.start_time is not None:
@@ -328,9 +334,14 @@ async def sync_provider_activities(
                 session.add(src)
                 await session.flush()
 
+                # Commit inside the lock so the Activity is visible to any
+                # concurrent session that next acquires the lock and queries
+                # the dedup window.  _populate_activity will update the row
+                # again (metrics, streams, status) and commit a second time.
+                await session.commit()
+
             # FIT download and stream processing happen outside the lock —
-            # they are slow network/IO operations that don't touch the
-            # find-or-create critical section.
+            # they are slow I/O operations that don't need to be serialised.
             await _populate_activity(
                 activity, src, norm, client, access_token, athlete, session, team_id=team_id
             )

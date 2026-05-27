@@ -4,12 +4,15 @@ Unit tests for backend.app.services.provider_sync.
 Tests ensure_fresh_token and sync_provider_activities in isolation by mocking
 the PROVIDERS registry so no real HTTP calls are made.
 """
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from backend.app.db.base import TeamBase
 from backend.app.models.team_orm import Activity, ActivitySource, Athlete
 from backend.app.models.registry_orm import ProviderConnection
 from backend.app.services.provider_sync import ensure_fresh_token, sync_provider_activities
@@ -637,3 +640,228 @@ class TestSyncProviderActivities:
             select(Activity).where(Activity.athlete_id == athlete.id)
         )).scalar_one()
         assert act.workout_category is None
+
+
+# ── Dedup race condition (issue #76) ──────────────────────────────────────────
+
+
+class TestDeduplicationRaceCondition:
+    """
+    Tests for the cross-session dedup race condition reported in #76.
+
+    Root cause
+    ----------
+    The asyncio lock in provider_sync serialises the dedup-window query + flush
+    *within a single process*, but it used to release before the database
+    transaction committed.  Under READ COMMITTED isolation (and SQLite WAL mode),
+    a second session that acquired the lock after the first had flushed-but-not-
+    committed would see an empty dedup window and create a duplicate Activity.
+
+    Fix
+    ---
+    ``await session.commit()`` is now called inside the asyncio lock for the
+    "new workout" path in provider_sync.py, wahoo_sync.py, and strava_sync.py.
+    The commit makes the new Activity visible to other sessions before the lock
+    is released, closing the window entirely.
+
+    Why a file-based engine is required here
+    ----------------------------------------
+    ``sqlite+aiosqlite:///:memory:`` gives every aiosqlite connection its own
+    private in-memory database, so separate sessions literally cannot share data.
+    A file-based database allows multiple connections to the same database, which
+    is what we need to observe the cross-session isolation behaviour.
+    SQLite's single-writer semantics still apply, but the observable outcome
+    faithfully reproduces the PostgreSQL race.
+    """
+
+    @pytest.fixture
+    async def race_engine(self, tmp_path):
+        """File-based SQLite engine shared by multiple concurrent sessions."""
+        db_path = tmp_path / "race.db"
+        eng = create_async_engine(
+            f"sqlite+aiosqlite:///{db_path}",
+            # Allow a short busy-wait so the second writer can proceed once the
+            # first session commits rather than failing immediately.
+            connect_args={"timeout": 10},
+        )
+        async with eng.begin() as conn:
+            await conn.run_sync(TeamBase.metadata.create_all)
+        yield eng
+        await eng.dispose()
+
+    async def test_flush_without_commit_allows_race(self, race_engine):
+        """
+        Documents the isolation problem: releasing the lock after a flush (but
+        before the commit) allows a second concurrent session to see an empty
+        dedup window and create a duplicate Activity.
+
+        This test intentionally uses the OLD buggy pattern and asserts that two
+        activities are created, proving the race mechanism is real.  It should
+        always pass regardless of production-code changes.
+
+        Two asyncio.Event objects gate the ordering deterministically:
+        - first_released_lock: first_task signals it after releasing the asyncio
+          lock (still holding the SQLite RESERVED lock, before commit).
+        - second_has_read: second_task signals it after executing the dedup SELECT
+          but BEFORE its own flush.  Signalling before flush is critical: the flush
+          will block in the aiosqlite background thread (INSERT waits for the
+          RESERVED lock held by first_task).  Signalling first lets first_task
+          proceed to commit, releasing the RESERVED lock and unblocking the INSERT.
+        """
+        from backend.app.services.provider_sync import _DUPLICATE_WINDOW, _get_activity_lock
+
+        factory = async_sessionmaker(race_engine, expire_on_commit=False)
+        base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
+
+        async with factory() as s:
+            athlete = Athlete(global_user_id="race-flush-user", ftp_tests=[])
+            s.add(athlete)
+            await s.commit()
+            athlete_id = athlete.id
+
+        team_id = f"race-flush-{athlete_id}"
+        first_released_lock = asyncio.Event()
+        second_has_read = asyncio.Event()
+
+        async def first_task() -> None:
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5010,
+                            status="pending",
+                        ))
+                        await s.flush()
+                # Lock released WITHOUT committing (the bug).
+                # Signal second_task to acquire the lock and read.
+                first_released_lock.set()
+                # Wait until second_task has read so its SELECT is guaranteed to
+                # land while first_task's RESERVED lock is still held (uncommitted).
+                await second_has_read.wait()
+                await s.commit()
+
+        async def second_task() -> None:
+            # Wait until first_task has released the asyncio lock before trying
+            # to acquire it, so ordering is guaranteed.
+            await first_released_lock.wait()
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    found = r.scalar_one_or_none()
+                    # Signal BEFORE flush: the flush blocks in the aiosqlite
+                    # background thread (INSERT waits for first_task's RESERVED
+                    # lock).  Setting the event here lets the event loop run
+                    # first_task → commit → release RESERVED → unblock INSERT.
+                    second_has_read.set()
+                    if found is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5009,
+                            status="pending",
+                        ))
+                        await s.flush()
+                await s.commit()
+
+        await asyncio.gather(first_task(), second_task())
+
+        async with factory() as s:
+            r = await s.execute(select(Activity).where(Activity.athlete_id == athlete_id))
+            activities = r.scalars().all()
+
+        # Demonstrates the race: flush-without-commit leaves a window that the
+        # second session exploits, producing a duplicate row.
+        assert len(activities) == 2, (
+            f"Expected 2 (race condition produces a duplicate) but got {len(activities)}. "
+            "The asyncio.Event gates should make the ordering deterministic."
+        )
+
+    async def test_commit_inside_lock_prevents_race(self, race_engine):
+        """
+        Regression test for #76: committing inside the asyncio lock ensures that
+        the new Activity is visible to any concurrent session before the lock is
+        released, so the second session finds the existing Activity and does not
+        create a duplicate.
+        """
+        from backend.app.services.provider_sync import _DUPLICATE_WINDOW, _get_activity_lock
+
+        factory = async_sessionmaker(race_engine, expire_on_commit=False)
+        base_time = datetime(2024, 6, 1, 10, 0, tzinfo=timezone.utc)
+
+        async with factory() as s:
+            athlete = Athlete(global_user_id="race-fix-user", ftp_tests=[])
+            s.add(athlete)
+            await s.commit()
+            athlete_id = athlete.id
+
+        team_id = f"race-fix-{athlete_id}"
+
+        async def first_task() -> None:
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5010,
+                            status="pending",
+                        ))
+                        await s.flush()
+                    # Fix: commit inside the lock so data is visible before
+                    # any other session acquires the lock.
+                    await s.commit()
+
+        async def second_task() -> None:
+            await asyncio.sleep(0)  # yield so first_task acquires the lock first
+            async with factory() as s:
+                async with _get_activity_lock(team_id, athlete_id):
+                    r = await s.execute(
+                        select(Activity).where(
+                            Activity.athlete_id == athlete_id,
+                            Activity.start_time >= base_time - _DUPLICATE_WINDOW,
+                            Activity.start_time <= base_time + _DUPLICATE_WINDOW,
+                        )
+                    )
+                    if r.scalar_one_or_none() is None:
+                        s.add(Activity(
+                            athlete_id=athlete_id,
+                            start_time=base_time,
+                            duration_s=5009,
+                            status="pending",
+                        ))
+                        await s.flush()
+                    await s.commit()
+
+        await asyncio.gather(first_task(), second_task())
+
+        async with factory() as s:
+            r = await s.execute(select(Activity).where(Activity.athlete_id == athlete_id))
+            activities = r.scalars().all()
+
+        assert len(activities) == 1, (
+            f"Race condition created {len(activities)} duplicate Activity records "
+            f"for the same workout (expected 1). "
+            f"The asyncio lock must guard both the flush and the commit."
+        )

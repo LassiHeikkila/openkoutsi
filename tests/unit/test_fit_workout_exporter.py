@@ -65,11 +65,25 @@ class TestFlattenSteps:
         inner = _repeat(2, [_step()])
         outer = _repeat(3, [inner])
         flat = _flatten_steps([outer])
-        # inner: 1 step + 1 repeat marker = 2
-        # outer: those 2 + outer repeat marker = 3
+        # flat: [step(0), INNER_REPEAT(1), OUTER_REPEAT(2)]
         assert len(flat) == 3
-        # Last element is the outer repeat
         assert flat[-1]["repeat_count"] == 3
+        # Both inner and outer start at step 0 — no preceding steps
+        assert flat[1]["steps_back"] == 0  # inner repeat: first child at index 0
+        assert flat[2]["steps_back"] == 0  # outer repeat: first child at index 0
+
+    def test_nested_repeat_with_preceding_step_uses_absolute_index(self):
+        # Flat: [step_a(0), step_b(1), INNER_REPEAT(2), OUTER_REPEAT(3)]
+        # INNER_REPEAT must point to step_b at absolute index 1, not local index 0.
+        flat = _flatten_steps([_step(), _repeat(3, [_repeat(2, [_step()])])])
+        assert len(flat) == 4
+        inner_repeat = flat[2]
+        outer_repeat = flat[3]
+        assert inner_repeat["_type"] == "repeat"
+        assert outer_repeat["_type"] == "repeat"
+        # Both should point to step_b at absolute index 1
+        assert inner_repeat["steps_back"] == 1
+        assert outer_repeat["steps_back"] == 1
 
     def test_mixed_steps_and_repeat(self):
         flat = _flatten_steps([_step(), _repeat(2, [_step()]), _step()])

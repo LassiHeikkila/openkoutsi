@@ -15,13 +15,14 @@ from __future__ import annotations
 import io
 
 
-def _fmt_duration(duration_type: str, duration_value) -> str:
+def _fmt_duration(duration_type: str, step: dict) -> str:
     if duration_type == "time":
-        s = (duration_value or 0) // 1000
+        ms = step.get("duration_time") or 0
+        s = int(ms) // 1000
         return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
     if duration_type == "distance":
-        m = (duration_value or 0) / 100
-        return f"{m:.0f} m"
+        cm = step.get("duration_distance") or 0
+        return f"{int(cm) / 100:.0f} m"
     return str(duration_type or "open")
 
 
@@ -75,7 +76,7 @@ def describe_fit_workout(data: bytes) -> str:
                 continue
             if frame.name == "workout":
                 fields = {f.name: f.value for f in frame.fields}
-                workout_name = fields.get("workout_name") or ""
+                workout_name = fields.get("wkt_name") or ""
             elif frame.name == "workout_step":
                 raw_steps.append({f.name: f.value for f in frame.fields})
 
@@ -94,7 +95,7 @@ def describe_fit_workout(data: bytes) -> str:
             )
         else:
             intensity = str(step.get("intensity") or "-")
-            duration = _fmt_duration(dtype, step.get("duration_value"))
+            duration = _fmt_duration(dtype, step)
             target = _fmt_target(step)
             rows.append(
                 f" {i:>3}  {'step':<7}  {intensity:<10}  {duration:<10}  {target}"

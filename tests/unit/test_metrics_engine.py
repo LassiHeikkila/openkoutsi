@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.app.models.team_orm import Activity, ActivitySource, Athlete, DailyMetric
-from backend.app.services.metrics_engine import recalculate_from
+from backend.app.services.metrics_engine import catch_up_metrics, recalculate_from
 
 # EMA decay constants (same as production)
 K42 = 1 - math.exp(-1 / 42)
@@ -134,3 +134,93 @@ class TestRecalculateFrom:
         assert len(metrics) == 1
         assert metrics[0].tss_day == pytest.approx(0.0)
         assert metrics[0].ctl == pytest.approx(0.0)
+
+
+class TestCatchUpMetrics:
+    async def test_no_update_when_metrics_match_activities(self, session):
+        """No recalculation when stored tss_day matches actual activity TSS."""
+        athlete = await _make_athlete(session)
+        await _make_activity(session, athlete.id, tss=80.0, day=TODAY)
+        await recalculate_from(athlete.id, TODAY, session)
+
+        updated = await catch_up_metrics(athlete.id, session)
+
+        assert updated is False
+
+    async def test_recalculates_when_activity_deleted(self, session):
+        """Detects stale tss_day after an activity is hard-deleted without going
+        through the API endpoint (which would normally trigger _bg_recalculate)."""
+        athlete = await _make_athlete(session)
+        yesterday = TODAY - timedelta(days=1)
+
+        act1 = await _make_activity(session, athlete.id, tss=60.0, day=yesterday)
+        act2 = await _make_activity(session, athlete.id, tss=40.0, day=yesterday)
+        await _make_activity(session, athlete.id, tss=50.0, day=TODAY)
+        await recalculate_from(athlete.id, yesterday, session)
+
+        # Verify initial state: both days correct
+        r = await session.execute(
+            select(DailyMetric).where(
+                DailyMetric.athlete_id == athlete.id,
+                DailyMetric.date == yesterday,
+            )
+        )
+        assert r.scalar_one().tss_day == pytest.approx(100.0)
+
+        # Simulate out-of-band hard delete (bypasses the API delete endpoint)
+        await session.delete(act2)
+        await session.flush()
+
+        # catch_up_metrics should detect the mismatch and fix it
+        updated = await catch_up_metrics(athlete.id, session)
+
+        assert updated is True
+        r2 = await session.execute(
+            select(DailyMetric).where(
+                DailyMetric.athlete_id == athlete.id,
+                DailyMetric.date == yesterday,
+            )
+        )
+        fixed = r2.scalar_one()
+        # tss_day should now reflect only act1's 60 TSS
+        assert fixed.tss_day == pytest.approx(60.0)
+
+    async def test_recalculates_cascade_from_earliest_stale_day(self, session):
+        """When the stale day is before the forward-fill gap, recalculation
+        starts from the stale day so subsequent days are also corrected."""
+        athlete = await _make_athlete(session)
+        two_days_ago = TODAY - timedelta(days=2)
+        yesterday = TODAY - timedelta(days=1)
+
+        act = await _make_activity(session, athlete.id, tss=100.0, day=two_days_ago)
+        await _make_activity(session, athlete.id, tss=50.0, day=yesterday)
+        # Don't create today's metric — forward fill gap exists
+        await recalculate_from(athlete.id, two_days_ago, session)
+
+        # Delete today's metric to simulate the forward-fill gap scenario
+        r = await session.execute(
+            select(DailyMetric).where(
+                DailyMetric.athlete_id == athlete.id,
+                DailyMetric.date == TODAY,
+            )
+        )
+        today_metric = r.scalar_one()
+        await session.delete(today_metric)
+        await session.flush()
+
+        # Also hard-delete the activity from two days ago (stale day is earlier)
+        await session.delete(act)
+        await session.flush()
+
+        updated = await catch_up_metrics(athlete.id, session)
+
+        assert updated is True
+        r3 = await session.execute(
+            select(DailyMetric).where(
+                DailyMetric.athlete_id == athlete.id,
+                DailyMetric.date == two_days_ago,
+            )
+        )
+        fixed = r3.scalar_one()
+        # Activity deleted → tss_day should now be 0
+        assert fixed.tss_day == pytest.approx(0.0)

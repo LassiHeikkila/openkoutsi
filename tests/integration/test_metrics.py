@@ -138,7 +138,7 @@ class TestCatchUp:
         session.add(DailyMetric(
             athlete_id=athlete_id,
             date=today,
-            ctl=30.0, atl=35.0, tsb=-5.0, tss_day=60.0,
+            ctl=30.0, atl=35.0, tsb=-5.0, tss_day=0.0,
         ))
         await session.commit()
 

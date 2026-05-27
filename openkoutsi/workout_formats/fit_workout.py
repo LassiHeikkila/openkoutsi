@@ -36,7 +36,7 @@ _INTENSITY = {
 }
 
 
-def _flatten_steps(steps: list[dict]) -> list[dict]:
+def _flatten_steps(steps: list[dict], *, _offset: int = 0) -> list[dict]:
     """
     Linearise the step tree into a flat list suitable for FIT message encoding.
 
@@ -52,12 +52,12 @@ def _flatten_steps(steps: list[dict]) -> list[dict]:
             result.append({"_type": "step", **step})
         elif kind == "repeat":
             children = step.get("steps", [])
-            first_child_idx = len(result)
-            result.extend(_flatten_steps(children))
+            first_child_abs_idx = _offset + len(result)
+            result.extend(_flatten_steps(children, _offset=first_child_abs_idx))
             result.append({
                 "_type": "repeat",
                 "repeat_count": step.get("repeat_count", 1),
-                "steps_back": first_child_idx,
+                "steps_back": first_child_abs_idx,
             })
 
     return result

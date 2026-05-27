@@ -61,24 +61,24 @@ class TestRoundTrip:
 
         assert warmup["intensity"] == "warmup"
         assert warmup["duration_type"] == "time"
-        assert warmup["duration_time"] == 600_000
+        assert warmup["duration_time"] == pytest.approx(600.0)
 
         assert active["intensity"] == "active"
         assert active["duration_type"] == "time"
-        assert active["duration_time"] == 120_000
+        assert active["duration_time"] == pytest.approx(120.0)
         assert active["target_type"] == "power"
         assert active["custom_target_power_low"] == 100
         assert active["custom_target_power_high"] == 100
 
         assert recovery["intensity"] == "recovery"
-        assert recovery["duration_time"] == 60_000
+        assert recovery["duration_time"] == pytest.approx(60.0)
 
         assert repeat["duration_type"] == "repeat_until_steps_cmplt"
         assert repeat["duration_step"] == 1   # first child (active) is at absolute index 1
         assert repeat["repeat_steps"] == 5
 
         assert cooldown["intensity"] == "cooldown"
-        assert cooldown["duration_time"] == 600_000
+        assert cooldown["duration_time"] == pytest.approx(600.0)
 
     def test_repeat_only(self):
         """Repeat block with no preceding steps — first child is at index 0."""
@@ -159,7 +159,7 @@ class TestRoundTrip:
         ]
         decoded = _decode(_export(steps, "1km"))
         assert decoded[0]["duration_type"] == "distance"
-        assert decoded[0]["duration_distance"] == 100_000  # 1000 m × 100 cm/m
+        assert decoded[0]["duration_distance"] == pytest.approx(1000.0)  # fitdecode returns meters
 
     def test_absolute_power_round_trip(self):
         steps = [

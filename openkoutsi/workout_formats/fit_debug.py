@@ -17,12 +17,13 @@ import io
 
 def _fmt_duration(duration_type: str, step: dict) -> str:
     if duration_type == "time":
-        ms = step.get("duration_time") or 0
-        s = int(ms) // 1000
+        # fitdecode applies FIT profile scale=1000, so duration_time is in seconds
+        s = int(step.get("duration_time") or 0)
         return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
     if duration_type == "distance":
-        cm = step.get("duration_distance") or 0
-        return f"{int(cm) / 100:.0f} m"
+        # fitdecode applies FIT profile scale=100, so duration_distance is in meters
+        m = step.get("duration_distance") or 0
+        return f"{float(m):.0f} m"
     return str(duration_type or "open")
 
 

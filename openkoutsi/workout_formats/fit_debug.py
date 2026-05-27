@@ -21,9 +21,9 @@ def _fmt_duration(duration_type: str, step: dict) -> str:
         s = int(step.get("duration_time") or 0)
         return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
     if duration_type == "distance":
-        # fitdecode applies FIT profile scale=100, so duration_distance is in meters
-        m = step.get("duration_distance") or 0
-        return f"{float(m):.0f} m"
+        # fitdecode returns duration_distance in mm; divide by 1000 for meters
+        mm = step.get("duration_distance") or 0
+        return f"{float(mm)/1000:.0f} m"
     return str(duration_type or "open")
 
 

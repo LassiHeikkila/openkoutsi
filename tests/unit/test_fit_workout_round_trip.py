@@ -159,7 +159,7 @@ class TestRoundTrip:
         ]
         decoded = _decode(_export(steps, "1km"))
         assert decoded[0]["duration_type"] == "distance"
-        assert decoded[0]["duration_distance"] == pytest.approx(1000.0)  # fitdecode returns meters
+        assert decoded[0]["duration_distance"] == pytest.approx(1000000.0)  # fitdecode returns mm (1000m = 1_000_000mm)
 
     def test_absolute_power_round_trip(self):
         steps = [

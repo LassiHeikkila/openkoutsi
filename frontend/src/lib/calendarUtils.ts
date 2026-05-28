@@ -18,11 +18,13 @@ export function getCalendarGrid(year: number, month: number): Date[] {
   return eachDayOfInterval({ start: gridStart, end: gridEnd })
 }
 
-/** Groups activities by their calendar date (YYYY-MM-DD) using the start_time ISO string. */
-export function groupActivitiesByDate(activities: Activity[]): Map<string, Activity[]> {
+/** Groups activities by their calendar date (YYYY-MM-DD) in the given timezone (defaults to UTC date prefix). */
+export function groupActivitiesByDate(activities: Activity[], timezone?: string): Map<string, Activity[]> {
   const map = new Map<string, Activity[]>()
   for (const a of activities) {
-    const key = a.start_time.slice(0, 10)
+    const key = timezone
+      ? new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date(a.start_time))
+      : a.start_time.slice(0, 10)
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(a)
   }

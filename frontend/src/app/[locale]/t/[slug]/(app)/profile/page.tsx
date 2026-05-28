@@ -17,6 +17,7 @@ import { toast } from '@/components/ui/use-toast'
 import { ZoneEditor } from '@/components/profile/ZoneEditor'
 import { ProviderCard } from '@/components/profile/ProviderCard'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Suspense } from 'react'
 import { Plus, RefreshCw, Trash2 } from 'lucide-react'
@@ -227,6 +228,24 @@ export default function ProfilePage() {
         body: JSON.stringify({
           app_settings: { ...(profile?.app_settings ?? {}), auto_training_status: checked },
         }),
+      })
+      mutateProfile()
+    } catch (err) {
+      toast({
+        title: t('settings.analysis.saveFailed'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    }
+  }
+
+  async function handleCoachingStyleChange(value: string) {
+    try {
+      const current = profile?.app_settings ?? {}
+      const updated = { ...current, coaching_style: value === 'default' ? undefined : value }
+      await apiFetch('/api/athlete/', {
+        method: 'PUT',
+        body: JSON.stringify({ app_settings: updated }),
       })
       mutateProfile()
     } catch (err) {
@@ -697,6 +716,29 @@ export default function ProfilePage() {
               onCheckedChange={handleAutoTrainingStatusToggle}
               disabled={!profile}
             />
+          </div>
+          <div className="flex items-start justify-between gap-4 mt-4 pt-4 border-t">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">{t('settings.analysis.coachingStyle')}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('settings.analysis.coachingStyleDesc')}
+              </p>
+            </div>
+            <Select
+              value={(profile?.app_settings?.coaching_style as string) ?? 'default'}
+              onValueChange={handleCoachingStyleChange}
+              disabled={!profile}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">{t('settings.analysis.coachingStyleDefault')}</SelectItem>
+                <SelectItem value="stern">{t('settings.analysis.coachingStyleStern')}</SelectItem>
+                <SelectItem value="friendly">{t('settings.analysis.coachingStyleFriendly')}</SelectItem>
+                <SelectItem value="encouraging">{t('settings.analysis.coachingStyleEncouraging')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

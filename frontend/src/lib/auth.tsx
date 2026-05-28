@@ -59,6 +59,14 @@ export function AuthProvider({
   const fetchAthlete = useCallback(async () => {
     try {
       const data = await apiFetch<AthleteProfile>('/api/athlete/')
+      const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+      if (detectedTz && data.app_settings?.timezone !== detectedTz) {
+        data.app_settings = { ...data.app_settings, timezone: detectedTz }
+        apiFetch('/api/athlete/', {
+          method: 'PUT',
+          body: JSON.stringify({ app_settings: data.app_settings }),
+        }).catch(() => {})
+      }
       setAthlete(data)
     } catch {
       setAthlete(null)

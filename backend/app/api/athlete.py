@@ -291,9 +291,9 @@ async def get_training_status(
 ):
     ctx, session = ctx_session
     athlete = await _get_athlete(ctx.user_id, session)
-    today = datetime.now(timezone.utc).date()
-
     app_cfg = athlete.app_settings or {}
+    from backend.app.services.llm_training_status_analyzer import _local_now
+    today = _local_now(app_cfg.get("timezone")).date()
     stale = (
         athlete.training_status_date is None
         or athlete.training_status_date < today

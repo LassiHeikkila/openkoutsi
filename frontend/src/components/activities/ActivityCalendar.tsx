@@ -8,6 +8,7 @@ import { format, isSameMonth } from 'date-fns'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from '@/navigation'
 import { fetcher } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 import type { Activity, PaginatedActivities, PlannedWorkout, TrainingPlan } from '@/lib/types'
 import {
   getCalendarGrid,
@@ -67,6 +68,7 @@ function PlannedWorkoutListRow({ workout }: { workout: PlannedWorkout }) {
 export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) {
   const t = useTranslations('dashboard')
   const { slug } = useParams<{ slug: string }>()
+  const { athlete } = useAuth()
 
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
@@ -80,7 +82,8 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
     fetcher,
   )
 
-  const byDate = groupActivitiesByDate(data?.items ?? [])
+  const timezone = athlete?.app_settings?.timezone as string | undefined
+  const byDate = groupActivitiesByDate(data?.items ?? [], timezone)
   const plannedByDate = groupPlannedWorkoutsByDate(activePlan)
   const grid = getCalendarGrid(year, month)
   const currentMonthStart = new Date(year, month, 1)

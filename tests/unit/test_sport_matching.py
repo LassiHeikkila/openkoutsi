@@ -29,7 +29,7 @@ from openkoutsi.sport_matching import sports_match
     ("Walk", "easy", False),
     ("Hike", "endurance", False),
     ("Yoga", "recovery", False),
-    ("WeightTraining", "strength", False),  # strength≠generic, explicit workout type needed
+    ("WeightTraining", "strength", True),  # explicit strength-to-strength match is valid
     # Explicit sport-specific workout types
     ("Swim", "swim", True),
     ("Run", "run", True),

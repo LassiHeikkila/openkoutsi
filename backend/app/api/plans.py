@@ -205,6 +205,16 @@ async def link_workout_to_activity(
     if not activity_result.scalar_one_or_none():
         raise HTTPException(404, "Activity not found")
 
+    # Reject if this activity is already linked to a different planned workout
+    existing_link_result = await session.execute(
+        select(PlannedWorkout).where(
+            PlannedWorkout.completed_activity_id == body.activity_id,
+            PlannedWorkout.id != workout_id,
+        )
+    )
+    if existing_link_result.scalar_one_or_none():
+        raise HTTPException(409, "Activity is already linked to another planned workout")
+
     workout.completed_activity_id = body.activity_id
     await session.commit()
     await session.refresh(workout)

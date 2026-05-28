@@ -22,7 +22,8 @@ async def find_and_link_workout(
     """Find a planned workout matching *activity* and set its completed_activity_id.
 
     Matching rules (all must pass):
-    - Same day-of-week as the activity's start_time
+    - Activity date falls within the plan's [start_date, end_date]
+    - Same week_number and day_of_week relative to the plan's start_date
     - Sport type compatible with workout type
     - activity.tss >= 60% of planned target_tss (when both present)
     - activity.duration_s >= 60% of planned duration_min in seconds (when both present)
@@ -52,25 +53,36 @@ async def find_and_link_workout(
     if not plans:
         return None
 
-    plan_ids = [p.id for p in plans]
-
-    # Find candidate planned workouts on this day that are not yet completed
-    workouts_result = await session.execute(
-        select(PlannedWorkout).where(
-            PlannedWorkout.plan_id.in_(plan_ids),
-            PlannedWorkout.day_of_week == day_of_week,
-            PlannedWorkout.completed_activity_id.is_(None),
-        )
-    )
-    candidates = workouts_result.scalars().all()
-
-    for workout in candidates:
-        if not _matches(activity, workout):
+    for plan in plans:
+        if plan.start_date is None:
+            continue
+        # Skip plans that haven't started or have ended
+        if act_date < plan.start_date:
+            continue
+        if plan.end_date is not None and act_date > plan.end_date:
             continue
 
-        workout.completed_activity_id = activity.id
-        await session.commit()
-        return workout
+        # Compute the 1-based week number within this plan
+        days_elapsed = (act_date - plan.start_date).days
+        week_number = days_elapsed // 7 + 1
+
+        workouts_result = await session.execute(
+            select(PlannedWorkout).where(
+                PlannedWorkout.plan_id == plan.id,
+                PlannedWorkout.week_number == week_number,
+                PlannedWorkout.day_of_week == day_of_week,
+                PlannedWorkout.completed_activity_id.is_(None),
+            )
+        )
+        candidates = workouts_result.scalars().all()
+
+        for workout in candidates:
+            if not _matches(activity, workout):
+                continue
+
+            workout.completed_activity_id = activity.id
+            await session.commit()
+            return workout
 
     return None
 

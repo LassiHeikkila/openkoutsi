@@ -1,6 +1,6 @@
 """Unit tests for the activity→planned workout matching service."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from datetime import datetime, timezone
 
 from backend.app.services.activity_workout_matcher import _matches

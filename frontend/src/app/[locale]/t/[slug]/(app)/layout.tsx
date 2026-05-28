@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import { usePathname, useRouter } from '@/navigation'
@@ -18,6 +18,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { slug } = useParams<{ slug: string }>()
   const [navOpen, setNavOpen] = useState(false)
+  const persistedLocaleRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!loading && !athlete) {
@@ -35,9 +36,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     }
   }, [athlete, loading, pathname, router, slug])
 
-  // Persist locale in app_settings so backend jobs (auto-analysis) can use it
+  // Persist locale in app_settings so backend jobs (auto-analysis) can use it.
+  // The ref prevents re-calling PATCH when athlete refreshes for unrelated reasons.
   useEffect(() => {
-    if (athlete && (athlete.app_settings as Record<string, unknown>)?.locale !== locale) {
+    if (!athlete || persistedLocaleRef.current === locale) return
+    persistedLocaleRef.current = locale
+    const stored = (athlete.app_settings as Record<string, unknown>)?.locale
+    if (stored !== locale) {
       apiFetch('/api/athlete/', {
         method: 'PATCH',
         body: JSON.stringify({ app_settings: { locale } }),

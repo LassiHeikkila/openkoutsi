@@ -43,6 +43,7 @@ from backend.app.services.pr_detection import detect_pr_badges
 from backend.app.services.provider_sync import _source_priority
 from openkoutsi.training_math import calculate_tss
 from openkoutsi.categorization import WorkoutCategory, classify_workout
+from backend.app.services.activity_workout_matcher import find_and_link_workout
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _FIT_MAGIC = b".FIT"
@@ -194,6 +195,7 @@ async def _bg_process_and_recalculate(
 
             _maybe_auto_training_status(athlete, team_id)
             await session.commit()
+            await find_and_link_workout(session, athlete_id, target_act)
             await recalculate_from(athlete_id, start_date, session)
 
         except Exception:
@@ -412,6 +414,8 @@ async def create_manual_activity(
     session.add(manual_src)
     await session.commit()
     await session.refresh(activity)
+
+    await find_and_link_workout(session, athlete.id, activity)
 
     if tss is not None:
         start_date = (
@@ -747,6 +751,8 @@ async def reprocess_activity(
     activity.workout_category = category.value if category else None
 
     await session.commit()
+
+    await find_and_link_workout(session, athlete.id, activity)
 
     # Update fitness metrics from this activity's date forward
     if activity.start_time is not None:

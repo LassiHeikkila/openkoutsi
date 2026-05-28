@@ -1,8 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { PlannedWorkout } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 
 const TYPE_COLORS: Record<string, string> = {
@@ -27,16 +40,28 @@ const WORKOUT_TYPE_KEYS = [
 interface Props {
   workout: PlannedWorkout
   compact?: boolean
+  onUnlink?: (workout: PlannedWorkout) => Promise<void>
 }
 
-export function WorkoutCard({ workout, compact = false }: Props) {
+export function WorkoutCard({ workout, compact = false, onUnlink }: Props) {
   const t = useTranslations('app')
+  const [unlinking, setUnlinking] = useState(false)
   const colorClass = TYPE_COLORS[workout.workout_type] ?? 'bg-muted text-muted-foreground'
 
   const typeKey = WORKOUT_TYPE_KEYS.find((k) => k === workout.workout_type)
   const typeLabel = typeKey
     ? t(`plan.generate.workoutTypes.${typeKey}` as never)
     : workout.workout_type
+
+  const handleUnlink = async () => {
+    if (!onUnlink) return
+    setUnlinking(true)
+    try {
+      await onUnlink(workout)
+    } finally {
+      setUnlinking(false)
+    }
+  }
 
   if (compact) {
     return (
@@ -67,6 +92,29 @@ export function WorkoutCard({ workout, compact = false }: Props) {
       </div>
       {workout.description && (
         <p className="text-xs mt-1 opacity-80">{workout.description}</p>
+      )}
+      {workout.completed_activity_id != null && onUnlink && (
+        <div className="mt-2 flex justify-end">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-xs h-6 px-2 opacity-70 hover:opacity-100">
+                {t('plan.unlink')}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t('plan.unlinkTitle')}</AlertDialogTitle>
+                <AlertDialogDescription>{t('plan.unlinkDesc')}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t('plan.unlinkCancel')}</AlertDialogCancel>
+                <AlertDialogAction onClick={handleUnlink} disabled={unlinking}>
+                  {t('plan.unlinkConfirm')}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       )}
     </div>
   )

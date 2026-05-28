@@ -61,6 +61,13 @@
     "weekLabel": "Week {week} — {date}",
     "rest": "Rest",
     "done": "Done",
+    "unlink": "Unlink",
+    "unlinkTitle": "Unlink activity?",
+    "unlinkDesc": "This will mark the workout as not completed. You can re-link it later.",
+    "unlinkConfirm": "Unlink",
+    "unlinkCancel": "Cancel",
+    "unlinkSuccess": "Workout unlinked",
+    "unlinkFailed": "Failed to unlink workout",
     "aiTag": "AI",
     "generate": {
       "step1Title": "Generate training plan",

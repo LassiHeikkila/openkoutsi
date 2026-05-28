@@ -253,7 +253,13 @@
       "autoAnalyzeDesc": "Luo automaattisesti tekoälyvalmennusanalyysi, kun harjoitus ladataan tai synkronoidaan. Vaatii tiimin ylläpitäjän määrittämän LLM:n.",
       "autoTrainingStatus": "Automaattinen päivittäinen valmennus­palaute",
       "autoTrainingStatusDesc": "Luo automaattisesti päivittäisen harjoittelun tilannekatsauksen kojelaudalle latausten ja synkronointien jälkeen. Vaatii tiimin ylläpitäjän määrittämän LLM:n.",
-      "saveFailed": "Asetuksen tallennus epäonnistui"
+      "saveFailed": "Asetuksen tallennus epäonnistui",
+      "coachingStyle": "Valmennustyyli",
+      "coachingStyleDesc": "Säädä Koutskin palautteen sävyä.",
+      "coachingStyleDefault": "Oletus",
+      "coachingStyleStern": "Tiukka",
+      "coachingStyleFriendly": "Ystävällinen",
+      "coachingStyleEncouraging": "Kannustava"
     }
   }
 }

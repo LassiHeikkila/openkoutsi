@@ -19,6 +19,7 @@ import logging
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import AsyncIterator
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from sqlalchemy import select
@@ -61,6 +62,10 @@ no code blocks. Separate each paragraph with a single blank line.
 If the athlete is missing planned sessions or not adhering to their training plan, \
 be direct and stern about it.
 
+The training status report includes the current local time. Use it to judge whether \
+the athlete still has time today to complete any unfinished planned workouts before \
+drawing conclusions about adherence.
+
 Before the feedback paragraphs, output a single line in the format: MOOD:<mood>
 where <mood> is one of: cheer, knowing, neutral, stern.
 - cheer: athlete is training well and making great progress
@@ -70,9 +75,26 @@ where <mood> is one of: cheer, knowing, neutral, stern.
 The MOOD line must be the very first line, followed by a blank line, then the paragraphs.\
 """
 
+_COACHING_STYLE_PROMPTS: dict[str, str] = {
+    "stern": "Be strict, demanding, and blunt. Hold the athlete to the highest standards and do not sugarcoat shortcomings.",
+    "friendly": "Use a warm, conversational, and supportive tone. Be honest but always kind.",
+    "encouraging": "Lead with positives. Celebrate wins, frame feedback constructively, and focus on building motivation and confidence.",
+}
 
-def _build_system_prompt(locale: str | None = None) -> str:
+
+def _local_now(tz_str: str | None) -> datetime:
+    if tz_str:
+        try:
+            return datetime.now(ZoneInfo(tz_str))
+        except ZoneInfoNotFoundError:
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _build_system_prompt(locale: str | None = None, coaching_style: str | None = None) -> str:
     prompt = _SYSTEM_PROMPT_BASE
+    if coaching_style and coaching_style in _COACHING_STYLE_PROMPTS:
+        prompt += f"\n\n{_COACHING_STYLE_PROMPTS[coaching_style]}"
     if locale:
         lang = _LOCALE_LANGUAGE.get(locale.split("-")[0].lower())
         if lang:
@@ -87,9 +109,11 @@ def _build_status_prompt(
     active_plan: TrainingPlan | None,
     this_week_workouts: list[PlannedWorkout],
     active_goals: list[Goal],
-    today: date,
+    now: datetime,
 ) -> str:
-    lines = [f"Training status report — {today.isoformat()}"]
+    today = now.date()
+    tz_label = now.strftime("%Z") or "UTC"
+    lines = [f"Training status report — {today.isoformat()}  {now.strftime('%H:%M')} {tz_label}"]
 
     if athlete.ftp:
         lines.append(f"Athlete FTP: {athlete.ftp} W")
@@ -154,8 +178,9 @@ async def _stream_status_analysis(
     active_plan: TrainingPlan | None,
     this_week_workouts: list[PlannedWorkout],
     active_goals: list[Goal],
-    today: date,
+    now: datetime,
     locale: str | None = None,
+    coaching_style: str | None = None,
 ) -> AsyncIterator[str]:
     """Yield text chunks from the LLM via streaming SSE."""
     team: Team | None = None
@@ -183,10 +208,10 @@ async def _stream_status_analysis(
 
     prompt = _build_status_prompt(
         athlete, recent_activities, current_metric, active_plan,
-        this_week_workouts, active_goals, today,
+        this_week_workouts, active_goals, now,
     )
     messages: list[dict] = [
-        {"role": "system", "content": _build_system_prompt(locale)},
+        {"role": "system", "content": _build_system_prompt(locale, coaching_style)},
         {"role": "user", "content": prompt},
     ]
     analysis_context = getattr(team, "llm_analysis_context", None)
@@ -229,16 +254,18 @@ async def analyze_training_status_bg(
     Background task: stream LLM training status → write chunks to DB every 500 ms
     → set final training_status_status to 'done' or 'error'.
     """
-    today = datetime.now(timezone.utc).date()
-    window_start = today - timedelta(days=28)
-
     async with get_team_session_factory(team_id)() as session:
         athlete_result = await session.execute(
             select(Athlete).where(Athlete.id == athlete_id)
         )
         athlete = athlete_result.scalar_one()
 
-        resolved_locale = locale or (athlete.app_settings or {}).get("locale")
+        app_cfg = athlete.app_settings or {}
+        resolved_locale = locale or app_cfg.get("locale")
+        coaching_style = app_cfg.get("coaching_style")
+        now = _local_now(app_cfg.get("timezone"))
+        today = now.date()
+        window_start = today - timedelta(days=28)
 
         # Last 28 days of activities
         acts_result = await session.execute(
@@ -309,7 +336,7 @@ async def analyze_training_status_bg(
                 athlete, team_id,
                 recent_activities, current_metric,
                 active_plan, this_week_workouts, active_goals,
-                today, locale=resolved_locale,
+                now, locale=resolved_locale, coaching_style=coaching_style,
             ):
                 buffer.append(chunk)
                 if time.monotonic() - last_flush >= 0.5:

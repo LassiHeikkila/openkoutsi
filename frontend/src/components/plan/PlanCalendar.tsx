@@ -11,10 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { apiFetch } from '@/lib/api'
+import { toast } from '@/components/ui/use-toast'
 
 interface Props {
   plan: TrainingPlan
   currentWeek?: number
+  onWorkoutUpdated?: (workout: PlannedWorkout) => void
 }
 
 interface SelectedDay {
@@ -23,14 +26,32 @@ interface SelectedDay {
   dateStr: string
 }
 
-export function PlanCalendar({ plan, currentWeek = 1 }: Props) {
+export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props) {
   const t = useTranslations('app')
   const dayLabels = t.raw('plan.generate.dayNames') as string[]
   const [selected, setSelected] = useState<SelectedDay | null>(null)
+  const [workoutsState, setWorkoutsState] = useState<PlannedWorkout[]>(plan.workouts)
+
+  const handleUnlink = async (workout: PlannedWorkout) => {
+    try {
+      await apiFetch(`/api/plans/${workout.plan_id}/workouts/${workout.id}/link`, {
+        method: 'DELETE',
+      })
+      const updated = { ...workout, completed_activity_id: null }
+      setWorkoutsState((prev) => prev.map((w) => (w.id === workout.id ? updated : w)))
+      setSelected((s) =>
+        s && s.workout?.id === workout.id ? { ...s, workout: updated } : s
+      )
+      onWorkoutUpdated?.(updated)
+      toast({ title: t('plan.unlinkSuccess') })
+    } catch {
+      toast({ title: t('plan.unlinkFailed'), variant: 'destructive' })
+    }
+  }
 
   // Group workouts by week
-  const weeks = new Map<number, typeof plan.workouts>()
-  for (const w of plan.workouts) {
+  const weeks = new Map<number, typeof workoutsState>()
+  for (const w of workoutsState) {
     if (!weeks.has(w.week_number)) weeks.set(w.week_number, [])
     weeks.get(w.week_number)!.push(w)
   }
@@ -104,7 +125,7 @@ export function PlanCalendar({ plan, currentWeek = 1 }: Props) {
           </DialogHeader>
           <div className="pt-1">
             {selected?.workout ? (
-              <WorkoutCard workout={selected.workout} />
+              <WorkoutCard workout={selected.workout} onUnlink={handleUnlink} />
             ) : (
               <p className="text-sm text-muted-foreground">{t('plan.rest')}</p>
             )}

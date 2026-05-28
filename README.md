@@ -27,6 +27,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Fitness metrics** — CTL/ATL/TSB computed and shown as interactive charts; stale metrics caused by deleted activities are detected and corrected automatically on dashboard load
 - **Training calendar** — dashboard calendar shows both performed and planned workouts with distinct visual markers
 - **Training plan generation** — periodized plans (Base → Build → Peak → Taper)
+- **Activity → plan linking** — uploaded activities are automatically matched to the day's planned workout (sport, TSS ≥ 60%, duration ≥ 60%); manual link/unlink via the plan calendar
 - **Structured workouts** — create interval workouts and export as Zwift `.zwo` or FIT workout files for head units
 - **Activity labels & notes** — tag activities as "race" or "commute" and add free-text notes (included in AI analysis context)
 - **AI coaching analysis** — per-activity analysis and plan support with OpenAI-compatible backends

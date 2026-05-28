@@ -9,7 +9,8 @@ from backend.app.core.deps import get_ctx_and_session
 from backend.app.db.registry import get_registry_session
 from backend.app.models.registry_orm import Team
 from backend.app.models.team_orm import Athlete, TrainingPlan, PlannedWorkout
-from backend.app.schemas.plans import TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse
+from backend.app.models.team_orm import Activity
+from backend.app.schemas.plans import TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse, LinkActivityRequest, PlannedWorkoutResponse
 from backend.app.services.plan_generator import generate_plan
 from backend.app.services.llm_plan_generator import generate_plan_llm
 
@@ -173,6 +174,77 @@ async def update_plan(
     await session.commit()
     await session.refresh(plan)
     return TrainingPlanResponse.model_validate(plan)
+
+
+@router.put("/{plan_id}/workouts/{workout_id}/link", response_model=PlannedWorkoutResponse)
+async def link_workout_to_activity(
+    plan_id: str,
+    workout_id: str,
+    body: LinkActivityRequest,
+    ctx_session=Depends(get_ctx_and_session),
+):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    plan_result = await session.execute(
+        select(TrainingPlan).where(TrainingPlan.id == plan_id, TrainingPlan.athlete_id == athlete.id)
+    )
+    if not plan_result.scalar_one_or_none():
+        raise HTTPException(404, "Plan not found")
+
+    workout_result = await session.execute(
+        select(PlannedWorkout).where(PlannedWorkout.id == workout_id, PlannedWorkout.plan_id == plan_id)
+    )
+    workout = workout_result.scalar_one_or_none()
+    if not workout:
+        raise HTTPException(404, "Planned workout not found")
+
+    activity_result = await session.execute(
+        select(Activity).where(Activity.id == body.activity_id, Activity.athlete_id == athlete.id)
+    )
+    if not activity_result.scalar_one_or_none():
+        raise HTTPException(404, "Activity not found")
+
+    # Reject if this activity is already linked to a different planned workout
+    existing_link_result = await session.execute(
+        select(PlannedWorkout).where(
+            PlannedWorkout.completed_activity_id == body.activity_id,
+            PlannedWorkout.id != workout_id,
+        )
+    )
+    if existing_link_result.scalar_one_or_none():
+        raise HTTPException(409, "Activity is already linked to another planned workout")
+
+    workout.completed_activity_id = body.activity_id
+    await session.commit()
+    await session.refresh(workout)
+    return PlannedWorkoutResponse.model_validate(workout)
+
+
+@router.delete("/{plan_id}/workouts/{workout_id}/link", status_code=204)
+async def unlink_workout_from_activity(
+    plan_id: str,
+    workout_id: str,
+    ctx_session=Depends(get_ctx_and_session),
+):
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    plan_result = await session.execute(
+        select(TrainingPlan).where(TrainingPlan.id == plan_id, TrainingPlan.athlete_id == athlete.id)
+    )
+    if not plan_result.scalar_one_or_none():
+        raise HTTPException(404, "Plan not found")
+
+    workout_result = await session.execute(
+        select(PlannedWorkout).where(PlannedWorkout.id == workout_id, PlannedWorkout.plan_id == plan_id)
+    )
+    workout = workout_result.scalar_one_or_none()
+    if not workout:
+        raise HTTPException(404, "Planned workout not found")
+
+    workout.completed_activity_id = None
+    await session.commit()
 
 
 @router.delete("/{plan_id}", status_code=204)

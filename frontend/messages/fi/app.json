@@ -61,6 +61,13 @@
     "weekLabel": "Viikko {week} — {date}",
     "rest": "Lepo",
     "done": "Tehty",
+    "unlink": "Poista linkitys",
+    "unlinkTitle": "Poistetaanko linkitys?",
+    "unlinkDesc": "Tämä merkitsee harjoituksen tekemättömäksi. Voit linkittää sen uudelleen myöhemmin.",
+    "unlinkConfirm": "Poista linkitys",
+    "unlinkCancel": "Peruuta",
+    "unlinkSuccess": "Linkitys poistettu",
+    "unlinkFailed": "Linkityksen poistaminen epäonnistui",
     "aiTag": "AI",
     "generate": {
       "step1Title": "Luo harjoitusohjelma",

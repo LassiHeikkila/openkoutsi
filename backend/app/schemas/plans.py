@@ -43,6 +43,10 @@ class TrainingPlanUpdate(BaseModel):
     name: Optional[str] = None
 
 
+class LinkActivityRequest(BaseModel):
+    activity_id: str
+
+
 class TrainingPlanResponse(BaseModel):
     id: str
     athlete_id: str

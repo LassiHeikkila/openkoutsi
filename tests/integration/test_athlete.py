@@ -78,6 +78,21 @@ class TestUpdateAthlete:
         assert resp.status_code == 401
 
 
+class TestPatchAthlete:
+    async def test_patch_partial_update(self, client, auth_headers):
+        await client.put("/api/athlete/", json={"ftp": 300, "max_hr": 185}, headers=auth_headers)
+        resp = await client.patch("/api/athlete/", json={"name": "Patched Rider"}, headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Patched Rider"
+        assert data["ftp"] == 300
+        assert data["max_hr"] == 185
+
+    async def test_patch_unauthenticated_returns_401(self, client):
+        resp = await client.patch("/api/athlete/", json={"ftp": 300})
+        assert resp.status_code == 401
+
+
 class TestLlmApiKeyHandling:
     """The LLM API key must be encrypted at rest and never returned to the client."""
 

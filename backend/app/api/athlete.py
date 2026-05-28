@@ -126,6 +126,7 @@ async def get_athlete(
 
 
 @router.put("/", response_model=AthleteResponse)
+@router.patch("/", response_model=AthleteResponse)
 async def update_athlete(
     body: AthleteUpdate,
     ctx_session=Depends(get_ctx_and_session),

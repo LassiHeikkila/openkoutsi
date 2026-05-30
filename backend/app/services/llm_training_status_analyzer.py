@@ -113,7 +113,8 @@ def _build_status_prompt(
 ) -> str:
     today = now.date()
     tz_label = now.strftime("%Z") or "UTC"
-    lines = [f"Training status report — {today.isoformat()}  {now.strftime('%H:%M')} {tz_label}"]
+    day_name = today.strftime("%A")
+    lines = [f"Training status report — {today.isoformat()} ({day_name})  {now.strftime('%H:%M')} {tz_label}"]
 
     if athlete.ftp:
         lines.append(f"Athlete FTP: {athlete.ftp} W")

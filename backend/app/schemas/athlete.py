@@ -57,6 +57,7 @@ class AthleteUpdate(BaseModel):
     hr_zones: Optional[list[ZoneSchema]] = None
     power_zones: Optional[list[ZoneSchema]] = None
     app_settings: Optional[dict] = None
+    ftp_test_method: Optional[str] = None
 
 
 class TrainingStatusBody(BaseModel):

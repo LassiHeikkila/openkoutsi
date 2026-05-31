@@ -7,7 +7,14 @@
     "loading": "Ladataan…",
     "noData": "Ei tehodataa vielä. Lataa harjoitus tehomittarilla nähdäksesi parhaat tuloksesi.",
     "noWeight": "ei painoa",
-    "rangeAll": "Kaikki"
+    "rangeAll": "Kaikki",
+    "ftpEstimate": "FTP-arvio",
+    "ftpSimple": "20 min -menetelmä (95 %)",
+    "ftpComplex": "Kriittisen tehon malli",
+    "ftpAccept": "Hyväksy",
+    "ftpAccepted": "FTP asetettu arvoon {ftp} W",
+    "ftpInsufficientData": "Ei riittävästi dataa",
+    "ftpCpDetail": "CP {cp} W · W′ {wprime} kJ"
   },
   "records": {
     "title": "Matkaennätykset",

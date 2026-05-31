@@ -8,8 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.deps import get_ctx_and_session
 from backend.app.models.team_orm import Activity, ActivityPowerBest, Athlete, WeightLog
-from backend.app.schemas.power import AllTimePowerBestsResponse, PowerBestEntry
-from openkoutsi.training_math import POWER_BEST_DURATIONS
+from backend.app.schemas.power import AllTimePowerBestsResponse, FtpEstimateResponse, PowerBestEntry
+from openkoutsi.training_math import (
+    CP_FIT_DURATIONS,
+    POWER_BEST_DURATIONS,
+    estimate_cp_wprime,
+    estimate_ftp_simple,
+)
 
 router = APIRouter(prefix="/power", tags=["power"])
 
@@ -102,3 +107,60 @@ async def get_power_bests(
     entries.sort(key=lambda e: (duration_order.get(e.duration_s, 9999), e.rank))
 
     return AllTimePowerBestsResponse(bests=entries)
+
+
+@router.get("/ftp-estimate", response_model=FtpEstimateResponse)
+async def get_ftp_estimate(
+    days: Optional[int] = Query(None, ge=1, description="Estimate from bests in the past N days. Omit for all-time."),
+    ctx_session=Depends(get_ctx_and_session),
+):
+    """
+    Estimate FTP from the athlete's power curve using two methods:
+
+    - Simple: 95% of the 20-minute (1200s) best power.
+    - Critical Power: linear work–time fit over the 2–20 minute bests (CP).
+
+    Both estimates use the rank-1 (single best) power per duration.  Pass
+    ?days=90/180/365 to estimate from a rolling window; omit for all-time.
+    """
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=days)
+        if days is not None
+        else None
+    )
+
+    where_clauses = [
+        ActivityPowerBest.athlete_id == athlete.id,
+        ActivityPowerBest.duration_s.in_(CP_FIT_DURATIONS),
+    ]
+    if cutoff is not None:
+        where_clauses.append(ActivityPowerBest.activity_start_time >= cutoff)
+
+    rows = await session.execute(
+        select(ActivityPowerBest.duration_s, ActivityPowerBest.power_w)
+        .where(*where_clauses)
+        .order_by(ActivityPowerBest.duration_s, ActivityPowerBest.power_w.desc())
+    )
+
+    # Keep the single best (rank-1) power per duration.
+    rank1: dict[int, float] = {}
+    for duration_s, power_w in rows.all():
+        if duration_s not in rank1:
+            rank1[duration_s] = power_w
+
+    twenty_min_power = rank1.get(1200)
+    ftp_simple_raw = estimate_ftp_simple(twenty_min_power)
+    cp, w_prime = estimate_cp_wprime(rank1)
+
+    return FtpEstimateResponse(
+        twenty_min_power=round(twenty_min_power, 1) if twenty_min_power is not None else None,
+        ftp_simple=round(ftp_simple_raw) if ftp_simple_raw is not None else None,
+        simple_available=ftp_simple_raw is not None,
+        cp=round(cp, 1) if cp is not None else None,
+        w_prime=round(w_prime) if w_prime is not None else None,
+        ftp_cp=round(cp) if cp is not None else None,
+        cp_available=cp is not None,
+    )

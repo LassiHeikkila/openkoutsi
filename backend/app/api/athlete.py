@@ -163,7 +163,7 @@ async def update_athlete(
         tests.append({
             "date": datetime.now(timezone.utc).date().isoformat(),
             "ftp": body.ftp,
-            "method": "manual",
+            "method": body.ftp_test_method or "manual",
         })
         athlete.ftp_tests = tests
     if body.max_hr is not None:

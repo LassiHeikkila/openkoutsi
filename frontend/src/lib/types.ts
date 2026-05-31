@@ -277,6 +277,16 @@ export interface AllTimePowerBests {
   bests: PowerBestEntry[]
 }
 
+export interface FtpEstimate {
+  twenty_min_power: number | null
+  ftp_simple: number | null
+  simple_available: boolean
+  cp: number | null
+  w_prime: number | null
+  ftp_cp: number | null
+  cp_available: boolean
+}
+
 export interface DistanceBestEntry {
   distance_m: number
   rank: number

@@ -39,6 +39,59 @@ def compute_power_bests(stream: list[float]) -> dict[int, float]:
     }
 
 
+# Durations (seconds) used for the Critical Power fit: 2–20 minutes.
+CP_FIT_DURATIONS: list[int] = [120, 180, 300, 480, 900, 1200]
+
+
+def estimate_ftp_simple(twenty_min_power: float | None) -> float | None:
+    """
+    Simple FTP estimate: 95% of the 20-minute (1200s) best mean power.
+    Returns None if no 20-minute best is available.
+    """
+    if twenty_min_power is None:
+        return None
+    return 0.95 * twenty_min_power
+
+
+def estimate_cp_wprime(bests: dict[int, float]) -> tuple[float | None, float | None]:
+    """
+    Estimate Critical Power (CP) and anaerobic work capacity (W') from the
+    2–20 minute power bests using the linear work–time model.
+
+    For each duration t (seconds) with mean power P(t) watts, total work is
+    W(t) = P(t)·t joules.  The model W(t) = CP·t + W' is fit by ordinary
+    least squares; the slope is CP (watts) and the intercept is W' (joules).
+
+    `bests` maps duration_s -> mean power (watts); only durations in
+    CP_FIT_DURATIONS are used.  Needs at least 2 data points.  Returns
+    (None, None) if there are fewer than 2 points or the fit yields CP <= 0.
+    """
+    points = [
+        (float(d), bests[d] * d)  # (t, work)
+        for d in CP_FIT_DURATIONS
+        if d in bests
+    ]
+    if len(points) < 2:
+        return None, None
+
+    n = len(points)
+    sum_t = sum(t for t, _ in points)
+    sum_w = sum(w for _, w in points)
+    sum_tt = sum(t * t for t, _ in points)
+    sum_tw = sum(t * w for t, w in points)
+
+    denom = n * sum_tt - sum_t * sum_t
+    if denom == 0:
+        return None, None
+
+    cp = (n * sum_tw - sum_t * sum_w) / denom
+    w_prime = (sum_w - cp * sum_t) / n
+
+    if cp <= 0:
+        return None, None
+    return cp, w_prime
+
+
 # Distance best durations in metres
 DISTANCE_BEST_DISTANCES: list[int] = [
     1_000, 2_000, 3_000, 5_000, 8_000,

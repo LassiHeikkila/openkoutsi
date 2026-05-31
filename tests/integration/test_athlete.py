@@ -47,6 +47,25 @@ class TestUpdateAthlete:
         assert data["ftp_tests"][0]["ftp"] == 280
         assert data["ftp_tests"][0]["method"] == "manual"
 
+    async def test_ftp_test_method_recorded_when_provided(self, client, auth_headers):
+        resp = await client.put(
+            "/api/athlete/",
+            json={"ftp": 265, "ftp_test_method": "20min"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ftp_tests"][-1]["method"] == "20min"
+
+    async def test_ftp_test_method_ignored_without_ftp(self, client, auth_headers):
+        resp = await client.put(
+            "/api/athlete/",
+            json={"max_hr": 190, "ftp_test_method": "cp"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ftp_tests"] == []
+
     async def test_updating_ftp_twice_preserves_history(self, client, auth_headers):
         await client.put("/api/athlete/", json={"ftp": 250}, headers=auth_headers)
         resp = await client.put("/api/athlete/", json={"ftp": 280}, headers=auth_headers)

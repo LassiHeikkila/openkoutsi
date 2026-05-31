@@ -303,3 +303,81 @@ class TestPowerBestsFromFitFile:
         # All entries must link back to the uploaded activity
         for entry in bests:
             assert entry["activity_id"] == activity_id
+
+
+class TestGetFtpEstimate:
+    async def test_empty_for_new_athlete(self, client, auth_headers):
+        resp = await client.get("/api/power/ftp-estimate", headers=auth_headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ftp_simple"] is None
+        assert body["ftp_cp"] is None
+        assert body["simple_available"] is False
+        assert body["cp_available"] is False
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/power/ftp-estimate")
+        assert resp.status_code == 401
+
+    async def test_both_methods_available_with_long_stream(
+        self, client, auth_headers, session
+    ):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # 1300s of constant 250 W covers all CP durations (120–1200).
+        await _insert_activity_with_power(
+            session, athlete, [250.0] * 1300, "2025-06-01T10:00:00+00:00"
+        )
+
+        resp = await client.get("/api/power/ftp-estimate", headers=auth_headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["simple_available"] is True
+        assert body["twenty_min_power"] == pytest.approx(250.0, abs=0.1)
+        assert body["ftp_simple"] == round(0.95 * 250.0)
+        assert body["cp_available"] is True
+        # Constant power → CP ≈ 250 W, W' ≈ 0 J.
+        assert body["cp"] == pytest.approx(250.0, abs=0.5)
+        assert body["w_prime"] == pytest.approx(0.0, abs=1.0)
+        assert body["ftp_cp"] == 250
+
+    async def test_cp_available_without_20min(self, client, auth_headers, session):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # 500s stream: covers 120/180/300/480 (>=2 CP points) but not 1200.
+        await _insert_activity_with_power(
+            session, athlete, [250.0] * 500, "2025-06-02T10:00:00+00:00"
+        )
+
+        resp = await client.get("/api/power/ftp-estimate", headers=auth_headers)
+        body = resp.json()
+        assert body["simple_available"] is False
+        assert body["ftp_simple"] is None
+        assert body["cp_available"] is True
+        assert body["ftp_cp"] is not None
+
+    async def test_neither_available_with_short_stream(
+        self, client, auth_headers, session
+    ):
+        athlete = await _get_athlete(client, auth_headers, session)
+        # 130s stream covers only the 120s CP duration → fewer than 2 points.
+        await _insert_activity_with_power(
+            session, athlete, [250.0] * 130, "2025-06-03T10:00:00+00:00"
+        )
+
+        resp = await client.get("/api/power/ftp-estimate", headers=auth_headers)
+        body = resp.json()
+        assert body["simple_available"] is False
+        assert body["cp_available"] is False
+
+    async def test_days_filter_excludes_old_activity(
+        self, client, auth_headers, session
+    ):
+        athlete = await _get_athlete(client, auth_headers, session)
+        old = datetime.now(timezone.utc) - timedelta(days=200)
+        await _insert_activity_with_power(
+            session, athlete, [250.0] * 1300, old.isoformat()
+        )
+
+        resp = await client.get("/api/power/ftp-estimate?days=90", headers=auth_headers)
+        body = resp.json()
+        assert body["simple_available"] is False
+        assert body["cp_available"] is False

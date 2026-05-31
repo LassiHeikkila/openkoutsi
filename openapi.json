@@ -4919,7 +4919,12 @@
           "ftp_test_method": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "20min",
+                  "cp"
+                ]
               },
               {
                 "type": "null"

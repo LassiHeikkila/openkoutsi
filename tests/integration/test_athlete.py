@@ -57,6 +57,14 @@ class TestUpdateAthlete:
         data = resp.json()
         assert data["ftp_tests"][-1]["method"] == "20min"
 
+    async def test_invalid_ftp_test_method_rejected(self, client, auth_headers):
+        resp = await client.put(
+            "/api/athlete/",
+            json={"ftp": 265, "ftp_test_method": "xyz"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
     async def test_ftp_test_method_ignored_without_ftp(self, client, auth_headers):
         resp = await client.put(
             "/api/athlete/",

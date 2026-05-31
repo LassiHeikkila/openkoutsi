@@ -132,8 +132,8 @@ function MembersTab({ slug }: { slug: string }) {
           <tr className="border-b text-left text-muted-foreground">
             <th className="pb-2 pr-4 font-medium">{t('members.username')}</th>
             <th className="pb-2 pr-4 font-medium">{t('members.roles')}</th>
-            <th className="pb-2 pr-4 font-medium">{t('members.joinedAt')}</th>
-            <th className="pb-2 pr-4 font-medium">{t('members.consent')}</th>
+            <th className="hidden sm:table-cell pb-2 pr-4 font-medium">{t('members.joinedAt')}</th>
+            <th className="hidden sm:table-cell pb-2 pr-4 font-medium">{t('members.consent')}</th>
             <th className="pb-2 font-medium">{t('members.actions')}</th>
           </tr>
         </thead>
@@ -167,10 +167,10 @@ function MembersTab({ slug }: { slug: string }) {
                   </div>
                 )}
               </td>
-              <td className="py-3 pr-4 text-muted-foreground">
+              <td className="hidden sm:table-cell py-3 pr-4 text-muted-foreground">
                 {new Date(m.joined_at).toLocaleDateString()}
               </td>
-              <td className="py-3 pr-4 text-muted-foreground">
+              <td className="hidden sm:table-cell py-3 pr-4 text-muted-foreground">
                 {m.consented_at
                   ? new Date(m.consented_at).toLocaleDateString()
                   : <span className="text-destructive/70">{t('members.noConsent')}</span>

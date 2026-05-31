@@ -153,7 +153,7 @@ export default function SuperadminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-8">
+    <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
       <h1 className="text-xl font-semibold">{t('title')}</h1>
 
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
@@ -164,52 +164,54 @@ export default function SuperadminPage() {
         {teams.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('noTeams')}</p>
         ) : (
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-x-4 border-b bg-muted/50 px-4 py-2 text-sm font-medium text-muted-foreground">
-              <span>{t('columns.name')}</span>
-              <span>{t('columns.slug')}</span>
-              <span>{t('columns.status')}</span>
-              <span>{t('columns.members')}</span>
-              <span>{t('columns.consent')}</span>
-              <span>{t('columns.created')}</span>
-              <span>{t('columns.actions')}</span>
-            </div>
-            {teams.map((team) => (
-              <div
-                key={team.id}
-                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-x-4 border-b px-4 py-3 last:border-b-0"
-              >
-                <span className="font-medium">{team.name}</span>
-                <span className="font-mono text-sm text-muted-foreground">{team.slug}</span>
-                <span>
-                  <Badge variant={statusBadgeVariant(team.status)}>
-                    {t(`status.${team.status as 'pending' | 'active' | 'rejected'}`)}
-                  </Badge>
-                </span>
-                <span className="text-sm">{team.member_count}</span>
-                <span className="text-sm">
-                  {team.consented_count}/{team.member_count}
-                  {team.consented_count < team.member_count && (
-                    <span className="ml-1 text-destructive/70">
-                      ({team.member_count - team.consented_count} {t('columns.consentPending')})
-                    </span>
-                  )}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {new Date(team.created_at).toLocaleDateString()}
-                </span>
-                <div className="flex gap-2">
-                  {team.status !== 'active' && (
-                    <Button size="sm" onClick={() => handleApprove(team)}>
-                      {t('approve')}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(team)}>
-                    {t('delete')}
-                  </Button>
-                </div>
+          <div className="rounded-md border overflow-x-auto">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-x-4 border-b bg-muted/50 px-4 py-2 text-sm font-medium text-muted-foreground">
+                <span>{t('columns.name')}</span>
+                <span>{t('columns.slug')}</span>
+                <span>{t('columns.status')}</span>
+                <span>{t('columns.members')}</span>
+                <span>{t('columns.consent')}</span>
+                <span>{t('columns.created')}</span>
+                <span>{t('columns.actions')}</span>
               </div>
-            ))}
+              {teams.map((team) => (
+                <div
+                  key={team.id}
+                  className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] items-center gap-x-4 border-b px-4 py-3 last:border-b-0"
+                >
+                  <span className="font-medium">{team.name}</span>
+                  <span className="font-mono text-sm text-muted-foreground">{team.slug}</span>
+                  <span>
+                    <Badge variant={statusBadgeVariant(team.status)}>
+                      {t(`status.${team.status as 'pending' | 'active' | 'rejected'}`)}
+                    </Badge>
+                  </span>
+                  <span className="text-sm">{team.member_count}</span>
+                  <span className="text-sm">
+                    {team.consented_count}/{team.member_count}
+                    {team.consented_count < team.member_count && (
+                      <span className="ml-1 text-destructive/70">
+                        ({team.member_count - team.consented_count} {t('columns.consentPending')})
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {new Date(team.created_at).toLocaleDateString()}
+                  </span>
+                  <div className="flex gap-2">
+                    {team.status !== 'active' && (
+                      <Button size="sm" onClick={() => handleApprove(team)}>
+                        {t('approve')}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(team)}>
+                      {t('delete')}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -232,19 +234,19 @@ export default function SuperadminPage() {
                 {user.teams.length === 0 ? (
                   <p className="text-xs text-muted-foreground pl-1">{t('users.noTeams')}</p>
                 ) : (
-                  <div className="space-y-1 pl-1">
+                  <div className="space-y-2 pl-1">
                     {user.teams.map((membership) => (
-                      <div key={membership.team_id} className="flex items-center gap-3 text-sm">
+                      <div key={membership.team_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                         <span className="font-mono text-muted-foreground w-32 shrink-0 truncate">
                           {membership.team_slug}
                         </span>
-                        <span className="text-muted-foreground shrink-0">{membership.team_name}</span>
-                        <div className="flex gap-1 shrink-0">
+                        <span className="text-muted-foreground">{membership.team_name}</span>
+                        <div className="flex gap-1">
                           {membership.roles.map((r) => (
                             <Badge key={r} variant="secondary" className="text-xs">{r}</Badge>
                           ))}
                         </div>
-                        <span className="ml-auto shrink-0">
+                        <span className="sm:ml-auto">
                           {membership.consented_at ? (
                             <span className="text-xs text-muted-foreground">
                               {t('users.consentAccepted')} {new Date(membership.consented_at).toLocaleDateString()}

@@ -202,7 +202,7 @@ async def update_athlete(
             else:
                 new_settings["llm_api_key_enc"] = None
 
-        athlete.app_settings = new_settings
+        athlete.app_settings = {**(athlete.app_settings or {}), **new_settings}
 
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()

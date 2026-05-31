@@ -242,7 +242,7 @@ export default function ProfilePage() {
   async function handleCoachingStyleChange(value: string) {
     try {
       const current = profile?.app_settings ?? {}
-      const updated = { ...current, coaching_style: value === 'default' ? undefined : value }
+      const updated = { ...current, coaching_style: value === 'default' ? null : value }
       await apiFetch('/api/athlete/', {
         method: 'PUT',
         body: JSON.stringify({ app_settings: updated }),

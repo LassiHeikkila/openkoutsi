@@ -86,9 +86,9 @@ export default function PowerPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">{t('power.title')}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Time range */}
           <div className="flex items-center rounded-md border overflow-hidden text-sm">
             {RANGE_OPTIONS.map(({ label, days }) => (

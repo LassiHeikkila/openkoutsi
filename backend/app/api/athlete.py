@@ -202,7 +202,10 @@ async def update_athlete(
             else:
                 new_settings["llm_api_key_enc"] = None
 
-        athlete.app_settings = new_settings
+        # Merge into existing settings. Explicit None values are treated as
+        # deletions so callers can remove a key without a full-replace round-trip.
+        merged = {**(athlete.app_settings or {}), **new_settings}
+        athlete.app_settings = {k: v for k, v in merged.items() if v is not None}
 
     athlete.updated_at = datetime.now(timezone.utc)
     await session.commit()

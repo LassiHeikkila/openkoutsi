@@ -243,9 +243,9 @@ export default function DashboardPage() {
 
       {/* Fitness history chart */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-2">
           <CardTitle className="text-base">{t('fitnessHistory')}</CardTitle>
-          <div className="flex items-center rounded-md border overflow-hidden text-xs">
+          <div className="flex items-center rounded-md border overflow-hidden text-xs self-start sm:self-auto">
             {PERIOD_OPTIONS.map(({ label, days: d }) => (
               <button
                 key={label}

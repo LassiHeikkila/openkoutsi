@@ -34,8 +34,8 @@ export function IntervalsTable({ intervals }: Props) {
             <tr className="border-b border-border bg-muted/40">
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t('duration')}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t('avgHr')}</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t('avgPower')}</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium text-muted-foreground">{t('avgHr')}</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right font-medium text-muted-foreground">{t('avgPower')}</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t('avgSpeed')}</th>
             </tr>
           </thead>
@@ -44,8 +44,8 @@ export function IntervalsTable({ intervals }: Props) {
               <tr key={iv.interval_number} className="border-b border-border last:border-0 hover:bg-muted/20">
                 <td className="px-3 py-2 text-muted-foreground">{iv.interval_number}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatDuration(iv.duration_s)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatHR(iv.avg_hr)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPower(iv.avg_power)}</td>
+                <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums">{formatHR(iv.avg_hr)}</td>
+                <td className="hidden sm:table-cell px-3 py-2 text-right tabular-nums">{formatPower(iv.avg_power)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{formatSpeed(iv.avg_speed_ms)}</td>
               </tr>
             ))}

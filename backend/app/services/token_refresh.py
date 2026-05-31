@@ -20,11 +20,11 @@ async def token_refresh_loop() -> None:
     """Runs every 30 minutes, proactively refreshing provider tokens expiring within 60 minutes."""
     log.info("Provider token refresh loop started")
     while True:
-        await asyncio.sleep(_LOOP_INTERVAL_SECONDS)
         try:
             await _refresh_expiring_tokens()
         except Exception:
             log.exception("Provider token refresh loop iteration failed")
+        await asyncio.sleep(_LOOP_INTERVAL_SECONDS)
 
 
 async def _refresh_expiring_tokens() -> None:

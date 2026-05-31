@@ -202,7 +202,13 @@ class TestRefreshExpiringTokens:
         self, reg_session_factory, seeded_user
     ):
         async with reg_session_factory() as s:
-            conn_a = _make_conn(seeded_user, "strava", expires_in=timedelta(minutes=10))
+            # Use distinct refresh tokens so the mock can fail deterministically
+            # by token value rather than by call order (SQL has no guaranteed ORDER BY).
+            conn_a = _make_conn(
+                seeded_user, "strava",
+                expires_in=timedelta(minutes=10),
+                refresh_token="bad-refresh-tok",
+            )
             s.add(conn_a)
             await s.flush()
             conn_a_id = conn_a.id
@@ -211,17 +217,17 @@ class TestRefreshExpiringTokens:
             user2 = User(id="user-2", username="tester2", password_hash="x")
             s.add(user2)
             await s.flush()
-            conn_b = _make_conn("user-2", "strava", expires_in=timedelta(minutes=10))
+            conn_b = _make_conn(
+                "user-2", "strava",
+                expires_in=timedelta(minutes=10),
+                refresh_token="good-refresh-tok",
+            )
             s.add(conn_b)
             await s.commit()
             conn_b_id = conn_b.id
 
-        call_count = 0
-
         async def _flaky_refresh(refresh_token: str):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
+            if refresh_token == "bad-refresh-tok":
                 raise RuntimeError("provider API error")
             return {
                 "access_token": "second-ok",
@@ -250,8 +256,8 @@ class TestRefreshExpiringTokens:
             a = await s.get(ProviderConnection, conn_a_id)
             b = await s.get(ProviderConnection, conn_b_id)
 
-        assert a.access_token == "old-access"  # first call failed
-        assert b.access_token == "second-ok"   # second call succeeded
+        assert a.access_token == "old-access"  # bad token — refresh failed
+        assert b.access_token == "second-ok"   # good token — refresh succeeded
 
 
 # ── token_refresh_loop ─────────────────────────────────────────────────────────
@@ -266,18 +272,19 @@ class TestTokenRefreshLoop:
             call_count += 1
             raise RuntimeError("boom")
 
-        with patch(
-            "backend.app.services.token_refresh._refresh_expiring_tokens",
-            side_effect=_failing_refresh,
+        # Patch the interval to 0 so asyncio.sleep(0) is a real checkpoint that
+        # yields to the event loop — avoids globally replacing asyncio.sleep which
+        # would also break the test's own yields.
+        with (
+            patch("backend.app.services.token_refresh._LOOP_INTERVAL_SECONDS", 0),
+            patch(
+                "backend.app.services.token_refresh._refresh_expiring_tokens",
+                side_effect=_failing_refresh,
+            ),
         ):
             task = asyncio.create_task(token_refresh_loop())
-            # Advance past the initial sleep by mocking asyncio.sleep
-            # Run the loop for two iterations via controlled sleep patches
-            with patch("backend.app.services.token_refresh.asyncio.sleep", AsyncMock()):
-                await asyncio.sleep(0)  # yield to the event loop
-                await asyncio.sleep(0)
-                await asyncio.sleep(0)
-
+            await asyncio.sleep(0)  # let the task start and call _refresh_expiring_tokens
+            await asyncio.sleep(0)  # let it complete the iteration and loop back
             task.cancel()
             try:
                 await task

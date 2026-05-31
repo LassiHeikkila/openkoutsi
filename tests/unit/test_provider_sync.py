@@ -148,6 +148,49 @@ class TestEnsureFreshToken:
             token = await ensure_fresh_token(conn, session)
         assert token == "access-tok"
 
+    async def test_token_expiring_within_lookahead_is_refreshed(self, session):
+        conn = _mock_conn(
+            token_expires_at=datetime.now(timezone.utc) + timedelta(seconds=30)
+        )
+        mock_cls = MagicMock()
+        mock_cls.refresh_access_token = AsyncMock(
+            return_value={
+                "access_token": "proactive-token",
+                "refresh_token": "new-refresh",
+                "expires_at": 9999999999,
+            }
+        )
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
+            token = await ensure_fresh_token(conn, session)
+        assert token == "proactive-token"
+
+    async def test_token_expiring_beyond_lookahead_is_not_refreshed(self, session):
+        conn = _mock_conn(
+            token_expires_at=datetime.now(timezone.utc) + timedelta(minutes=5)
+        )
+        mock_cls = MagicMock()
+        mock_cls.refresh_access_token = AsyncMock()
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
+            token = await ensure_fresh_token(conn, session)
+        assert token == "access-tok"
+        mock_cls.refresh_access_token.assert_not_called()
+
+    async def test_custom_lookahead_triggers_early_refresh(self, session):
+        conn = _mock_conn(
+            token_expires_at=datetime.now(timezone.utc) + timedelta(minutes=30)
+        )
+        mock_cls = MagicMock()
+        mock_cls.refresh_access_token = AsyncMock(
+            return_value={
+                "access_token": "early-token",
+                "refresh_token": "new-refresh",
+                "expires_at": 9999999999,
+            }
+        )
+        with patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}):
+            token = await ensure_fresh_token(conn, session, lookahead=timedelta(hours=1))
+        assert token == "early-token"
+
 
 # ── sync_provider_activities ───────────────────────────────────────────────────
 

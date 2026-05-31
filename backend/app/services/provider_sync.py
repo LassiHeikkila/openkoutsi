@@ -102,12 +102,17 @@ def _winning_priority(activity: Activity) -> int:
 # ── Token management ──────────────────────────────────────────────────────────
 
 
-async def ensure_fresh_token(conn: ProviderConnection, session: AsyncSession) -> str:
-    """Refresh the access token if it has expired. Returns current token."""
+async def ensure_fresh_token(
+    conn: ProviderConnection,
+    session: AsyncSession,
+    *,
+    lookahead: timedelta = timedelta(seconds=60),
+) -> str:
+    """Refresh the access token if it expires within lookahead. Returns current token."""
     expires_at = conn.token_expires_at
     if expires_at is not None and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at and datetime.now(timezone.utc) >= expires_at and conn.refresh_token:
+    if expires_at and datetime.now(timezone.utc) + lookahead >= expires_at and conn.refresh_token:
         client_cls = PROVIDERS.get(conn.provider)
         if client_cls is None:
             log.warning("Unknown provider %s — cannot refresh token", conn.provider)

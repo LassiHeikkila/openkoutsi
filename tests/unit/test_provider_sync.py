@@ -191,6 +191,24 @@ class TestEnsureFreshToken:
             token = await ensure_fresh_token(conn, session, lookahead=timedelta(hours=1))
         assert token == "early-token"
 
+    async def test_refresh_failure_is_logged_and_reraised(self, session):
+        conn = _mock_conn(
+            token_expires_at=datetime.now(timezone.utc) - timedelta(hours=1)
+        )
+        mock_cls = MagicMock()
+        mock_cls.refresh_access_token = AsyncMock(side_effect=RuntimeError("provider down"))
+
+        with (
+            patch("backend.app.services.provider_sync.PROVIDERS", {"strava": mock_cls}),
+            patch("backend.app.services.provider_sync.log") as mock_log,
+        ):
+            with pytest.raises(RuntimeError, match="provider down"):
+                await ensure_fresh_token(conn, session)
+
+        mock_log.error.assert_called_once()
+        call_args = mock_log.error.call_args
+        assert "strava" in call_args.args[1]
+
 
 # ── sync_provider_activities ───────────────────────────────────────────────────
 

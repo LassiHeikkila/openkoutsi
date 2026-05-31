@@ -118,13 +118,24 @@ async def ensure_fresh_token(
             log.warning("Unknown provider %s — cannot refresh token", conn.provider)
             return conn.access_token or ""
 
-        tokens = await client_cls.refresh_access_token(conn.refresh_token)  # type: ignore[arg-type]
+        try:
+            tokens = await client_cls.refresh_access_token(conn.refresh_token)  # type: ignore[arg-type]
+        except Exception:
+            log.error(
+                "Failed to refresh %s token for user %s",
+                conn.provider,
+                conn.user_id,
+                exc_info=True,
+            )
+            raise
+
         conn.access_token = tokens["access_token"]
         conn.refresh_token = tokens["refresh_token"]
         conn.token_expires_at = datetime.fromtimestamp(
             tokens["expires_at"], tz=timezone.utc
         )
         await session.commit()
+        log.info("Refreshed %s token for user %s", conn.provider, conn.user_id)
 
     return conn.access_token or ""
 

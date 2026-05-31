@@ -6,6 +6,8 @@ Requires the `fit-tool` package (add to pyproject.toml and run `uv sync`).
 
 from __future__ import annotations
 
+import copy
+
 from openkoutsi.workout_formats.base import AbstractWorkoutExporter, ExporterMeta
 
 try:
@@ -35,14 +37,42 @@ _INTENSITY = {
     "other": "ACTIVE",
 }
 
+# Maximum note length devices reliably display; the FIT field is bounded too.
+_FIT_NOTE_MAX = 50
 
-def _flatten_steps(steps: list[dict], *, _offset: int = 0) -> list[dict]:
+
+def _annotate_rep(step: dict, rep: int, count: int) -> dict:
+    """Append a compact ``(#rep/count)`` marker to ``step``'s notes (mutating and
+    returning it) so individual repeats are distinguishable on-device.
+
+    The marker is always kept; if the existing note is long it is truncated so
+    that ``note + " " + marker`` still fits within ``_FIT_NOTE_MAX`` — otherwise
+    the downstream truncation in ``_build_fit_bytes`` would cut the marker off.
+    """
+    marker = f"(#{rep}/{count})"
+    existing = step.get("notes")
+    if existing:
+        keep = _FIT_NOTE_MAX - len(marker) - 1  # room for a separating space
+        existing = existing[:keep].rstrip() if keep > 0 else ""
+        step["notes"] = f"{existing} {marker}".strip()
+    else:
+        step["notes"] = marker
+    return step
+
+
+def _flatten_steps(steps: list[dict]) -> list[dict]:
     """
     Linearise the step tree into a flat list suitable for FIT message encoding.
 
-    RepeatBlock is encoded as a special step with duration_type=REPEAT_UNTIL_STEPS_CMPLT,
-    pointing back to the first child step. The repeat step is inserted AFTER the child steps
-    (that is how FIT repeat steps work — they are a "loop back" marker).
+    Repeat blocks are *flattened* — instead of emitting a native FIT
+    REPEAT_UNTIL_STEPS_CMPLT "loop back" marker (which Wahoo devices render
+    incorrectly, see issue #73), each block's children are duplicated
+    ``repeat_count`` times so every interval becomes an independent step. Nested
+    repeats are expanded inner-first. Each duplicated step gets a ``(#rep/count)``
+    marker appended to its notes so reps can be told apart on the device.
+
+    The result is a flat list of ``{"_type": "step", ...}`` dicts in execution
+    order; no repeat markers remain.
     """
     result: list[dict] = []
 
@@ -51,14 +81,14 @@ def _flatten_steps(steps: list[dict], *, _offset: int = 0) -> list[dict]:
         if kind == "step":
             result.append({"_type": "step", **step})
         elif kind == "repeat":
-            children = step.get("steps", [])
-            first_child_abs_idx = _offset + len(result)
-            result.extend(_flatten_steps(children, _offset=first_child_abs_idx))
-            result.append({
-                "_type": "repeat",
-                "repeat_count": step.get("repeat_count", 1),
-                "steps_back": first_child_abs_idx,
-            })
+            children = _flatten_steps(step.get("steps", []))
+            count = step.get("repeat_count", 1)
+            # Duplicate the (already-expanded) children once per repetition. A
+            # large repeat_count produces a correspondingly long step list, but
+            # that is unambiguous for every device.
+            for rep in range(1, count + 1):
+                for child in children:
+                    result.append(_annotate_rep(copy.deepcopy(child), rep, count))
 
     return result
 
@@ -81,15 +111,6 @@ def _build_fit_bytes(
 
     for step in flat_steps:
         msg = WorkoutStepMessage()
-
-        if step["_type"] == "repeat":
-            msg.duration_type = WorkoutStepDuration.REPEAT_UNTIL_STEPS_CMPLT
-            msg.duration_value = step["steps_back"]
-            msg.target_type = WorkoutStepTarget.OPEN
-            msg.target_value = step["repeat_count"]
-            msg.intensity = Intensity.ACTIVE
-            builder.add(msg)
-            continue
 
         dur = step.get("duration", {})
         if dur.get("type") == "time":
@@ -140,7 +161,7 @@ def _build_fit_bytes(
         msg.intensity = getattr(Intensity, intensity_name, Intensity.ACTIVE)
 
         if step.get("notes"):
-            msg.notes = step["notes"][:50]
+            msg.notes = step["notes"][:_FIT_NOTE_MAX]
 
         builder.add(msg)
 

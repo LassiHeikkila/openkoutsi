@@ -45,63 +45,66 @@ class TestFlattenSteps:
     def test_empty_list(self):
         assert _flatten_steps([]) == []
 
-    def test_repeat_inserts_loop_marker_after_children(self):
+    def test_no_repeat_markers_emitted(self):
+        # Flattening must never leave a "repeat" marker behind — every entry is a step.
+        flat = _flatten_steps([_repeat(3, [_step(seconds=60), _step(step_type="recovery", seconds=30)])])
+        assert all(f["_type"] == "step" for f in flat)
+
+    def test_repeat_duplicates_children(self):
         block = _repeat(3, [_step(seconds=60), _step(step_type="recovery", seconds=30)])
         flat = _flatten_steps([block])
-        # 2 child steps + 1 repeat marker = 3 total
-        assert len(flat) == 3
-        assert flat[0]["_type"] == "step"
-        assert flat[1]["_type"] == "step"
-        assert flat[2]["_type"] == "repeat"
-        assert flat[2]["repeat_count"] == 3
-        assert flat[2]["steps_back"] == 0  # first child is at absolute index 0
+        # 2 children x 3 reps = 6 expanded steps
+        assert len(flat) == 6
+        # order: active, recovery, active, recovery, active, recovery
+        assert [f["step_type"] for f in flat] == [
+            "active", "recovery", "active", "recovery", "active", "recovery",
+        ]
 
-    def test_repeat_steps_back_correct_for_single_child(self):
-        block = _repeat(5, [_step()])
-        flat = _flatten_steps([block])
-        assert flat[1]["steps_back"] == 0  # first child is at absolute index 0
+    def test_repeat_single_child(self):
+        flat = _flatten_steps([_repeat(5, [_step()])])
+        assert len(flat) == 5
+        assert all(f["_type"] == "step" for f in flat)
+
+    def test_rep_counter_appended_to_notes(self):
+        flat = _flatten_steps([_repeat(3, [_step()])])
+        assert flat[0]["notes"] == "(#1/3)"
+        assert flat[1]["notes"] == "(#2/3)"
+        assert flat[2]["notes"] == "(#3/3)"
+
+    def test_rep_counter_preserves_existing_notes(self):
+        flat = _flatten_steps([_repeat(2, [_step(notes="Hard effort")])])
+        assert flat[0]["notes"] == "Hard effort (#1/2)"
+        assert flat[1]["notes"] == "Hard effort (#2/2)"
+
+    def test_rep_counter_survives_long_notes(self):
+        # A note at/over the 50-char FIT limit must still end with the rep marker
+        # (the original note is truncated to make room), not have it cut off.
+        long_note = "x" * 60
+        flat = _flatten_steps([_repeat(3, [_step(notes=long_note)])])
+        for rep in range(1, 4):
+            notes = flat[rep - 1]["notes"]
+            assert len(notes) <= 50
+            assert notes.endswith(f"(#{rep}/3)")
 
     def test_nested_repeats(self):
+        # outer 3 x (inner 2 x step) = 6 steps
         inner = _repeat(2, [_step()])
         outer = _repeat(3, [inner])
         flat = _flatten_steps([outer])
-        # flat: [step(0), INNER_REPEAT(1), OUTER_REPEAT(2)]
-        assert len(flat) == 3
-        assert flat[-1]["repeat_count"] == 3
-        # Both inner and outer start at step 0 — no preceding steps
-        assert flat[1]["steps_back"] == 0  # inner repeat: first child at index 0
-        assert flat[2]["steps_back"] == 0  # outer repeat: first child at index 0
-
-    def test_nested_repeat_with_preceding_step_uses_absolute_index(self):
-        # Flat: [step_a(0), step_b(1), INNER_REPEAT(2), OUTER_REPEAT(3)]
-        # INNER_REPEAT must point to step_b at absolute index 1, not local index 0.
-        flat = _flatten_steps([_step(), _repeat(3, [_repeat(2, [_step()])])])
-        assert len(flat) == 4
-        inner_repeat = flat[2]
-        outer_repeat = flat[3]
-        assert inner_repeat["_type"] == "repeat"
-        assert outer_repeat["_type"] == "repeat"
-        # Both should point to step_b at absolute index 1
-        assert inner_repeat["steps_back"] == 1
-        assert outer_repeat["steps_back"] == 1
+        assert len(flat) == 6
+        assert all(f["_type"] == "step" for f in flat)
 
     def test_mixed_steps_and_repeat(self):
         flat = _flatten_steps([_step(), _repeat(2, [_step()]), _step()])
-        assert len(flat) == 4  # warmup + (1 step + 1 repeat marker) + cooldown
+        # warmup + (1 child x 2 reps) + cooldown = 4 steps
+        assert len(flat) == 4
+        assert all(f["_type"] == "step" for f in flat)
 
-    def test_repeat_steps_back_is_first_child_absolute_index_not_child_count(self):
-        # [step(0), repeat_children_start(1), repeat_child(1), REPEAT_marker]
-        # steps_back must be 1 (first child absolute index), not 1 (coincidence here)
-        # Use a case where they differ: two preceding steps, two children.
-        # Flat: [step(0), step(1), child_a(2), child_b(3), REPEAT]
-        # steps_back (child count) = 2, first_child_idx = 2 — same here too!
-        # Use: [step(0), child_a(1), child_b(2), REPEAT] — preceding=1, children=2.
-        # steps_back (child count) = 2, first_child_idx = 1 — different!
+    def test_multiple_children_preceded_by_step(self):
         flat = _flatten_steps([_step(), _repeat(3, [_step(), _step()])])
-        # flat: [step(0), child_a(1), child_b(2), REPEAT(3)]
-        repeat = flat[3]
-        assert repeat["_type"] == "repeat"
-        assert repeat["steps_back"] == 1  # absolute index of first child, not child count (2)
+        # 1 preceding step + (2 children x 3 reps) = 7 steps
+        assert len(flat) == 7
+        assert all(f["_type"] == "step" for f in flat)
 
 
 class TestFitWorkoutExporter:
@@ -184,7 +187,7 @@ class TestFitWorkoutExporter:
         result = exporter.export([block], "Intervals", None, 250, None)
         assert isinstance(result, bytes)
 
-    def test_repeat_count_encoded(self):
+    def test_repeat_flattened_no_marker(self):
         exporter = FitWorkoutExporter()
         block = _repeat(3, [
             _step(seconds=1200, spec={"type": "pct_ftp", "pct": 90}),
@@ -192,14 +195,13 @@ class TestFitWorkoutExporter:
         ])
         data = exporter.export([block], "3x20", None, 250, None)
         decoded = _decode_steps(data)
-        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
-        assert repeat_step.get("repeat_steps") == 3
-        assert repeat_step.get("duration_step") == 0  # first child is at absolute index 0
+        # No native repeat marker — the block is expanded into 2 x 3 = 6 steps.
+        assert not any(s.get("duration_type") == "repeat_until_steps_cmplt" for s in decoded)
+        assert len(decoded) == 6
 
-    def test_repeat_only_workout_duration_step_is_zero(self):
-        # Flat layout: [active(0), recovery(1), REPEAT(2)]
-        # The repeat marker must reference step index 0 (where the block starts),
-        # not the child-step count (2). Wahoo uses duration_step as an absolute index.
+    def test_repeat_only_workout_expands_to_step_sequence(self):
+        # The block [active, recovery] repeated 3x becomes 6 sequential steps,
+        # alternating active/recovery, with no loop-back marker.
         exporter = FitWorkoutExporter()
         block = _repeat(3, [
             _step(seconds=60, spec={"type": "pct_ftp", "pct": 120}),
@@ -207,13 +209,13 @@ class TestFitWorkoutExporter:
         ])
         data = exporter.export([block], "Intervals", None, 250, None)
         decoded = _decode_steps(data)
-        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
-        assert repeat_step["duration_step"] == 0  # first child is at absolute index 0
+        assert len(decoded) == 6
+        assert [s["intensity"] for s in decoded] == [
+            "active", "recovery", "active", "recovery", "active", "recovery",
+        ]
 
-    def test_repeat_after_warmup_duration_step_is_one(self):
-        # Flat layout: [warmup(0), active(1), recovery(2), REPEAT(3)]
-        # The repeat marker must reference step index 1 (the active step),
-        # not 2 (the child-step count). Offset warmup proves the index is absolute.
+    def test_repeat_after_warmup_expands_in_order(self):
+        # warmup + 5x(active+recovery) → 1 + 10 = 11 sequential steps.
         exporter = FitWorkoutExporter()
         steps = [
             _step(step_type="warmup", seconds=600),
@@ -224,12 +226,15 @@ class TestFitWorkoutExporter:
         ]
         data = exporter.export(steps, "Warmup + Intervals", None, 250, None)
         decoded = _decode_steps(data)
-        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
-        assert repeat_step["duration_step"] == 1  # first child is at absolute index 1
+        assert len(decoded) == 11
+        assert decoded[0]["intensity"] == "warmup"
+        assert all(s.get("duration_type") != "repeat_until_steps_cmplt" for s in decoded)
+        # rep counters present on the repeated steps
+        assert decoded[1]["notes"].endswith("(#1/5)")
+        assert decoded[-1]["notes"].endswith("(#5/5)")
 
-    def test_full_structured_workout_repeat_encodes_correct_step_index(self):
-        # Flat layout: [warmup(0), active(1), recovery(2), REPEAT(3), cooldown(4)]
-        # The repeat marker must reference step index 1, not 2.
+    def test_full_structured_workout_expands_block(self):
+        # warmup + 3x(active+recovery) + cooldown → 1 + 6 + 1 = 8 steps.
         exporter = FitWorkoutExporter()
         steps = [
             _step(step_type="warmup", seconds=600),
@@ -241,9 +246,23 @@ class TestFitWorkoutExporter:
         ]
         data = exporter.export(steps, "Full Workout", None, 250, None)
         decoded = _decode_steps(data)
-        repeat_step = next(s for s in decoded if s.get("duration_type") == "repeat_until_steps_cmplt")
-        assert repeat_step["duration_step"] == 1  # first child is at absolute index 1
-        assert repeat_step["repeat_steps"] == 3
+        assert len(decoded) == 8
+        assert decoded[0]["intensity"] == "warmup"
+        assert decoded[-1]["intensity"] == "cooldown"
+        assert not any(s.get("duration_type") == "repeat_until_steps_cmplt" for s in decoded)
+
+    def test_nested_repeat_expands_fully(self):
+        # outer 3 x (inner 2 x active) = 6 active steps, no markers.
+        exporter = FitWorkoutExporter()
+        steps = [
+            _repeat(3, [
+                _repeat(2, [_step(seconds=60, spec={"type": "pct_ftp", "pct": 110})]),
+            ]),
+        ]
+        data = exporter.export(steps, "Nested", None, 250, None)
+        decoded = _decode_steps(data)
+        assert len(decoded) == 6
+        assert all(s.get("duration_type") != "repeat_until_steps_cmplt" for s in decoded)
 
     def test_export_distance_duration(self):
         exporter = FitWorkoutExporter()

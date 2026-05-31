@@ -101,17 +101,23 @@ def _winning_priority(activity: Activity) -> int:
 
 # ── Token management ──────────────────────────────────────────────────────────
 
+# How far ahead to refresh before actual expiry, per provider.
+# Strava tokens last 6 h — refresh when ≤30 min remain (Strava's own recommendation).
+# Wahoo tokens last 2 h — 1 min is enough; Wahoo revokes old tokens on refresh so
+# we refresh as late as possible to avoid unnecessary rotations.
+_REFRESH_LOOKAHEAD: dict[str, timedelta] = {
+    "strava": timedelta(minutes=30),
+    "wahoo": timedelta(minutes=1),
+}
+_DEFAULT_REFRESH_LOOKAHEAD = timedelta(minutes=1)
 
-async def ensure_fresh_token(
-    conn: ProviderConnection,
-    session: AsyncSession,
-    *,
-    lookahead: timedelta = timedelta(seconds=60),
-) -> str:
-    """Refresh the access token if it expires within lookahead. Returns current token."""
+
+async def ensure_fresh_token(conn: ProviderConnection, session: AsyncSession) -> str:
+    """Refresh the access token if it will expire soon. Returns current token."""
     expires_at = conn.token_expires_at
     if expires_at is not None and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
+    lookahead = _REFRESH_LOOKAHEAD.get(conn.provider, _DEFAULT_REFRESH_LOOKAHEAD)
     if expires_at and datetime.now(timezone.utc) + lookahead >= expires_at and conn.refresh_token:
         client_cls = PROVIDERS.get(conn.provider)
         if client_cls is None:

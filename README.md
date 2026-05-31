@@ -24,6 +24,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Workout categorization** — automatic Coggan-style zone classification with manual override
 - **Strava + Wahoo sync** — OAuth integrations with history import and webhook updates through bridge services
 - **Zone sync** — sync HR/power zones and FTP from connected providers
+- **FTP estimation** — estimate FTP from your power curve via the 20-minute (95%) or Critical Power method, shown on the Power view, and accept either to set your profile FTP
 - **Fitness metrics** — CTL/ATL/TSB computed and shown as interactive charts; stale metrics caused by deleted activities are detected and corrected automatically on dashboard load
 - **Training calendar** — dashboard calendar shows both performed and planned workouts with distinct visual markers
 - **Training plan generation** — periodized plans (Base → Build → Peak → Taper)

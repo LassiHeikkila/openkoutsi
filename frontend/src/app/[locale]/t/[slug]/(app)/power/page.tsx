@@ -5,8 +5,11 @@ import { useParams } from 'next/navigation'
 import { Link } from '@/navigation'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
-import { fetcher } from '@/lib/api'
-import type { AllTimePowerBests, PowerBestEntry } from '@/lib/types'
+import { fetcher, apiFetch } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { toast } from '@/components/ui/use-toast'
+import type { AllTimePowerBests, FtpEstimate, PowerBestEntry } from '@/lib/types'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PowerCurveChart, formatDuration } from '@/components/charts/PowerCurveChart'
 
@@ -68,6 +71,115 @@ const RANGE_OPTIONS = [
   { label: '6M',  days: 180 },
   { label: '3M',  days: 90  },
 ] as const
+
+function FtpEstimateRow({
+  label,
+  detail,
+  value,
+  available,
+  onAccept,
+  accepting,
+}: {
+  label: string
+  detail?: string
+  value: number | null
+  available: boolean
+  onAccept: () => void
+  accepting: boolean
+}) {
+  const t = useTranslations('app')
+  return (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <div>
+        <div className="font-medium">{label}</div>
+        {available && detail && (
+          <div className="text-xs text-muted-foreground">{detail}</div>
+        )}
+      </div>
+      <div className="flex items-center gap-3">
+        {available && value != null ? (
+          <>
+            <span className="text-lg font-semibold tabular-nums">{value} W</span>
+            <Button size="sm" variant="outline" disabled={accepting} onClick={onAccept}>
+              {t('power.ftpAccept')}
+            </Button>
+          </>
+        ) : (
+          <span className="text-sm text-muted-foreground">{t('power.ftpInsufficientData')}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FtpEstimateCard({ rangeDays }: { rangeDays: number | null }) {
+  const t = useTranslations('app')
+  const tCommon = useTranslations('common')
+  const { refreshAthlete } = useAuth()
+  const [accepting, setAccepting] = useState<string | null>(null)
+
+  const ftpKey = rangeDays != null
+    ? `/api/power/ftp-estimate?days=${rangeDays}`
+    : '/api/power/ftp-estimate'
+  const { data: ftp, isLoading } = useSWR<FtpEstimate>(ftpKey, fetcher)
+
+  async function accept(value: number, method: 'cp' | '20min') {
+    setAccepting(method)
+    try {
+      await apiFetch('/api/athlete/', {
+        method: 'PUT',
+        body: JSON.stringify({ ftp: value, ftp_test_method: method }),
+      })
+      await refreshAthlete()
+      toast({ title: t('power.ftpAccepted', { ftp: value }) })
+    } catch (err) {
+      toast({
+        title: tCommon('error'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    } finally {
+      setAccepting(null)
+    }
+  }
+
+  const cpDetail = ftp?.cp != null && ftp?.w_prime != null
+    ? t('power.ftpCpDetail', { cp: Math.round(ftp.cp), wprime: (ftp.w_prime / 1000).toFixed(1) })
+    : undefined
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('power.ftpEstimate')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+            {t('power.loading')}
+          </div>
+        ) : (
+          <div className="divide-y">
+            <FtpEstimateRow
+              label={t('power.ftpSimple')}
+              value={ftp?.ftp_simple ?? null}
+              available={!!ftp?.simple_available}
+              accepting={accepting === '20min'}
+              onAccept={() => ftp?.ftp_simple != null && accept(ftp.ftp_simple, '20min')}
+            />
+            <FtpEstimateRow
+              label={t('power.ftpComplex')}
+              detail={cpDetail}
+              value={ftp?.ftp_cp ?? null}
+              available={!!ftp?.cp_available}
+              accepting={accepting === 'cp'}
+              onAccept={() => ftp?.ftp_cp != null && accept(ftp.ftp_cp, 'cp')}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function PowerPage() {
   const t = useTranslations('app')
@@ -134,6 +246,9 @@ export default function PowerPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* FTP estimate */}
+      <FtpEstimateCard rangeDays={rangeDays} />
 
       {/* Power all-time bests */}
       <Card>

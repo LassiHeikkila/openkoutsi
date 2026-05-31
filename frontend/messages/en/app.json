@@ -7,7 +7,14 @@
     "loading": "Loading…",
     "noData": "No power data yet. Upload a workout with a power meter to see your bests.",
     "noWeight": "no weight",
-    "rangeAll": "All"
+    "rangeAll": "All",
+    "ftpEstimate": "FTP Estimate",
+    "ftpSimple": "20-min method (95%)",
+    "ftpComplex": "Critical Power model",
+    "ftpAccept": "Accept",
+    "ftpAccepted": "FTP set to {ftp} W",
+    "ftpInsufficientData": "Not enough data",
+    "ftpCpDetail": "CP {cp} W · W′ {wprime} kJ"
   },
   "records": {
     "title": "Distance Records",

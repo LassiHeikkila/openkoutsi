@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -57,6 +57,7 @@ class AthleteUpdate(BaseModel):
     hr_zones: Optional[list[ZoneSchema]] = None
     power_zones: Optional[list[ZoneSchema]] = None
     app_settings: Optional[dict] = None
+    ftp_test_method: Optional[Literal["manual", "20min", "cp"]] = None
 
 
 class TrainingStatusBody(BaseModel):

@@ -3025,6 +3025,64 @@
         }
       }
     },
+    "/api/power/ftp-estimate": {
+      "get": {
+        "tags": [
+          "power"
+        ],
+        "summary": "Get Ftp Estimate",
+        "description": "Estimate FTP from the athlete's power curve using two methods:\n\n- Simple: 95% of the 20-minute (1200s) best power.\n- Critical Power: linear work\u2013time fit over the 2\u201320 minute bests (CP).\n\nBoth estimates use the rank-1 (single best) power per duration.  Pass\n?days=90/180/365 to estimate from a rolling window; omit for all-time.",
+        "operationId": "get_ftp_estimate_api_power_ftp_estimate_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Estimate from bests in the past N days. Omit for all-time.",
+              "title": "Days"
+            },
+            "description": "Estimate from bests in the past N days. Omit for all-time."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FtpEstimateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/plans/": {
       "get": {
         "tags": [
@@ -4857,6 +4915,22 @@
               }
             ],
             "title": "App Settings"
+          },
+          "ftp_test_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "20min",
+                  "cp"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ftp Test Method"
           }
         },
         "type": "object",
@@ -5184,6 +5258,77 @@
           "analysis"
         ],
         "title": "FrontendAnalysisBody"
+      },
+      "FtpEstimateResponse": {
+        "properties": {
+          "twenty_min_power": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twenty Min Power"
+          },
+          "ftp_simple": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ftp Simple"
+          },
+          "simple_available": {
+            "type": "boolean",
+            "title": "Simple Available",
+            "default": false
+          },
+          "cp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cp"
+          },
+          "w_prime": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "W Prime"
+          },
+          "ftp_cp": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ftp Cp"
+          },
+          "cp_available": {
+            "type": "boolean",
+            "title": "Cp Available",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "FtpEstimateResponse"
       },
       "FtpTestSchema": {
         "properties": {

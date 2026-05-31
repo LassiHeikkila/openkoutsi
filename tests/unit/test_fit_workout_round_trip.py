@@ -54,28 +54,32 @@ class TestRoundTrip:
         ]
         decoded = _decode(_export(steps, "5x2min"))
 
-        # Flat layout: warmup(0), active(1), recovery(2), REPEAT(3), cooldown(4)
-        assert len(decoded) == 5
+        # Flattened layout: warmup(0) + 5x(active, recovery) + cooldown = 12 steps
+        assert len(decoded) == 12
+        assert not any(s.get("duration_type") == "repeat_until_steps_cmplt" for s in decoded)
 
-        warmup, active, recovery, repeat, cooldown = decoded
+        warmup, cooldown = decoded[0], decoded[-1]
 
         assert warmup["intensity"] == "warmup"
         assert warmup["duration_type"] == "time"
         assert warmup["duration_time"] == pytest.approx(600.0)
 
-        assert active["intensity"] == "active"
-        assert active["duration_type"] == "time"
-        assert active["duration_time"] == pytest.approx(120.0)
-        assert active["target_type"] == "power"
-        assert active["custom_target_power_low"] == 100
-        assert active["custom_target_power_high"] == 100
+        # The 5 active/recovery pairs occupy indices 1..10.
+        for rep in range(5):
+            active = decoded[1 + rep * 2]
+            recovery = decoded[2 + rep * 2]
 
-        assert recovery["intensity"] == "recovery"
-        assert recovery["duration_time"] == pytest.approx(60.0)
+            assert active["intensity"] == "active"
+            assert active["duration_type"] == "time"
+            assert active["duration_time"] == pytest.approx(120.0)
+            assert active["target_type"] == "power"
+            assert active["custom_target_power_low"] == 100
+            assert active["custom_target_power_high"] == 100
+            assert active["notes"].endswith(f"(#{rep + 1}/5)")
 
-        assert repeat["duration_type"] == "repeat_until_steps_cmplt"
-        assert repeat["duration_step"] == 1   # first child (active) is at absolute index 1
-        assert repeat["repeat_steps"] == 5
+            assert recovery["intensity"] == "recovery"
+            assert recovery["duration_time"] == pytest.approx(60.0)
+            assert recovery["notes"].endswith(f"(#{rep + 1}/5)")
 
         assert cooldown["intensity"] == "cooldown"
         assert cooldown["duration_time"] == pytest.approx(600.0)
@@ -93,15 +97,14 @@ class TestRoundTrip:
         ]
         decoded = _decode(_export(steps, "3x5min"))
 
-        assert len(decoded) == 3
-        assert decoded[0]["intensity"] == "active"
+        # [active, recovery] x 3 = 6 flattened steps, no repeat marker.
+        assert len(decoded) == 6
+        assert not any(s.get("duration_type") == "repeat_until_steps_cmplt" for s in decoded)
+        assert [s["intensity"] for s in decoded] == [
+            "active", "recovery", "active", "recovery", "active", "recovery",
+        ]
         assert decoded[0]["target_type"] == "power"
         assert decoded[0]["target_power_zone"] == 4
-
-        repeat = decoded[2]
-        assert repeat["duration_type"] == "repeat_until_steps_cmplt"
-        assert repeat["duration_step"] == 0
-        assert repeat["repeat_steps"] == 3
 
     def test_multiple_repeat_blocks(self):
         """Two back-to-back repeat blocks — second block's marker must reference correct index."""
@@ -127,18 +130,15 @@ class TestRoundTrip:
         ]
         decoded = _decode(_export(steps, "Mixed"))
 
-        # Flat: warmup(0), active1(1), rec1(2), REPEAT1(3), active2(4), rec2(5), REPEAT2(6), cooldown(7)
-        assert len(decoded) == 8
-
-        repeat1 = decoded[3]
-        assert repeat1["duration_type"] == "repeat_until_steps_cmplt"
-        assert repeat1["duration_step"] == 1
-        assert repeat1["repeat_steps"] == 3
-
-        repeat2 = decoded[6]
-        assert repeat2["duration_type"] == "repeat_until_steps_cmplt"
-        assert repeat2["duration_step"] == 4
-        assert repeat2["repeat_steps"] == 2
+        # Flattened: warmup + 3x(active,recovery) + 2x(active,recovery) + cooldown
+        # = 1 + 6 + 4 + 1 = 12 steps, no repeat markers.
+        assert len(decoded) == 12
+        assert not any(s.get("duration_type") == "repeat_until_steps_cmplt" for s in decoded)
+        assert decoded[0]["intensity"] == "warmup"
+        assert decoded[-1]["intensity"] == "cooldown"
+        # First block reps run 60s active; second block reps run 300s active.
+        assert decoded[1]["duration_time"] == pytest.approx(60.0)
+        assert decoded[7]["duration_time"] == pytest.approx(300.0)
 
     def test_hr_absolute_target_round_trip(self):
         """HR absolute targets encode into custom_target_heart_rate_low/high, not target_value."""
@@ -182,7 +182,7 @@ class TestRoundTrip:
         assert decoded[0]["custom_target_power_high"] == 1250
 
     def test_nested_repeat_round_trip(self):
-        """Nested repeat: inner marker must point to the correct absolute step index."""
+        """Nested repeat flattens to outer x inner copies of the inner steps."""
         steps = [
             {"kind": "step", "step_type": "warmup",
              "duration": {"type": "time", "seconds": 300}},
@@ -195,18 +195,11 @@ class TestRoundTrip:
         ]
         decoded = _decode(_export(steps, "Nested"))
 
-        # Flat: warmup(0), active(1), INNER_REPEAT(2), OUTER_REPEAT(3)
-        assert len(decoded) == 4
-
-        inner_repeat = decoded[2]
-        assert inner_repeat["duration_type"] == "repeat_until_steps_cmplt"
-        assert inner_repeat["duration_step"] == 1   # active is at absolute index 1
-        assert inner_repeat["repeat_steps"] == 2
-
-        outer_repeat = decoded[3]
-        assert outer_repeat["duration_type"] == "repeat_until_steps_cmplt"
-        assert outer_repeat["duration_step"] == 1   # outer block also starts at active (index 1)
-        assert outer_repeat["repeat_steps"] == 3
+        # Flattened: warmup + (3 x 2 = 6 active steps) = 7 steps, no markers.
+        assert len(decoded) == 7
+        assert not any(s.get("duration_type") == "repeat_until_steps_cmplt" for s in decoded)
+        assert decoded[0]["intensity"] == "warmup"
+        assert all(s["intensity"] == "active" for s in decoded[1:])
 
 
 # ---------------------------------------------------------------------------
@@ -228,8 +221,9 @@ class TestDescribeFitWorkout:
         output = describe_fit_workout(_export(steps, "W"))
         assert "2 steps" in output
 
-    def test_repeat_marker_shows_target_step_and_count(self):
-        """The description must make the repeat target index and count immediately visible."""
+    def test_repeat_block_flattened_in_description(self):
+        """Repeat blocks are flattened, so the description lists every expanded step
+        (warmup + 4x(active,recovery) = 9 steps) and contains no repeat marker."""
         steps = [
             {"kind": "step", "step_type": "warmup", "duration": {"type": "time", "seconds": 300}},
             {"kind": "repeat", "repeat_count": 4, "steps": [
@@ -240,9 +234,9 @@ class TestDescribeFitWorkout:
             ]},
         ]
         output = describe_fit_workout(_export(steps, "Intervals"))
-        # Repeat marker should reference step 1 (active) and repeat 4 times
-        assert "→1" in output
-        assert "×4" in output
+        assert "9 steps" in output
+        # No native repeat loop-back marker remains.
+        assert "→" not in output
 
     def test_power_pct_ftp_shown_in_description(self):
         steps = [{"kind": "step", "step_type": "active",

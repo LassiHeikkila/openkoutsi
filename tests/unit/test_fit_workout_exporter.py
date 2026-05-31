@@ -76,6 +76,16 @@ class TestFlattenSteps:
         assert flat[0]["notes"] == "Hard effort (#1/2)"
         assert flat[1]["notes"] == "Hard effort (#2/2)"
 
+    def test_rep_counter_survives_long_notes(self):
+        # A note at/over the 50-char FIT limit must still end with the rep marker
+        # (the original note is truncated to make room), not have it cut off.
+        long_note = "x" * 60
+        flat = _flatten_steps([_repeat(3, [_step(notes=long_note)])])
+        for rep in range(1, 4):
+            notes = flat[rep - 1]["notes"]
+            assert len(notes) <= 50
+            assert notes.endswith(f"(#{rep}/3)")
+
     def test_nested_repeats(self):
         # outer 3 x (inner 2 x step) = 6 steps
         inner = _repeat(2, [_step()])

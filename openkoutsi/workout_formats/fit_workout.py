@@ -37,13 +37,26 @@ _INTENSITY = {
     "other": "ACTIVE",
 }
 
+# Maximum note length devices reliably display; the FIT field is bounded too.
+_FIT_NOTE_MAX = 50
+
 
 def _annotate_rep(step: dict, rep: int, count: int) -> dict:
     """Append a compact ``(#rep/count)`` marker to ``step``'s notes (mutating and
-    returning it) so individual repeats are distinguishable on-device."""
+    returning it) so individual repeats are distinguishable on-device.
+
+    The marker is always kept; if the existing note is long it is truncated so
+    that ``note + " " + marker`` still fits within ``_FIT_NOTE_MAX`` — otherwise
+    the downstream truncation in ``_build_fit_bytes`` would cut the marker off.
+    """
     marker = f"(#{rep}/{count})"
     existing = step.get("notes")
-    step["notes"] = f"{existing} {marker}" if existing else marker
+    if existing:
+        keep = _FIT_NOTE_MAX - len(marker) - 1  # room for a separating space
+        existing = existing[:keep].rstrip() if keep > 0 else ""
+        step["notes"] = f"{existing} {marker}".strip()
+    else:
+        step["notes"] = marker
     return step
 
 
@@ -148,7 +161,7 @@ def _build_fit_bytes(
         msg.intensity = getattr(Intensity, intensity_name, Intensity.ACTIVE)
 
         if step.get("notes"):
-            msg.notes = step["notes"][:50]
+            msg.notes = step["notes"][:_FIT_NOTE_MAX]
 
         builder.add(msg)
 

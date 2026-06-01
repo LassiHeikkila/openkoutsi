@@ -50,6 +50,15 @@
       "targetValuePlaceholder": "e.g. 300",
       "createGoal": "Create goal",
       "creating": "Saving…"
+    },
+    "complete": {
+      "title": "Complete goal",
+      "achievedValue": "Achieved {metric}",
+      "achievedValuePlaceholder": "e.g. 305",
+      "outcomeNote": "Outcome",
+      "outcomeNotePlaceholder": "Did you reach the target? Any notes…",
+      "confirm": "Mark achieved",
+      "saving": "Saving…"
     }
   },
   "plan": {

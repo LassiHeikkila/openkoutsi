@@ -25,6 +25,7 @@ class TestCreateGoal:
         data = resp.json()
         assert data["title"] == "First Century"
         assert data["status"] == "active"
+        assert data["outcome_note"] is None
         assert "id" in data
         assert "athlete_id" in data
 
@@ -61,6 +62,67 @@ class TestUpdateGoal:
         data = resp.json()
         assert data["current_value"] == 280.0
         assert data["status"] == "active"
+
+    async def test_complete_with_value_and_outcome_note(self, client, auth_headers):
+        create_resp = await client.post(
+            "/api/goals/",
+            json={"title": "Improve FTP", "metric": "ftp_w", "target_value": 300.0},
+            headers=auth_headers,
+        )
+        goal_id = create_resp.json()["id"]
+
+        resp = await client.put(
+            f"/api/goals/{goal_id}",
+            json={
+                "status": "achieved",
+                "current_value": 305.0,
+                "outcome_note": "Hit target a week early",
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "achieved"
+        assert data["current_value"] == 305.0
+        assert data["outcome_note"] == "Hit target a week early"
+
+    async def test_complete_metricless_goal_with_note(self, client, auth_headers):
+        create_resp = await client.post(
+            "/api/goals/",
+            json={"title": "Finish first race"},
+            headers=auth_headers,
+        )
+        goal_id = create_resp.json()["id"]
+
+        resp = await client.put(
+            f"/api/goals/{goal_id}",
+            json={"status": "achieved", "outcome_note": "Done, felt great"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "achieved"
+        assert data["outcome_note"] == "Done, felt great"
+        assert data["current_value"] is None
+
+    async def test_partial_update_preserves_other_fields(self, client, auth_headers):
+        create_resp = await client.post(
+            "/api/goals/",
+            json={"title": "Improve FTP", "target_value": 300.0},
+            headers=auth_headers,
+        )
+        goal_id = create_resp.json()["id"]
+
+        resp = await client.put(
+            f"/api/goals/{goal_id}",
+            json={"outcome_note": "note only"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["outcome_note"] == "note only"
+        assert data["title"] == "Improve FTP"
+        assert data["target_value"] == 300.0
 
     async def test_unauthenticated_returns_401(self, client):
         resp = await client.put("/api/goals/some-id", json={"title": "X"})

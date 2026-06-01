@@ -5485,6 +5485,17 @@
             "type": "string",
             "title": "Status"
           },
+          "outcome_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Note"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -5580,6 +5591,17 @@
               }
             ],
             "title": "Status"
+          },
+          "outcome_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Note"
           }
         },
         "type": "object",

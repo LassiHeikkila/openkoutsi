@@ -20,6 +20,7 @@ class GoalUpdate(BaseModel):
     target_value: Optional[float] = None
     current_value: Optional[float] = None
     status: Optional[str] = None
+    outcome_note: Optional[str] = None
 
 
 class GoalResponse(BaseModel):
@@ -32,6 +33,7 @@ class GoalResponse(BaseModel):
     target_value: Optional[float] = None
     current_value: Optional[float] = None
     status: str
+    outcome_note: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

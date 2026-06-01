@@ -168,13 +168,18 @@ function GoalCompleteDialog({
     try {
       const data: { current_value?: number; outcome_note?: string } = {}
       if (goal.metric && currentValue.trim() !== '') {
-        data.current_value = parseFloat(currentValue)
+        const parsed = parseFloat(currentValue)
+        if (Number.isFinite(parsed)) {
+          data.current_value = parsed
+        }
       }
       if (outcomeNote.trim() !== '') {
         data.outcome_note = outcomeNote.trim()
       }
       await onComplete(data)
       setOpen(false)
+    } catch {
+      // onComplete surfaces the error via toast; keep the dialog open
     } finally {
       setSaving(false)
     }

@@ -158,6 +158,7 @@ export interface Goal {
   target_value: number | null
   current_value: number | null
   status: string
+  outcome_note: string | null
   created_at: string
 }
 

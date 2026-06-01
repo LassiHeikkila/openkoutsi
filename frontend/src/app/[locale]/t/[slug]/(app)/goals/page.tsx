@@ -8,6 +8,7 @@ import type { Goal, GoalCreate } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -146,6 +147,90 @@ function GoalForm({ onSave }: { onSave: (data: GoalCreate) => Promise<void> }) {
   )
 }
 
+function GoalCompleteDialog({
+  goal,
+  onComplete,
+}: {
+  goal: Goal
+  onComplete: (data: { current_value?: number; outcome_note?: string }) => Promise<void>
+}) {
+  const t = useTranslations('app')
+  const [currentValue, setCurrentValue] = useState(
+    goal.current_value != null ? String(goal.current_value) : '',
+  )
+  const [outcomeNote, setOutcomeNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const data: { current_value?: number; outcome_note?: string } = {}
+      if (goal.metric && currentValue.trim() !== '') {
+        data.current_value = parseFloat(currentValue)
+      }
+      if (outcomeNote.trim() !== '') {
+        data.outcome_note = outcomeNote.trim()
+      }
+      await onComplete(data)
+      setOpen(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-green-600"
+          title={t('goals.markAchieved')}
+        >
+          <CheckCircle2 className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('goals.complete.title')}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {goal.metric && (
+            <div className="space-y-2">
+              <Label htmlFor="goal-achieved-value">
+                {t('goals.complete.achievedValue', { metric: goal.metric })}
+              </Label>
+              <Input
+                id="goal-achieved-value"
+                type="number"
+                value={currentValue}
+                onChange={(e) => setCurrentValue(e.target.value)}
+                placeholder={t('goals.complete.achievedValuePlaceholder')}
+              />
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="goal-outcome">{t('goals.complete.outcomeNote')}</Label>
+            <Textarea
+              id="goal-outcome"
+              value={outcomeNote}
+              onChange={(e) => setOutcomeNote(e.target.value)}
+              placeholder={t('goals.complete.outcomeNotePlaceholder')}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>
+              {saving ? t('goals.complete.saving') : t('goals.complete.confirm')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function GoalsPage() {
   const t = useTranslations('app')
   const tCommon = useTranslations('common')
@@ -166,11 +251,14 @@ export default function GoalsPage() {
     }
   }
 
-  async function handleAchieve(id: string) {
+  async function handleComplete(
+    id: string,
+    data: { current_value?: number; outcome_note?: string },
+  ) {
     try {
       await apiFetch(`/api/goals/${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ status: 'achieved' }),
+        body: JSON.stringify({ status: 'achieved', ...data }),
       })
       await mutate()
       toast({ title: t('goals.goalAchieved') })
@@ -180,6 +268,7 @@ export default function GoalsPage() {
         description: err instanceof Error ? err.message : tCommon('unknownError'),
         variant: 'destructive',
       })
+      throw err
     }
   }
 
@@ -234,15 +323,10 @@ export default function GoalsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-green-600"
-                      title={t('goals.markAchieved')}
-                      onClick={() => handleAchieve(goal.id)}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                    </Button>
+                    <GoalCompleteDialog
+                      goal={goal}
+                      onComplete={(data) => handleComplete(goal.id, data)}
+                    />
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -285,13 +369,23 @@ export default function GoalsPage() {
           <div className="space-y-2">
             {achieved.map((goal) => (
               <Card key={goal.id} className="opacity-70">
-                <CardContent className="pt-3 pb-3 flex items-center justify-between gap-2">
-                  <div>
+                <CardContent className="pt-3 pb-3 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium line-through text-muted-foreground">
                       {goal.title}
                     </p>
+                    {goal.metric && goal.target_value != null && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {goal.metric}: {goal.current_value ?? '—'} / {goal.target_value}
+                      </p>
+                    )}
+                    {goal.outcome_note && (
+                      <p className="text-sm text-muted-foreground mt-1">{goal.outcome_note}</p>
+                    )}
                   </div>
-                  <Badge variant="secondary">{t('goals.achievedBadge')}</Badge>
+                  <Badge variant="secondary" className="shrink-0">
+                    {t('goals.achievedBadge')}
+                  </Badge>
                 </CardContent>
               </Card>
             ))}

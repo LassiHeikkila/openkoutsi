@@ -50,6 +50,15 @@
       "targetValuePlaceholder": "esim. 300",
       "createGoal": "Luo tavoite",
       "creating": "Tallennetaan…"
+    },
+    "complete": {
+      "title": "Merkitse tavoite saavutetuksi",
+      "achievedValue": "Saavutettu {metric}",
+      "achievedValuePlaceholder": "esim. 305",
+      "outcomeNote": "Lopputulos",
+      "outcomeNotePlaceholder": "Saavutitko tavoitteen? Lisätietoja…",
+      "confirm": "Merkitse saavutetuksi",
+      "saving": "Tallennetaan…"
     }
   },
   "plan": {

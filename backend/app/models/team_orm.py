@@ -269,6 +269,7 @@ class Goal(TeamBase):
     target_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     current_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String, default="active")
+    outcome_note: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     athlete: Mapped["Athlete"] = relationship("Athlete", back_populates="goals")

@@ -15,8 +15,13 @@ class PlannedWorkoutResponse(BaseModel):
     duration_min: Optional[int] = None
     target_tss: Optional[int] = None
     completed_activity_id: Optional[str] = None
+    skip_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class SkipWorkoutRequest(BaseModel):
+    reason: str
 
 
 class WorkoutCreate(BaseModel):

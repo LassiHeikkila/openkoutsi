@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { apiFetch } from '@/lib/api'
 import { toast } from '@/components/ui/use-toast'
 
@@ -47,6 +48,10 @@ interface ActivityListResponse {
   total: number
 }
 
+const SKIP_REASON_KEYS = [
+  'illness', 'injury', 'fatigue', 'busy', 'lazy', 'travel', 'weather', 'other',
+] as const
+
 export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props) {
   const t = useTranslations('app')
   const dayLabels = t.raw('plan.generate.dayNames') as string[]
@@ -60,17 +65,24 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
   const [linking, setLinking] = useState(false)
   const [showLinkPicker, setShowLinkPicker] = useState(false)
 
+  // Skip flow state
+  const [showSkipForm, setShowSkipForm] = useState(false)
+  const [selectedSkipKey, setSelectedSkipKey] = useState<string>('')
+  const [customReason, setCustomReason] = useState('')
+  const [skipping, setSkipping] = useState(false)
+
+  const _updateWorkout = (updated: PlannedWorkout) => {
+    setWorkoutsState((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
+    setSelected((s) => s && s.workout?.id === updated.id ? { ...s, workout: updated } : s)
+    onWorkoutUpdated?.(updated)
+  }
+
   const handleUnlink = async (workout: PlannedWorkout) => {
     try {
       await apiFetch(`/api/plans/${workout.plan_id}/workouts/${workout.id}/link`, {
         method: 'DELETE',
       })
-      const updated = { ...workout, completed_activity_id: null }
-      setWorkoutsState((prev) => prev.map((w) => (w.id === workout.id ? updated : w)))
-      setSelected((s) =>
-        s && s.workout?.id === workout.id ? { ...s, workout: updated } : s
-      )
-      onWorkoutUpdated?.(updated)
+      _updateWorkout({ ...workout, completed_activity_id: null })
       toast({ title: t('plan.unlinkSuccess') })
     } catch {
       toast({ title: t('plan.unlinkFailed'), variant: 'destructive' })
@@ -102,12 +114,7 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
         method: 'PUT',
         body: JSON.stringify({ activity_id: selectedActivityId }),
       })
-      const updated = { ...workout, completed_activity_id: selectedActivityId }
-      setWorkoutsState((prev) => prev.map((w) => (w.id === workout.id ? updated : w)))
-      setSelected((s) =>
-        s && s.workout?.id === workout.id ? { ...s, workout: updated } : s
-      )
-      onWorkoutUpdated?.(updated)
+      _updateWorkout({ ...workout, completed_activity_id: selectedActivityId })
       setShowLinkPicker(false)
       toast({ title: t('plan.linkSuccess') })
     } catch (err: unknown) {
@@ -118,12 +125,53 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
     }
   }
 
+  const handleSkip = async () => {
+    if (!selected?.workout || !selectedSkipKey) return
+    const workout = selected.workout
+    const reason = selectedSkipKey === 'other'
+      ? (customReason.trim() || t('plan.skipReasons.other' as never))
+      : t(`plan.skipReasons.${selectedSkipKey}` as never)
+
+    setSkipping(true)
+    try {
+      await apiFetch(`/api/plans/${workout.plan_id}/workouts/${workout.id}/skip`, {
+        method: 'PUT',
+        body: JSON.stringify({ reason }),
+      })
+      _updateWorkout({ ...workout, skip_reason: reason })
+      setShowSkipForm(false)
+      setSelectedSkipKey('')
+      setCustomReason('')
+      toast({ title: t('plan.skipSuccess') })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('plan.skipFailed')
+      toast({ title: msg, variant: 'destructive' })
+    } finally {
+      setSkipping(false)
+    }
+  }
+
+  const handleClearSkip = async (workout: PlannedWorkout) => {
+    try {
+      await apiFetch(`/api/plans/${workout.plan_id}/workouts/${workout.id}/skip`, {
+        method: 'DELETE',
+      })
+      _updateWorkout({ ...workout, skip_reason: null })
+      toast({ title: t('plan.clearSkipSuccess') })
+    } catch {
+      toast({ title: t('plan.clearSkipFailed'), variant: 'destructive' })
+    }
+  }
+
   const handleDialogClose = (open: boolean) => {
     if (!open) {
       setSelected(null)
       setShowLinkPicker(false)
       setSelectedActivityId('')
       setActivities([])
+      setShowSkipForm(false)
+      setSelectedSkipKey('')
+      setCustomReason('')
     }
   }
 
@@ -167,6 +215,9 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
                         setShowLinkPicker(false)
                         setSelectedActivityId('')
                         setActivities([])
+                        setShowSkipForm(false)
+                        setSelectedSkipKey('')
+                        setCustomReason('')
                         setSelected({
                           workout: workout ?? null,
                           label,
@@ -208,20 +259,36 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
           <div className="pt-1 space-y-3">
             {selected?.workout ? (
               <>
-                <WorkoutCard workout={selected.workout} onUnlink={handleUnlink} />
+                <WorkoutCard
+                  workout={selected.workout}
+                  onUnlink={handleUnlink}
+                  onClearSkip={handleClearSkip}
+                />
 
-                {selected.workout.completed_activity_id == null && (
+                {/* Action buttons — only when not yet completed and not skipped */}
+                {selected.workout.completed_activity_id == null &&
+                  selected.workout.skip_reason == null && (
                   <div className="space-y-2">
-                    {!showLinkPicker ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-xs"
-                        onClick={() => openLinkPicker(selected.date)}
-                      >
-                        {t('plan.markAsCompleted')}
-                      </Button>
-                    ) : (
+                    {!showLinkPicker && !showSkipForm ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs"
+                          onClick={() => openLinkPicker(selected.date)}
+                        >
+                          {t('plan.markAsCompleted')}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-xs"
+                          onClick={() => setShowSkipForm(true)}
+                        >
+                          {t('plan.skip')}
+                        </Button>
+                      </>
+                    ) : showLinkPicker ? (
                       <div className="space-y-2">
                         <p className="text-xs text-muted-foreground">{t('plan.selectActivity')}</p>
                         {loadingActivities ? (
@@ -260,6 +327,53 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
                             onClick={() => {
                               setShowLinkPicker(false)
                               setSelectedActivityId('')
+                            }}
+                          >
+                            {t('plan.unlinkCancel')}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-foreground">{t('plan.skipTitle')}</p>
+                        <Select value={selectedSkipKey} onValueChange={setSelectedSkipKey}>
+                          <SelectTrigger className="w-full text-xs h-9">
+                            <SelectValue placeholder={t('plan.skipTitle')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SKIP_REASON_KEYS.map((key) => (
+                              <SelectItem key={key} value={key} className="text-xs">
+                                {t(`plan.skipReasons.${key}` as never)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedSkipKey === 'other' && (
+                          <Textarea
+                            className="text-xs resize-none"
+                            rows={2}
+                            placeholder={t('plan.skipReasonPlaceholder')}
+                            value={customReason}
+                            onChange={(e) => setCustomReason(e.target.value)}
+                          />
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1 text-xs"
+                            disabled={!selectedSkipKey || skipping || (selectedSkipKey === 'other' && !customReason.trim())}
+                            onClick={handleSkip}
+                          >
+                            {skipping ? '…' : t('plan.skipConfirm')}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => {
+                              setShowSkipForm(false)
+                              setSelectedSkipKey('')
+                              setCustomReason('')
                             }}
                           >
                             {t('plan.unlinkCancel')}

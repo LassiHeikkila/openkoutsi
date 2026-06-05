@@ -317,6 +317,7 @@ class PlannedWorkout(TeamBase):
     workout_definition_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("workout_definitions.id", ondelete="SET NULL"), nullable=True
     )
+    skip_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     plan: Mapped["TrainingPlan"] = relationship("TrainingPlan", back_populates="workouts")
 

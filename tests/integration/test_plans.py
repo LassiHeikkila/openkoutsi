@@ -314,3 +314,81 @@ class TestLlmPlanGeneration:
         valid = _make_llm_plan_json(4)
         with pytest.raises(ValueError, match="Expected 6 weeks"):
             _parse_response(valid, 6)
+
+
+class TestSkipWorkout:
+    async def _create_plan_and_get_workout(self, client, auth_headers):
+        resp = await client.post(
+            "/api/plans/",
+            json={"name": "Skip Test Plan", "start_date": str(_START), "weeks": 1},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+        plan = resp.json()
+        workout = next(w for w in plan["workouts"] if w["workout_type"] != "rest")
+        return plan["id"], workout["id"]
+
+    async def test_skip_sets_reason(self, client, auth_headers):
+        plan_id, workout_id = await self._create_plan_and_get_workout(client, auth_headers)
+        resp = await client.put(
+            f"/api/plans/{plan_id}/workouts/{workout_id}/skip",
+            json={"reason": "illness"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["skip_reason"] == "illness"
+
+    async def test_skip_reason_persists_in_plan_response(self, client, auth_headers):
+        plan_id, workout_id = await self._create_plan_and_get_workout(client, auth_headers)
+        await client.put(
+            f"/api/plans/{plan_id}/workouts/{workout_id}/skip",
+            json={"reason": "Travel"},
+            headers=auth_headers,
+        )
+        resp = await client.get(f"/api/plans/{plan_id}", headers=auth_headers)
+        assert resp.status_code == 200
+        workout = next(w for w in resp.json()["workouts"] if w["id"] == workout_id)
+        assert workout["skip_reason"] == "Travel"
+
+    async def test_clear_skip_removes_reason(self, client, auth_headers):
+        plan_id, workout_id = await self._create_plan_and_get_workout(client, auth_headers)
+        await client.put(
+            f"/api/plans/{plan_id}/workouts/{workout_id}/skip",
+            json={"reason": "busy"},
+            headers=auth_headers,
+        )
+        resp = await client.delete(
+            f"/api/plans/{plan_id}/workouts/{workout_id}/skip",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 204
+
+        plan_resp = await client.get(f"/api/plans/{plan_id}", headers=auth_headers)
+        workout = next(w for w in plan_resp.json()["workouts"] if w["id"] == workout_id)
+        assert workout["skip_reason"] is None
+
+    async def test_skip_unknown_plan_returns_404(self, client, auth_headers):
+        resp = await client.put(
+            "/api/plans/nonexistent/workouts/nonexistent/skip",
+            json={"reason": "illness"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_skip_unknown_workout_returns_404(self, client, auth_headers):
+        plan_id, _ = await self._create_plan_and_get_workout(client, auth_headers)
+        resp = await client.put(
+            f"/api/plans/{plan_id}/workouts/nonexistent/skip",
+            json={"reason": "illness"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_unauthenticated_returns_401(self, client, auth_headers):
+        plan_id, workout_id = await self._create_plan_and_get_workout(client, auth_headers)
+        resp = await client.put(
+            f"/api/plans/{plan_id}/workouts/{workout_id}/skip",
+            json={"reason": "illness"},
+        )
+        assert resp.status_code == 401

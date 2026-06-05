@@ -37,15 +37,21 @@ const WORKOUT_TYPE_KEYS = [
   'long', 'strength', 'yoga', 'cross-training',
 ] as const
 
+const SKIP_REASON_KEYS = [
+  'illness', 'injury', 'fatigue', 'busy', 'lazy', 'travel', 'weather', 'other',
+] as const
+
 interface Props {
   workout: PlannedWorkout
   compact?: boolean
   onUnlink?: (workout: PlannedWorkout) => Promise<void>
+  onClearSkip?: (workout: PlannedWorkout) => Promise<void>
 }
 
-export function WorkoutCard({ workout, compact = false, onUnlink }: Props) {
+export function WorkoutCard({ workout, compact = false, onUnlink, onClearSkip }: Props) {
   const t = useTranslations('app')
   const [unlinking, setUnlinking] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const colorClass = TYPE_COLORS[workout.workout_type] ?? 'bg-muted text-muted-foreground'
 
   const typeKey = WORKOUT_TYPE_KEYS.find((k) => k === workout.workout_type)
@@ -63,11 +69,25 @@ export function WorkoutCard({ workout, compact = false, onUnlink }: Props) {
     }
   }
 
+  const handleClearSkip = async () => {
+    if (!onClearSkip) return
+    setClearing(true)
+    try {
+      await onClearSkip(workout)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   if (compact) {
     return (
       <div className={cn('rounded px-2 py-1 text-xs font-medium truncate', colorClass)}>
         {typeLabel}
-        {workout.target_tss != null && ` · ${workout.target_tss} TSS`}
+        {workout.skip_reason != null
+          ? ` · ${t('plan.skipped')}`
+          : workout.target_tss != null
+            ? ` · ${workout.target_tss} TSS`
+            : null}
       </div>
     )
   }
@@ -87,6 +107,11 @@ export function WorkoutCard({ workout, compact = false, onUnlink }: Props) {
           )}
           {workout.completed_activity_id != null && (
             <Badge variant="secondary" className="text-xs h-5">{t('plan.done')}</Badge>
+          )}
+          {workout.skip_reason != null && workout.completed_activity_id == null && (
+            <Badge className="text-xs h-5 bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100">
+              {t('plan.skipped')}
+            </Badge>
           )}
         </div>
       </div>
@@ -114,6 +139,26 @@ export function WorkoutCard({ workout, compact = false, onUnlink }: Props) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </div>
+      )}
+      {workout.skip_reason != null && workout.completed_activity_id == null && (
+        <p className="text-xs mt-1 opacity-70 italic">
+          {SKIP_REASON_KEYS.includes(workout.skip_reason as typeof SKIP_REASON_KEYS[number])
+            ? t(`plan.skipReasons.${workout.skip_reason}` as never)
+            : workout.skip_reason}
+        </p>
+      )}
+      {workout.skip_reason != null && workout.completed_activity_id == null && onClearSkip && (
+        <div className="mt-2 flex justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs h-6 px-2 opacity-70 hover:opacity-100"
+            disabled={clearing}
+            onClick={handleClearSkip}
+          >
+            {t('plan.clearSkip')}
+          </Button>
         </div>
       )}
     </div>

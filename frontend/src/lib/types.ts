@@ -180,6 +180,7 @@ export interface PlannedWorkout {
   duration_min: number | null
   target_tss: number | null
   completed_activity_id: string | null
+  skip_reason: string | null
   workout_definition_id?: string | null
 }
 

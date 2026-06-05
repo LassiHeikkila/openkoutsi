@@ -46,3 +46,20 @@ async def init_team_db(team_id: str) -> None:
     async with engine.begin() as conn:
         await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.run_sync(TeamBase.metadata.create_all)
+        # Schema migrations for columns added after initial release
+        await _apply_schema_migrations(conn)
+
+
+async def _apply_schema_migrations(conn) -> None:
+    """Add columns that were introduced after create_all first ran on existing DBs."""
+    migrations = [
+        "ALTER TABLE planned_workouts ADD COLUMN skip_reason TEXT",
+    ]
+    for stmt in migrations:
+        try:
+            await conn.execute(text(stmt))
+        except Exception as exc:
+            # SQLite raises OperationalError: "duplicate column name: <col>" when the
+            # column already exists — that is the only expected failure; re-raise anything else.
+            if "duplicate column name" not in str(exc).lower():
+                raise

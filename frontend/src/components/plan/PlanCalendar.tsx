@@ -128,9 +128,11 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
   const handleSkip = async () => {
     if (!selected?.workout || !selectedSkipKey) return
     const workout = selected.workout
+    // Persist the stable key for preset reasons so the stored value is locale-independent.
+    // For "other", persist the free-text the user typed.
     const reason = selectedSkipKey === 'other'
-      ? (customReason.trim() || t('plan.skipReasons.other' as never))
-      : t(`plan.skipReasons.${selectedSkipKey}` as never)
+      ? (customReason.trim() || 'other')
+      : selectedSkipKey
 
     setSkipping(true)
     try {

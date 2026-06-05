@@ -385,6 +385,38 @@ class TestSkipWorkout:
         )
         assert resp.status_code == 404
 
+    async def test_skip_already_completed_workout_returns_409(self, client, auth_headers, session):
+        from sqlalchemy import select
+        from backend.app.models.team_orm import PlannedWorkout, Activity, Athlete
+
+        plan_id, workout_id = await self._create_plan_and_get_workout(client, auth_headers)
+
+        # Insert a dummy activity and mark the workout as completed directly in the DB
+        athlete_result = await session.execute(select(Athlete))
+        athlete = athlete_result.scalar_one()
+        import uuid
+        activity = Activity(
+            id=str(uuid.uuid4()),
+            athlete_id=athlete.id,
+            name="dummy",
+            sport_type="Ride",
+            status="ok",
+        )
+        session.add(activity)
+        await session.flush()
+
+        workout_result = await session.execute(select(PlannedWorkout).where(PlannedWorkout.id == workout_id))
+        workout = workout_result.scalar_one()
+        workout.completed_activity_id = activity.id
+        await session.commit()
+
+        resp = await client.put(
+            f"/api/plans/{plan_id}/workouts/{workout_id}/skip",
+            json={"reason": "illness"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 409
+
     async def test_unauthenticated_returns_401(self, client, auth_headers):
         plan_id, workout_id = await self._create_plan_and_get_workout(client, auth_headers)
         resp = await client.put(

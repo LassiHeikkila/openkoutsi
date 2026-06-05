@@ -37,6 +37,10 @@ const WORKOUT_TYPE_KEYS = [
   'long', 'strength', 'yoga', 'cross-training',
 ] as const
 
+const SKIP_REASON_KEYS = [
+  'illness', 'injury', 'fatigue', 'busy', 'lazy', 'travel', 'weather', 'other',
+] as const
+
 interface Props {
   workout: PlannedWorkout
   compact?: boolean
@@ -138,7 +142,11 @@ export function WorkoutCard({ workout, compact = false, onUnlink, onClearSkip }:
         </div>
       )}
       {workout.skip_reason != null && workout.completed_activity_id == null && (
-        <p className="text-xs mt-1 opacity-70 italic">{workout.skip_reason}</p>
+        <p className="text-xs mt-1 opacity-70 italic">
+          {SKIP_REASON_KEYS.includes(workout.skip_reason as typeof SKIP_REASON_KEYS[number])
+            ? t(`plan.skipReasons.${workout.skip_reason}` as never)
+            : workout.skip_reason}
+        </p>
       )}
       {workout.skip_reason != null && workout.completed_activity_id == null && onClearSkip && (
         <div className="mt-2 flex justify-end">

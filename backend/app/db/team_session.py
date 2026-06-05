@@ -58,6 +58,8 @@ async def _apply_schema_migrations(conn) -> None:
     for stmt in migrations:
         try:
             await conn.execute(text(stmt))
-        except Exception:
-            # Column already exists — safe to ignore
-            pass
+        except Exception as exc:
+            # SQLite raises OperationalError: "duplicate column name: <col>" when the
+            # column already exists — that is the only expected failure; re-raise anything else.
+            if "duplicate column name" not in str(exc).lower():
+                raise

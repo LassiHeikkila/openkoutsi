@@ -309,9 +309,14 @@ async def get_training_status(
 
     # Recover from a stuck "pending" state: if the task hasn't completed within
     # the timeout window, reset to "error" so the user can retry.
-    if athlete.training_status_status == "pending" and athlete.training_status_updated_at:
-        elapsed = now_utc - athlete.training_status_updated_at.replace(tzinfo=timezone.utc)
-        if elapsed.total_seconds() > _PENDING_TIMEOUT_MINUTES * 60:
+    # A NULL updated_at with status "pending" (e.g. pre-migration row) is treated
+    # as immediately timed out.
+    if athlete.training_status_status == "pending":
+        updated_at = athlete.training_status_updated_at
+        timed_out = updated_at is None or (
+            now_utc - updated_at.replace(tzinfo=timezone.utc)
+        ).total_seconds() > _PENDING_TIMEOUT_MINUTES * 60
+        if timed_out:
             athlete.training_status_status = "error"
             athlete.training_status_updated_at = now_utc
             await session.commit()

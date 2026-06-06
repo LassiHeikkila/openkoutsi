@@ -20,8 +20,22 @@ log = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from backend.app.api.strava import strava_bridge_poller
     from backend.app.api.wahoo import wahoo_bridge_poller
+    from sqlalchemy import select
+    from backend.app.models.registry_orm import Team
+    from backend.app.db.registry import _RegistrySessionLocal
+    from backend.app.db.team_session import init_team_db
 
     await init_registry_db()
+
+    # Run schema migrations for every existing team DB on startup
+    async with _RegistrySessionLocal() as reg_session:
+        result = await reg_session.execute(select(Team))
+        teams = result.scalars().all()
+    for team in teams:
+        try:
+            await init_team_db(team.id)
+        except Exception:
+            log.exception("Failed to migrate team DB for team %s", team.id)
 
     strava_poller = asyncio.create_task(strava_bridge_poller())
     wahoo_poller = asyncio.create_task(wahoo_bridge_poller())

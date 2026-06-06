@@ -25,7 +25,8 @@
     "dayNames": ["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"],
     "monthNames": ["Tammikuu", "Helmikuu", "Maaliskuu", "Huhtikuu", "Toukokuu", "Kesäkuu", "Heinäkuu", "Elokuu", "Syyskuu", "Lokakuu", "Marraskuu", "Joulukuu"],
     "performed": "Toteutuneet",
-    "planned": "Suunnitellut"
+    "planned": "Suunnitellut",
+    "skipped": "Ohitetut"
   },
   "noHistory": "Ei dataa viel\u00e4 \u2014 lataa harjoituksia aloittaaksesi seurannan",
   "recentActivities": "Viimeisimm\u00e4t harjoitukset",

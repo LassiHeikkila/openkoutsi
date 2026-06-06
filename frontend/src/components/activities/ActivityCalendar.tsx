@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import useSWR from 'swr'
 import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -16,8 +16,9 @@ import {
   monthBounds,
   offsetMonth,
 } from '@/lib/calendarUtils'
-import { groupPlannedWorkoutsByDate } from '@/lib/planUtils'
+import { groupPlannedWorkoutsByDate, plannedWorkoutStatus } from '@/lib/planUtils'
 import { formatDuration, formatDistance } from '@/lib/utils'
+import { WorkoutActionsPanel } from '@/components/plan/WorkoutActionsPanel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -50,21 +51,6 @@ function ActivityListRow({ activity, slug }: { activity: Activity; slug: string 
   )
 }
 
-function PlannedWorkoutListRow({ workout }: { workout: PlannedWorkout }) {
-  const parts: string[] = [workout.workout_type]
-  if (workout.duration_min != null) parts.push(`${workout.duration_min} min`)
-  if (workout.target_tss != null) parts.push(`${Math.round(workout.target_tss)} TSS`)
-
-  return (
-    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-      <p className="text-sm font-medium">{parts.join(' · ')}</p>
-      {workout.description && (
-        <p className="text-xs text-muted-foreground mt-0.5">{workout.description}</p>
-      )}
-    </div>
-  )
-}
-
 export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) {
   const t = useTranslations('dashboard')
   const { slug } = useParams<{ slug: string }>()
@@ -75,6 +61,10 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
   const [month, setMonth] = useState(now.getMonth())
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Optimistic overrides (workout id → updated workout) applied on top of the
+  // plan fetched at the dashboard level, so status changes made here reflect
+  // immediately without waiting for a refetch.
+  const [overrides, setOverrides] = useState<Map<string, PlannedWorkout>>(new Map())
 
   const { start, end } = monthBounds(year, month)
   const { data, isLoading } = useSWR<PaginatedActivities>(
@@ -82,17 +72,35 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
     fetcher,
   )
 
+  const mergedPlan = useMemo<TrainingPlan | undefined>(() => {
+    if (!activePlan) return undefined
+    if (overrides.size === 0) return activePlan
+    return {
+      ...activePlan,
+      workouts: activePlan.workouts.map((w) => overrides.get(w.id) ?? w),
+    }
+  }, [activePlan, overrides])
+
+  const applyOverride = (workout: PlannedWorkout) => {
+    setOverrides((prev) => {
+      const next = new Map(prev)
+      next.set(workout.id, workout)
+      return next
+    })
+  }
+
   const timezone = athlete?.app_settings?.timezone as string | undefined
   const byDate = groupActivitiesByDate(data?.items ?? [], timezone)
-  const plannedByDate = groupPlannedWorkoutsByDate(activePlan)
+  const plannedByDate = groupPlannedWorkoutsByDate(mergedPlan)
   const grid = getCalendarGrid(year, month)
   const currentMonthStart = new Date(year, month, 1)
 
   const selectedActivities = selectedDay
     ? (byDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? [])
     : []
+  const selectedDayKey = selectedDay ? format(selectedDay, 'yyyy-MM-dd') : ''
   const selectedPlanned = selectedDay
-    ? (plannedByDate.get(format(selectedDay, 'yyyy-MM-dd')) ?? []).filter((w) => w.completed_activity_id == null)
+    ? (plannedByDate.get(selectedDayKey) ?? [])
     : []
 
   function handlePrev() {
@@ -134,6 +142,10 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
               <span className="flex items-center gap-1">
                 <span className="h-2 w-2 rounded-full border border-amber-500/80" />
                 {t('calendar.planned')}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full border border-dashed border-muted-foreground/50" />
+                {t('calendar.skipped')}
               </span>
             </div>
             <div className="flex items-center gap-1">
@@ -184,12 +196,17 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
                 const planned = plannedByDate.get(key) ?? []
                 const inMonth = isSameMonth(day, currentMonthStart)
                 const hasActivities = activities.length > 0
-                const pendingPlanned = planned.filter((w) => w.completed_activity_id == null)
-                const hasPlanned = pendingPlanned.length > 0
+                // Completed planned workouts are represented by their linked activity's
+                // blue bar, so they get no separate bar here. Pending → amber, skipped → dashed.
+                const pendingPlanned = planned.filter((w) => plannedWorkoutStatus(w) === 'planned')
+                const skippedPlanned = planned.filter((w) => plannedWorkoutStatus(w) === 'skipped')
+                const hasPending = pendingPlanned.length > 0
+                const hasSkipped = skippedPlanned.length > 0
                 const activityBars = activities.slice(0, 2)
-                const plannedBars = pendingPlanned.slice(0, 2)
+                const plannedBarsData = [...pendingPlanned, ...skippedPlanned]
+                const plannedBars = plannedBarsData.slice(0, 2)
                 const activityOverflow = activities.length - 2
-                const plannedOverflow = pendingPlanned.length - 2
+                const plannedOverflow = plannedBarsData.length - 2
 
                 return (
                   <div
@@ -200,22 +217,26 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
                       inMonth ? '' : 'opacity-35',
                       hasActivities
                         ? 'cursor-pointer bg-primary/10 border border-primary/20 hover:bg-primary/20'
-                        : hasPlanned
+                        : hasPending
                           ? 'cursor-pointer bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20'
-                        : 'border border-transparent',
+                          : hasSkipped
+                            ? 'cursor-pointer bg-muted/40 border border-muted-foreground/20 hover:bg-muted/60'
+                            : planned.length > 0
+                              ? 'cursor-pointer border border-transparent hover:bg-muted/40'
+                              : 'border border-transparent',
                     ].join(' ')}
                   >
                     <span className={[
                       'text-xs leading-none font-medium',
                       hasActivities && inMonth
                         ? 'text-primary'
-                        : hasPlanned && inMonth
+                        : hasPending && inMonth
                           ? 'text-amber-700 dark:text-amber-400'
                           : 'text-muted-foreground',
                     ].join(' ')}>
                       {format(day, 'd')}
                     </span>
-                    {(hasActivities || hasPlanned) && (
+                    {(hasActivities || plannedBarsData.length > 0) && (
                       <div className="flex flex-col gap-0.5 mt-auto">
                         {activityBars.map((a) => (
                           <div
@@ -227,7 +248,12 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
                         {plannedBars.map((w) => (
                           <div
                             key={w.id}
-                            className="h-1.5 w-full rounded-full border border-amber-500/80"
+                            className={[
+                              'h-1.5 w-full rounded-full border',
+                              plannedWorkoutStatus(w) === 'skipped'
+                                ? 'border-dashed border-muted-foreground/40'
+                                : 'border-amber-500/80',
+                            ].join(' ')}
                             title={w.description ?? w.workout_type}
                           />
                         ))}
@@ -276,7 +302,12 @@ export function ActivityCalendar({ activePlan }: { activePlan?: TrainingPlan }) 
               <>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">{t('calendar.planned')}</p>
                 {selectedPlanned.map((w) => (
-                  <PlannedWorkoutListRow key={w.id} workout={w} />
+                  <WorkoutActionsPanel
+                    key={w.id}
+                    workout={w}
+                    date={selectedDayKey}
+                    onWorkoutUpdated={applyOverride}
+                  />
                 ))}
               </>
             )}

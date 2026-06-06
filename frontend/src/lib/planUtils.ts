@@ -31,6 +31,16 @@ export function aggregatePlannedTssByWeek(plans: TrainingPlan[]): Map<string, nu
   return map
 }
 
+export type PlannedWorkoutStatus = 'completed' | 'skipped' | 'planned'
+
+/** Derives the status of a planned workout.
+ *  A linked completed activity takes precedence over a skip reason. */
+export function plannedWorkoutStatus(workout: PlannedWorkout): PlannedWorkoutStatus {
+  if (workout.completed_activity_id != null) return 'completed'
+  if (workout.skip_reason != null) return 'skipped'
+  return 'planned'
+}
+
 /** Groups workouts of the active plan by date key (yyyy-MM-dd). */
 export function groupPlannedWorkoutsByDate(plan: TrainingPlan | undefined): Map<string, PlannedWorkout[]> {
   const map = new Map<string, PlannedWorkout[]>()

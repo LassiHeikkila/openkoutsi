@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { createElement } from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { NextIntlClientProvider } from 'next-intl'
 import appMessages from '../../messages/en/app.json'
 import { WorkoutActionsPanel } from '@/components/plan/WorkoutActionsPanel'
 import { apiFetch } from '@/lib/api'
 import type { PlannedWorkout } from '@/lib/types'
+
+// JSX inside vi.mock factories is mis-parsed by the oxc/rolldown transform used here,
+// so the mocks and rendering use React.createElement instead of JSX.
 
 // Preserve the real module (setup.ts uses setAccessToken) but stub the network call.
 vi.mock('@/lib/api', async (importActual) => {
@@ -15,21 +19,33 @@ vi.mock('@/lib/api', async (importActual) => {
 vi.mock('@/components/ui/use-toast', () => ({ toast: vi.fn() }))
 
 // Radix Select relies on pointer APIs unavailable in jsdom; swap for a native select.
-vi.mock('@/components/ui/select', () => ({
+vi.mock('@/components/ui/select', async () => {
+  const { createElement: h } = await import('react')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Select: ({ value, onValueChange, children }: any) => (
-    <select data-testid="select" value={value} onChange={(e) => onValueChange(e.target.value)}>
-      <option value="" />
-      {children}
-    </select>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
+  const Select = ({ value, onValueChange, children }: any) =>
+    h(
+      'select',
+      {
+        'data-testid': 'select',
+        value,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onChange: (e: any) => onValueChange(e.target.value),
+      },
+      h('option', { value: '' }),
+      children,
+    )
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  SelectContent: ({ children }: any) => <>{children}</>,
+  const SelectContent = ({ children }: any) => children
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
-}))
+  const SelectItem = ({ value, children }: any) => h('option', { value }, children)
+  return {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger: () => null,
+    SelectValue: () => null,
+  }
+})
 
 const mockedFetch = vi.mocked(apiFetch)
 
@@ -51,9 +67,11 @@ function makeWorkout(overrides: Partial<PlannedWorkout> = {}): PlannedWorkout {
 
 function renderPanel(props: Parameters<typeof WorkoutActionsPanel>[0]) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ app: appMessages }}>
-      <WorkoutActionsPanel {...props} />
-    </NextIntlClientProvider>,
+    createElement(
+      NextIntlClientProvider,
+      { locale: 'en', messages: { app: appMessages } },
+      createElement(WorkoutActionsPanel, props),
+    ),
   )
 }
 
@@ -127,9 +145,15 @@ describe('WorkoutActionsPanel', () => {
     expect(screen.queryByText('Mark as skipped…')).toBeNull()
 
     rerender(
-      <NextIntlClientProvider locale="en" messages={{ app: appMessages }}>
-        <WorkoutActionsPanel workout={makeWorkout()} date="2025-01-06" onWorkoutUpdated={vi.fn()} />
-      </NextIntlClientProvider>,
+      createElement(
+        NextIntlClientProvider,
+        { locale: 'en', messages: { app: appMessages } },
+        createElement(WorkoutActionsPanel, {
+          workout: makeWorkout(),
+          date: '2025-01-06',
+          onWorkoutUpdated: vi.fn(),
+        }),
+      ),
     )
     expect(screen.getByText('Mark as completed…')).toBeTruthy()
     expect(screen.getByText('Mark as skipped…')).toBeTruthy()

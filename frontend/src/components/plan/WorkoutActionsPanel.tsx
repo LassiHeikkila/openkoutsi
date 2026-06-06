@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetch } from '@/lib/api'
+import { formatDuration } from '@/lib/utils'
 import { toast } from '@/components/ui/use-toast'
 
 interface ActivityListResponse {
@@ -24,12 +25,6 @@ interface ActivityListResponse {
 const SKIP_REASON_KEYS = [
   'illness', 'injury', 'fatigue', 'busy', 'lazy', 'travel', 'weather', 'other',
 ] as const
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
 
 interface Props {
   workout: PlannedWorkout

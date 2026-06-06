@@ -313,12 +313,18 @@ async def get_training_status(
     # as immediately timed out.
     if athlete.training_status_status == "pending":
         updated_at = athlete.training_status_updated_at
-        timed_out = updated_at is None or (
-            now_utc - updated_at.replace(tzinfo=timezone.utc)
-        ).total_seconds() > _PENDING_TIMEOUT_MINUTES * 60
+        if updated_at is not None:
+            # Normalise to UTC regardless of whether the stored value is naive or aware
+            aware = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+            timed_out = (now_utc - aware.astimezone(timezone.utc)).total_seconds() > _PENDING_TIMEOUT_MINUTES * 60
+        else:
+            timed_out = True  # pre-migration row with no timestamp — treat as timed out
         if timed_out:
             athlete.training_status_status = "error"
             athlete.training_status_updated_at = now_utc
+            # Set training_status_date to today so stale=False and the auto-trigger
+            # doesn't immediately re-fire after this error reset.
+            athlete.training_status_date = today
             await session.commit()
 
     if app_cfg.get("auto_training_status") and stale and athlete.training_status_status != "pending":

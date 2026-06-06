@@ -74,13 +74,20 @@ def _maybe_auto_analyze(activity_id: str, athlete: Athlete, team_id: str) -> boo
     return False
 
 
-def _maybe_auto_training_status(athlete: Athlete, team_id: str) -> None:
+def _maybe_auto_training_status(athlete: Athlete, team_id: str) -> bool:
+    """Marks athlete as pending for training status analysis if eligible.
+
+    Returns True if the status was set to pending; caller must commit the
+    session and then call asyncio.create_task(analyze_training_status_bg(...))
+    *after* the commit to avoid a race where the task writes "error" before the
+    pending state is persisted.
+    """
     if (athlete.app_settings or {}).get("auto_training_status") and athlete.training_status_status != "pending":
-        from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
         athlete.training_status_status = "pending"
         athlete.training_status = None
         athlete.training_status_updated_at = datetime.now(timezone.utc)
-        asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
+        return True
+    return False
 
 
 async def _bg_process_and_recalculate(
@@ -194,8 +201,11 @@ async def _bg_process_and_recalculate(
             if _maybe_auto_analyze(target_act.id, athlete, team_id):
                 target_act.analysis_status = "pending"
 
-            _maybe_auto_training_status(athlete, team_id)
+            needs_status = _maybe_auto_training_status(athlete, team_id)
             await session.commit()
+            if needs_status:
+                from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+                asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
             await find_and_link_workout(session, athlete_id, target_act)
             await recalculate_from(athlete_id, start_date, session)
 

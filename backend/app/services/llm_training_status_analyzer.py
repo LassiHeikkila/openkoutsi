@@ -379,6 +379,7 @@ async def analyze_training_status_bg(
                 if athlete:
                     athlete.training_status_status = "error"
                     athlete.training_status_updated_at = datetime.now(timezone.utc)
+                    athlete.training_status_date = datetime.now(timezone.utc).date()
                     await recovery_session.commit()
         except Exception:
             log.exception(

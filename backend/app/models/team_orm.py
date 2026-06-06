@@ -50,7 +50,7 @@ class Athlete(TeamBase):
     training_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     training_status_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     training_status_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    training_status_pending_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    training_status_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(

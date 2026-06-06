@@ -352,7 +352,7 @@ async def analyze_training_status_bg(
                 athlete.training_status = accumulated
                 athlete.training_status_status = "done"
                 athlete.training_status_date = today
-                athlete.training_status_pending_since = None
+                athlete.training_status_updated_at = datetime.now(timezone.utc)
                 await session.commit()
                 log.info("Training status analysis complete for athlete %s", athlete_id)
 
@@ -360,7 +360,7 @@ async def analyze_training_status_bg(
                 log.exception("Training status analysis failed for athlete %s", athlete_id)
                 athlete.training_status_status = "error"
                 athlete.training_status_date = today
-                athlete.training_status_pending_since = None
+                athlete.training_status_updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
     except Exception:
@@ -378,7 +378,7 @@ async def analyze_training_status_bg(
                 athlete = result.scalar_one_or_none()
                 if athlete:
                     athlete.training_status_status = "error"
-                    athlete.training_status_pending_since = None
+                    athlete.training_status_updated_at = datetime.now(timezone.utc)
                     await recovery_session.commit()
         except Exception:
             log.exception(

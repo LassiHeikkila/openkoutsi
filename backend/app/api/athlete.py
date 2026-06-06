@@ -309,17 +309,17 @@ async def get_training_status(
 
     # Recover from a stuck "pending" state: if the task hasn't completed within
     # the timeout window, reset to "error" so the user can retry.
-    if athlete.training_status_status == "pending" and athlete.training_status_pending_since:
-        elapsed = now_utc - athlete.training_status_pending_since.replace(tzinfo=timezone.utc)
+    if athlete.training_status_status == "pending" and athlete.training_status_updated_at:
+        elapsed = now_utc - athlete.training_status_updated_at.replace(tzinfo=timezone.utc)
         if elapsed.total_seconds() > _PENDING_TIMEOUT_MINUTES * 60:
             athlete.training_status_status = "error"
-            athlete.training_status_pending_since = None
+            athlete.training_status_updated_at = now_utc
             await session.commit()
 
     if app_cfg.get("auto_training_status") and stale and athlete.training_status_status != "pending":
         athlete.training_status_status = "pending"
         athlete.training_status = None
-        athlete.training_status_pending_since = now_utc
+        athlete.training_status_updated_at = now_utc
         await session.commit()
         from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
         asyncio.create_task(analyze_training_status_bg(athlete.id, ctx.team_id))
@@ -345,7 +345,7 @@ async def trigger_training_status(
     now_utc = datetime.now(timezone.utc)
     athlete.training_status_status = "pending"
     athlete.training_status = None
-    athlete.training_status_pending_since = now_utc
+    athlete.training_status_updated_at = now_utc
     await session.commit()
 
     from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg

@@ -257,6 +257,6 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
         from datetime import datetime, timezone
         athlete.training_status_status = "pending"
         athlete.training_status = None
-        athlete.training_status_pending_since = datetime.now(timezone.utc)
+        athlete.training_status_updated_at = datetime.now(timezone.utc)
         await session.commit()
         asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))

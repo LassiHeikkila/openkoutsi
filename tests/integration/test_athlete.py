@@ -3,6 +3,7 @@ Integration tests for /api/athlete endpoints.
 """
 import io
 import json
+from datetime import datetime
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -551,3 +552,34 @@ class TestTrainingStatus:
 
         assert resp.status_code == 200
         assert resp.json()["status"] == "pending"
+
+    async def test_pending_with_null_updated_at_resets_to_error(self, client, auth_headers, session):
+        from backend.app.models.team_orm import Athlete
+
+        result = await session.execute(
+            select(Athlete).where(Athlete.global_user_id == "test-user-00000000")
+        )
+        athlete = result.scalar_one()
+        athlete.training_status_status = "pending"
+        athlete.training_status_updated_at = None
+        await session.commit()
+
+        resp = await client.get("/api/athlete/training-status", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"
+
+    async def test_pending_older_than_timeout_resets_to_error(self, client, auth_headers, session):
+        from datetime import timedelta, timezone
+        from backend.app.models.team_orm import Athlete
+
+        result = await session.execute(
+            select(Athlete).where(Athlete.global_user_id == "test-user-00000000")
+        )
+        athlete = result.scalar_one()
+        athlete.training_status_status = "pending"
+        athlete.training_status_updated_at = datetime.now(timezone.utc) - timedelta(minutes=31)
+        await session.commit()
+
+        resp = await client.get("/api/athlete/training-status", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"

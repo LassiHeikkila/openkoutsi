@@ -263,6 +263,7 @@ async def _process_event_for_team(
             from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
             athlete.training_status_status = "pending"
             athlete.training_status = None
+            athlete.training_status_updated_at = datetime.now(timezone.utc)
             await session.commit()
             asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
 

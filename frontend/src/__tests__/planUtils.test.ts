@@ -4,8 +4,25 @@ import {
   weekKey,
   aggregatePlannedTssByWeek,
   groupPlannedWorkoutsByDate,
+  plannedWorkoutStatus,
 } from '@/lib/planUtils'
-import type { TrainingPlan } from '@/lib/types'
+import type { PlannedWorkout, TrainingPlan } from '@/lib/types'
+
+function makeWorkout(overrides: Partial<PlannedWorkout> = {}): PlannedWorkout {
+  return {
+    id: 'w1',
+    plan_id: 'p1',
+    week_number: 1,
+    day_of_week: 1,
+    workout_type: 'endurance',
+    description: null,
+    duration_min: 60,
+    target_tss: 50,
+    completed_activity_id: null,
+    skip_reason: null,
+    ...overrides,
+  }
+}
 
 function makePlan(overrides: Partial<TrainingPlan> & { workouts?: TrainingPlan['workouts'] }): TrainingPlan {
   return {
@@ -183,5 +200,24 @@ describe('groupPlannedWorkoutsByDate', () => {
     expect(map.size).toBe(1)
     expect(map.get('2025-01-06')).toBeUndefined()
     expect(map.get('2025-01-07')).toHaveLength(1)
+  })
+})
+
+describe('plannedWorkoutStatus', () => {
+  it('returns "planned" when neither completed nor skipped', () => {
+    expect(plannedWorkoutStatus(makeWorkout())).toBe('planned')
+  })
+
+  it('returns "completed" when linked to an activity', () => {
+    expect(plannedWorkoutStatus(makeWorkout({ completed_activity_id: 'act-1' }))).toBe('completed')
+  })
+
+  it('returns "skipped" when a skip reason is set', () => {
+    expect(plannedWorkoutStatus(makeWorkout({ skip_reason: 'illness' }))).toBe('skipped')
+  })
+
+  it('treats completion as taking precedence over a skip reason', () => {
+    const w = makeWorkout({ completed_activity_id: 'act-1', skip_reason: 'illness' })
+    expect(plannedWorkoutStatus(w)).toBe('completed')
   })
 })

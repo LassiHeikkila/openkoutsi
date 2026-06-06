@@ -25,7 +25,8 @@
     "dayNames": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     "monthNames": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     "performed": "Performed",
-    "planned": "Planned"
+    "planned": "Planned",
+    "skipped": "Skipped"
   },
   "noHistory": "No data yet \u2014 upload activities to start tracking",
   "recentActivities": "Recent activities",

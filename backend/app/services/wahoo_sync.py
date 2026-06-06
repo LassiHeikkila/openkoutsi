@@ -254,7 +254,9 @@ async def _process_wahoo_for_team(norm, athlete, conn, access_token, team_id, se
 
     if app_cfg.get("auto_training_status") and athlete.training_status_status != "pending":
         from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
+        from datetime import datetime, timezone
         athlete.training_status_status = "pending"
         athlete.training_status = None
+        athlete.training_status_pending_since = datetime.now(timezone.utc)
         await session.commit()
         asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))

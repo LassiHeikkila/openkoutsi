@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -79,6 +79,7 @@ def _maybe_auto_training_status(athlete: Athlete, team_id: str) -> None:
         from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
         athlete.training_status_status = "pending"
         athlete.training_status = None
+        athlete.training_status_pending_since = datetime.now(timezone.utc)
         asyncio.create_task(analyze_training_status_bg(athlete.id, team_id))
 
 

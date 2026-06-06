@@ -255,107 +255,133 @@ async def analyze_training_status_bg(
     Background task: stream LLM training status → write chunks to DB every 500 ms
     → set final training_status_status to 'done' or 'error'.
     """
-    async with get_team_session_factory(team_id)() as session:
-        athlete_result = await session.execute(
-            select(Athlete).where(Athlete.id == athlete_id)
-        )
-        athlete = athlete_result.scalar_one()
-
-        app_cfg = athlete.app_settings or {}
-        resolved_locale = locale or app_cfg.get("locale")
-        coaching_style = app_cfg.get("coaching_style")
-        now = _local_now(app_cfg.get("timezone"))
-        today = now.date()
-        window_start = today - timedelta(days=28)
-
-        # Last 28 days of activities
-        acts_result = await session.execute(
-            select(Activity)
-            .where(
-                Activity.athlete_id == athlete_id,
-                Activity.start_time >= datetime(
-                    window_start.year, window_start.month, window_start.day,
-                    tzinfo=timezone.utc,
-                ),
+    try:
+        async with get_team_session_factory(team_id)() as session:
+            athlete_result = await session.execute(
+                select(Athlete).where(Athlete.id == athlete_id)
             )
-            .order_by(Activity.start_time.asc())
-        )
-        recent_activities = list(acts_result.scalars().all())
+            athlete = athlete_result.scalar_one()
 
-        # Latest DailyMetric
-        metric_result = await session.execute(
-            select(DailyMetric)
-            .where(DailyMetric.athlete_id == athlete_id)
-            .order_by(DailyMetric.date.desc())
-            .limit(1)
-        )
-        current_metric = metric_result.scalar_one_or_none()
+            app_cfg = athlete.app_settings or {}
+            resolved_locale = locale or app_cfg.get("locale")
+            coaching_style = app_cfg.get("coaching_style")
+            now = _local_now(app_cfg.get("timezone"))
+            today = now.date()
+            window_start = today - timedelta(days=28)
 
-        # Active training plan
-        plan_result = await session.execute(
-            select(TrainingPlan)
-            .where(
-                TrainingPlan.athlete_id == athlete_id,
-                TrainingPlan.status == "active",
-            )
-            .order_by(TrainingPlan.created_at.desc())
-            .limit(1)
-        )
-        active_plan = plan_result.scalar_one_or_none()
-
-        # This week's planned workouts (if plan exists)
-        this_week_workouts: list[PlannedWorkout] = []
-        if active_plan and active_plan.start_date:
-            current_week = max(1, (today - active_plan.start_date).days // 7 + 1)
-            pw_result = await session.execute(
-                select(PlannedWorkout)
+            # Last 28 days of activities
+            acts_result = await session.execute(
+                select(Activity)
                 .where(
-                    PlannedWorkout.plan_id == active_plan.id,
-                    PlannedWorkout.week_number == current_week,
+                    Activity.athlete_id == athlete_id,
+                    Activity.start_time >= datetime(
+                        window_start.year, window_start.month, window_start.day,
+                        tzinfo=timezone.utc,
+                    ),
                 )
-                .order_by(PlannedWorkout.day_of_week)
+                .order_by(Activity.start_time.asc())
             )
-            this_week_workouts = list(pw_result.scalars().all())
+            recent_activities = list(acts_result.scalars().all())
 
-        # Active goals
-        goals_result = await session.execute(
-            select(Goal)
-            .where(
-                Goal.athlete_id == athlete_id,
-                Goal.status == "active",
+            # Latest DailyMetric
+            metric_result = await session.execute(
+                select(DailyMetric)
+                .where(DailyMetric.athlete_id == athlete_id)
+                .order_by(DailyMetric.date.desc())
+                .limit(1)
             )
-            .order_by(Goal.target_date.asc().nullslast())
+            current_metric = metric_result.scalar_one_or_none()
+
+            # Active training plan
+            plan_result = await session.execute(
+                select(TrainingPlan)
+                .where(
+                    TrainingPlan.athlete_id == athlete_id,
+                    TrainingPlan.status == "active",
+                )
+                .order_by(TrainingPlan.created_at.desc())
+                .limit(1)
+            )
+            active_plan = plan_result.scalar_one_or_none()
+
+            # This week's planned workouts (if plan exists)
+            this_week_workouts: list[PlannedWorkout] = []
+            if active_plan and active_plan.start_date:
+                current_week = max(1, (today - active_plan.start_date).days // 7 + 1)
+                pw_result = await session.execute(
+                    select(PlannedWorkout)
+                    .where(
+                        PlannedWorkout.plan_id == active_plan.id,
+                        PlannedWorkout.week_number == current_week,
+                    )
+                    .order_by(PlannedWorkout.day_of_week)
+                )
+                this_week_workouts = list(pw_result.scalars().all())
+
+            # Active goals
+            goals_result = await session.execute(
+                select(Goal)
+                .where(
+                    Goal.athlete_id == athlete_id,
+                    Goal.status == "active",
+                )
+                .order_by(Goal.target_date.asc().nullslast())
+            )
+            active_goals = list(goals_result.scalars().all())
+
+            buffer: list[str] = []
+            last_flush = time.monotonic()
+            accumulated = ""
+
+            try:
+                async for chunk in _stream_status_analysis(
+                    athlete, team_id,
+                    recent_activities, current_metric,
+                    active_plan, this_week_workouts, active_goals,
+                    now, locale=resolved_locale, coaching_style=coaching_style,
+                ):
+                    buffer.append(chunk)
+                    if time.monotonic() - last_flush >= 0.5:
+                        accumulated += "".join(buffer)
+                        buffer.clear()
+                        last_flush = time.monotonic()
+                        athlete.training_status = accumulated
+                        await session.commit()
+
+                accumulated += "".join(buffer)
+                athlete.training_status = accumulated
+                athlete.training_status_status = "done"
+                athlete.training_status_date = today
+                athlete.training_status_pending_since = None
+                await session.commit()
+                log.info("Training status analysis complete for athlete %s", athlete_id)
+
+            except Exception:
+                log.exception("Training status analysis failed for athlete %s", athlete_id)
+                athlete.training_status_status = "error"
+                athlete.training_status_date = today
+                athlete.training_status_pending_since = None
+                await session.commit()
+
+    except Exception:
+        # Session acquisition or early DB query failed — open a fresh session to
+        # clear the pending state so the user can retry.
+        log.exception(
+            "Training status background task failed outside inner try for athlete %s",
+            athlete_id,
         )
-        active_goals = list(goals_result.scalars().all())
-
-        buffer: list[str] = []
-        last_flush = time.monotonic()
-        accumulated = ""
-
         try:
-            async for chunk in _stream_status_analysis(
-                athlete, team_id,
-                recent_activities, current_metric,
-                active_plan, this_week_workouts, active_goals,
-                now, locale=resolved_locale, coaching_style=coaching_style,
-            ):
-                buffer.append(chunk)
-                if time.monotonic() - last_flush >= 0.5:
-                    accumulated += "".join(buffer)
-                    buffer.clear()
-                    last_flush = time.monotonic()
-                    athlete.training_status = accumulated
-                    await session.commit()
-
-            accumulated += "".join(buffer)
-            athlete.training_status = accumulated
-            athlete.training_status_status = "done"
-            athlete.training_status_date = today
-            await session.commit()
-            log.info("Training status analysis complete for athlete %s", athlete_id)
-
+            async with get_team_session_factory(team_id)() as recovery_session:
+                result = await recovery_session.execute(
+                    select(Athlete).where(Athlete.id == athlete_id)
+                )
+                athlete = result.scalar_one_or_none()
+                if athlete:
+                    athlete.training_status_status = "error"
+                    athlete.training_status_pending_since = None
+                    await recovery_session.commit()
         except Exception:
-            log.exception("Training status analysis failed for athlete %s", athlete_id)
-            athlete.training_status_status = "error"
-            athlete.training_status_date = today
-            await session.commit()
+            log.exception(
+                "Recovery session also failed for athlete %s — status may remain stuck",
+                athlete_id,
+            )

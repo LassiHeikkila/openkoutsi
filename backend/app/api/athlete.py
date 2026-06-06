@@ -289,6 +289,9 @@ async def get_avatar(
     return FileResponse(path)
 
 
+_PENDING_TIMEOUT_MINUTES = 30
+
+
 @router.get("/training-status", response_model=TrainingStatusResponse)
 async def get_training_status(
     ctx_session=Depends(get_ctx_and_session),
@@ -297,14 +300,26 @@ async def get_training_status(
     athlete = await _get_athlete(ctx.user_id, session)
     app_cfg = athlete.app_settings or {}
     from backend.app.services.llm_training_status_analyzer import _local_now
+    now_utc = datetime.now(timezone.utc)
     today = _local_now(app_cfg.get("timezone")).date()
     stale = (
         athlete.training_status_date is None
         or athlete.training_status_date < today
     )
+
+    # Recover from a stuck "pending" state: if the task hasn't completed within
+    # the timeout window, reset to "error" so the user can retry.
+    if athlete.training_status_status == "pending" and athlete.training_status_pending_since:
+        elapsed = now_utc - athlete.training_status_pending_since.replace(tzinfo=timezone.utc)
+        if elapsed.total_seconds() > _PENDING_TIMEOUT_MINUTES * 60:
+            athlete.training_status_status = "error"
+            athlete.training_status_pending_since = None
+            await session.commit()
+
     if app_cfg.get("auto_training_status") and stale and athlete.training_status_status != "pending":
         athlete.training_status_status = "pending"
         athlete.training_status = None
+        athlete.training_status_pending_since = now_utc
         await session.commit()
         from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg
         asyncio.create_task(analyze_training_status_bg(athlete.id, ctx.team_id))
@@ -327,8 +342,10 @@ async def trigger_training_status(
     if athlete.training_status_status == "pending":
         return {"status": "pending"}
 
+    now_utc = datetime.now(timezone.utc)
     athlete.training_status_status = "pending"
     athlete.training_status = None
+    athlete.training_status_pending_since = now_utc
     await session.commit()
 
     from backend.app.services.llm_training_status_analyzer import analyze_training_status_bg

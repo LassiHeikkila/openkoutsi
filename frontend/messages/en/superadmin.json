@@ -35,5 +35,7 @@
   "deleteConfirmAction": "Delete",
   "approveFailed": "Approval failed",
   "deleteFailed": "Delete failed",
-  "authFailed": "Invalid secret"
+  "authFailed": "Invalid secret",
+  "messagesTitle": "Messages",
+  "noMessages": "No messages."
 }

@@ -3,10 +3,13 @@
 import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import useSWR from 'swr'
 import { Link, usePathname, useRouter } from '@/navigation'
 import { useAuth } from '@/lib/auth'
+import { fetcher } from '@/lib/api'
+import type { UnreadCount } from '@/lib/types'
 import { Button } from './ui/button'
-import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X, Shield, Dumbbell } from 'lucide-react'
+import { Activity, BarChart2, Target, Calendar, User, LogOut, Settings, Zap, Timer, X, Shield, Dumbbell, Inbox } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LocaleSwitcher } from './LocaleSwitcher'
 
@@ -20,6 +23,12 @@ function NavInner({ onClose }: NavInnerProps) {
   const router = useRouter()
   const { athlete, logout, isAdmin } = useAuth()
   const { slug } = useParams<{ slug: string }>()
+  const { data: unread } = useSWR<UnreadCount>(
+    isAdmin ? '/api/messages/unread-count' : null,
+    fetcher,
+    { refreshInterval: 60000 },
+  )
+  const unreadCount = unread?.count ?? 0
 
   const navItems = [
     { href: `/t/${slug}/dashboard`, labelKey: 'nav.dashboard' as const, icon: BarChart2 },
@@ -110,6 +119,26 @@ function NavInner({ onClose }: NavInnerProps) {
           >
             <Shield className="h-4 w-4 shrink-0" />
             {t('nav.admin')}
+          </Link>
+        )}
+        {isAdmin && (
+          <Link
+            href={`/t/${slug}/inbox`}
+            onClick={onClose}
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
+              pathname.includes(`/t/${slug}/inbox`)
+                ? 'bg-accent text-accent-foreground font-medium'
+                : 'text-muted-foreground',
+            )}
+          >
+            <Inbox className="h-4 w-4 shrink-0" />
+            <span className="flex-1">{t('nav.inbox')}</span>
+            {unreadCount > 0 && (
+              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </Link>
         )}
       </div>

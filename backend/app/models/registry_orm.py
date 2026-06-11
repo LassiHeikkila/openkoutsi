@@ -111,6 +111,28 @@ class Invitation(RegistryBase):
     team: Mapped["Team"] = relationship("Team", back_populates="invitations")
 
 
+class JoinRequest(RegistryBase):
+    """A self-serve request from a person to join a team.
+
+    Credentials are captured up front (hashed) so that, on admin approval, the
+    user account + membership can be created without further interaction.
+    """
+
+    __tablename__ = "join_requests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(String, ForeignKey("teams.id", ondelete="CASCADE"))
+    username: Mapped[str] = mapped_column(String, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # "pending" → awaiting decision; "approved"; "rejected"
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
 class DataConsent(RegistryBase):
     """Records that a user has accepted the data processing terms for a team."""
 

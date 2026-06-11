@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,8 +8,12 @@ import json
 
 from backend.app.core.config import settings
 from backend.app.db.registry import get_registry_session
+from backend.app.db.user_session import get_user_session_factory, init_user_db
+from backend.app.models.message_orm import Message
 from backend.app.models.registry_orm import DataConsent, Team, TeamMembership, User
+from backend.app.schemas.messages import MessageResponse, UnreadCountResponse
 from backend.app.schemas.teams import SuperadminTeamResponse, SuperadminUserResponse, SuperadminUserTeam
+from backend.app.services.notifications import SUPERADMIN_MAILBOX
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -139,3 +145,65 @@ async def delete_team(
 
     await session.delete(team)
     await session.commit()
+
+
+# ── Superadmin inbox ──────────────────────────────────────────────────────────
+# Messages addressed to the superadmin (who has no user account) live in a
+# reserved per-user mailbox keyed by SUPERADMIN_MAILBOX.
+
+
+async def _get_superadmin_message(message_id: str, session: AsyncSession) -> Message:
+    result = await session.execute(select(Message).where(Message.id == message_id))
+    message = result.scalar_one_or_none()
+    if message is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return message
+
+
+@router.get("/messages", response_model=list[MessageResponse])
+async def list_superadmin_messages(_: None = Depends(_require_secret)):
+    await init_user_db(SUPERADMIN_MAILBOX)
+    async with get_user_session_factory(SUPERADMIN_MAILBOX)() as session:
+        result = await session.execute(select(Message).order_by(Message.created_at.desc()))
+        return result.scalars().all()
+
+
+@router.get("/messages/unread-count", response_model=UnreadCountResponse)
+async def superadmin_unread_count(_: None = Depends(_require_secret)):
+    await init_user_db(SUPERADMIN_MAILBOX)
+    async with get_user_session_factory(SUPERADMIN_MAILBOX)() as session:
+        result = await session.execute(
+            select(func.count()).select_from(Message).where(Message.read_at.is_(None))
+        )
+        return UnreadCountResponse(count=result.scalar_one())
+
+
+@router.post("/messages/read-all", status_code=204)
+async def superadmin_mark_all_read(_: None = Depends(_require_secret)):
+    await init_user_db(SUPERADMIN_MAILBOX)
+    async with get_user_session_factory(SUPERADMIN_MAILBOX)() as session:
+        now = datetime.now(timezone.utc)
+        result = await session.execute(select(Message).where(Message.read_at.is_(None)))
+        for message in result.scalars().all():
+            message.read_at = now
+        await session.commit()
+
+
+@router.post("/messages/{message_id}/read", response_model=MessageResponse)
+async def superadmin_mark_read(message_id: str, _: None = Depends(_require_secret)):
+    await init_user_db(SUPERADMIN_MAILBOX)
+    async with get_user_session_factory(SUPERADMIN_MAILBOX)() as session:
+        message = await _get_superadmin_message(message_id, session)
+        if message.read_at is None:
+            message.read_at = datetime.now(timezone.utc)
+            await session.commit()
+        return message
+
+
+@router.delete("/messages/{message_id}", status_code=204)
+async def superadmin_delete_message(message_id: str, _: None = Depends(_require_secret)):
+    await init_user_db(SUPERADMIN_MAILBOX)
+    async with get_user_session_factory(SUPERADMIN_MAILBOX)() as session:
+        message = await _get_superadmin_message(message_id, session)
+        await session.delete(message)  # hard delete
+        await session.commit()

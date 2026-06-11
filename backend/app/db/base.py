@@ -11,6 +11,15 @@ class TeamBase(DeclarativeBase):
     pass
 
 
+class UserBase(DeclarativeBase):
+    """Base for per-user DBs (one isolated SQLite file per user).
+
+    Generic on purpose: today it holds the user's message inbox, but other
+    per-user data can be added as additional tables in the same file.
+    """
+    pass
+
+
 # Keep the legacy alias so any remaining references to `Base` import still resolve
 # during the transition. Remove once all callers are updated.
 Base = RegistryBase

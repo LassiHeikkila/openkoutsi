@@ -3,7 +3,18 @@
   "tabs": {
     "members": "Jäsenet",
     "invitations": "Kutsut",
+    "joinRequests": "Liittymispyynnöt",
     "settings": "Asetukset"
+  },
+  "joinRequests": {
+    "none": "Ei avoimia liittymispyyntöjä.",
+    "requestedAt": "Pyydetty",
+    "approve": "Hyväksy",
+    "reject": "Hylkää",
+    "approved": "Pyyntö hyväksytty",
+    "rejected": "Pyyntö hylätty",
+    "approveFailed": "Pyynnön hyväksyntä epäonnistui",
+    "rejectFailed": "Pyynnön hylkäys epäonnistui"
   },
   "members": {
     "username": "Käyttäjätunnus",

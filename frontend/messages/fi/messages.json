@@ -1,0 +1,45 @@
+{
+  "inbox": {
+    "title": "Postilaatikko",
+    "empty": "Ei viestejä.",
+    "markAllRead": "Merkitse kaikki luetuiksi",
+    "delete": "Poista",
+    "deleteFailed": "Viestin poisto epäonnistui"
+  },
+  "types": {
+    "team_request": {
+      "title": "Uusi tiimipyyntö",
+      "body": "{admin_username} pyysi uutta tiimiä \"{team_name}\" ({team_slug}). Hyväksyntä vaaditaan ennen kuin jäsenet voivat kirjautua."
+    },
+    "invite_used": {
+      "title": "Kutsu käytetty",
+      "body": "{username} liittyi tiimiin {team_name} kutsulinkin kautta."
+    },
+    "join_request": {
+      "title": "Liittymispyyntö",
+      "body": "{username} pyysi liittyä tiimiin {team_name}. Käsittele se kohdassa Ylläpito → Liittymispyynnöt."
+    },
+    "unknown": {
+      "title": "Ilmoitus",
+      "body": "Sinulla on uusi ilmoitus."
+    }
+  },
+  "join": {
+    "title": "Pyydä liittymistä",
+    "description": "Lähetä pyyntö liittyä tähän tiimiin. Ylläpitäjä käsittelee sen.",
+    "username": "Käyttäjätunnus",
+    "usernamePlaceholder": "käyttäjätunnus",
+    "password": "Salasana",
+    "passwordHint": "Vähintään 12 merkkiä, yksi iso kirjain ja yksi numero.",
+    "displayName": "Näyttönimi",
+    "displayNamePlaceholder": "Valinnainen",
+    "message": "Viesti",
+    "messagePlaceholder": "Valinnainen — mitä ylläpitäjien olisi hyvä tietää",
+    "submit": "Lähetä pyyntö",
+    "submitting": "Lähetetään…",
+    "successTitle": "Pyyntö lähetetty",
+    "successDesc": "Ylläpitäjä käsittelee pyyntösi. Voit kirjautua, kun se on hyväksytty.",
+    "failed": "Pyynnön lähetys epäonnistui",
+    "backToLogin": "Takaisin kirjautumiseen"
+  }
+}

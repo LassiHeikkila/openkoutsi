@@ -307,3 +307,25 @@ export interface TrainingStatus {
   feedback: string | null
   generated_date: string | null
 }
+
+export interface Message {
+  id: string
+  type: string
+  data: Record<string, string | null>
+  read_at: string | null
+  created_at: string
+}
+
+export interface UnreadCount {
+  count: number
+}
+
+export interface JoinRequest {
+  id: string
+  team_slug: string
+  username: string
+  display_name: string | null
+  message: string | null
+  status: string
+  created_at: string
+}

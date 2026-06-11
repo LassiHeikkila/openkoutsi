@@ -3,7 +3,18 @@
   "tabs": {
     "members": "Members",
     "invitations": "Invitations",
+    "joinRequests": "Join requests",
     "settings": "Settings"
+  },
+  "joinRequests": {
+    "none": "No pending join requests.",
+    "requestedAt": "Requested",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approved": "Request approved",
+    "rejected": "Request rejected",
+    "approveFailed": "Failed to approve request",
+    "rejectFailed": "Failed to reject request"
   },
   "members": {
     "username": "Username",

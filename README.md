@@ -18,7 +18,9 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 
 - **Multi-team support** — isolated teams with separate databases/storage; users can belong to multiple teams
 - **Invite-only signup + team requests** — setup wizard creates the first team/admin; later team creation requests can be approved via superadmin
-- **Admin dashboard** — manage members, invitations, password resets, and per-team LLM settings
+- **Self-serve join requests** — prospective members can request to join a team from the login page; admins approve or reject from the Admin → Join requests tab
+- **Admin & superadmin inbox** — in-app messages notify admins about events (new team requests, used invites, join requests); each user has an isolated per-user message store, deletions are permanent, and the design leaves a hook for future email/push delivery
+- **Admin dashboard** — manage members, invitations, join requests, password resets, and per-team LLM settings
 - **Coach access** — coaches can view athlete profiles and activity lists inside their team
 - **FIT file ingestion** — upload activities directly with automatic TSS, normalized power, and zone distribution analysis
 - **Workout categorization** — automatic Coggan-style zone classification with manual override

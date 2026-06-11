@@ -95,6 +95,14 @@ export default function LoginPage() {
               {t('login.forgotPassword')}
             </Link>
           </p>
+          <p className="text-sm text-muted-foreground text-center">
+            <Link
+              href={`/t/${slug}/join`}
+              className="underline underline-offset-4 hover:text-primary"
+            >
+              {t('login.requestToJoin')}
+            </Link>
+          </p>
         </CardFooter>
       </form>
     </Card>

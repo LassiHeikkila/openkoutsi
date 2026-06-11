@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Trash2 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
-import { messageTypeKey } from '@/lib/messages'
+import { messageTypeKey, messageValues } from '@/lib/messages'
 import type { Message } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -266,12 +266,25 @@ export default function SuperadminPage() {
           <div className="space-y-2">
             {messages.map((m) => {
               const key = messageTypeKey(m.type)
-              const values = (m.data ?? {}) as Record<string, string>
+              const values = messageValues(m.data)
+              const interactive = !m.read_at
               return (
                 <div
                   key={m.id}
-                  className={`flex items-start justify-between gap-3 rounded-md border px-4 py-3 ${m.read_at ? 'opacity-70' : ''}`}
-                  onClick={() => !m.read_at && markMessageRead(m.id)}
+                  className={`flex items-start justify-between gap-3 rounded-md border px-4 py-3 ${interactive ? 'cursor-pointer' : 'opacity-70'}`}
+                  role={interactive ? 'button' : undefined}
+                  tabIndex={interactive ? 0 : undefined}
+                  onClick={() => interactive && markMessageRead(m.id)}
+                  onKeyDown={
+                    interactive
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            markMessageRead(m.id)
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">

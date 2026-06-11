@@ -49,20 +49,16 @@ async def create_join_request(
     if team.status != "active":
         raise HTTPException(status_code=403, detail="Team is not accepting join requests")
 
-    # Reject if this username already belongs to the team.
+    # Reject any username that already exists globally. This is a public,
+    # unauthenticated flow: we have no proof the requester controls an existing
+    # account, so approving such a request must never attach a stranger to it.
+    # Existing users who want to join another team should use an invite.
     existing_user = await session.execute(
         select(User).where(User.username == body.username)
     )
     user = existing_user.scalar_one_or_none()
     if user is not None and user.deleted_at is None:
-        existing_mb = await session.execute(
-            select(TeamMembership).where(
-                TeamMembership.team_id == team.id,
-                TeamMembership.user_id == user.id,
-            )
-        )
-        if existing_mb.scalar_one_or_none() is not None:
-            raise HTTPException(status_code=400, detail="Already a member of this team")
+        raise HTTPException(status_code=400, detail="Username not available")
 
     # One pending request per username per team.
     dup = await session.execute(
@@ -148,55 +144,45 @@ async def approve_join_request(
     _require_admin(ctx, team)
     jr = await _get_pending(request_id, team, session)
 
-    # Create or reuse the global user.
+    # The username was guaranteed not to exist when the request was submitted.
+    # If it exists now it was claimed by someone else in the meantime, and we
+    # cannot prove the requester owns it — refuse rather than attach silently.
     existing = await session.execute(select(User).where(User.username == jr.username))
-    user = existing.scalar_one_or_none()
-    already_member = False
-    if user is not None:
-        if user.deleted_at is not None:
-            raise HTTPException(status_code=400, detail="Username not available")
-        mb = await session.execute(
-            select(TeamMembership).where(
-                TeamMembership.team_id == team.id,
-                TeamMembership.user_id == user.id,
-            )
-        )
-        already_member = mb.scalar_one_or_none() is not None
-    else:
-        user = User(
-            id=str(uuid.uuid4()),
-            username=jr.username,
-            password_hash=jr.password_hash,
-        )
-        session.add(user)
-        await session.flush()
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=400, detail="Username is no longer available")
 
-    if not already_member:
-        session.add(
-            TeamMembership(
-                team_id=team.id,
-                user_id=user.id,
-                roles=json.dumps(["user"]),
-            )
+    user = User(
+        id=str(uuid.uuid4()),
+        username=jr.username,
+        password_hash=jr.password_hash,
+    )
+    session.add(user)
+    await session.flush()
+
+    session.add(
+        TeamMembership(
+            team_id=team.id,
+            user_id=user.id,
+            roles=json.dumps(["user"]),
         )
+    )
 
     jr.status = "approved"
     jr.decided_at = datetime.now(timezone.utc)
     jr.decided_by_user_id = ctx.user_id
     await session.commit()
 
-    if not already_member:
-        await init_team_db(team.id)
-        async with get_team_session_factory(team.id)() as team_session:
-            team_session.add(
-                Athlete(
-                    id=str(uuid.uuid4()),
-                    global_user_id=user.id,
-                    name=jr.display_name or None,
-                    ftp_tests=[],
-                )
+    await init_team_db(team.id)
+    async with get_team_session_factory(team.id)() as team_session:
+        team_session.add(
+            Athlete(
+                id=str(uuid.uuid4()),
+                global_user_id=user.id,
+                name=jr.display_name or None,
+                ftp_tests=[],
             )
-            await team_session.commit()
+        )
+        await team_session.commit()
 
     return _to_response(jr, team.slug)
 

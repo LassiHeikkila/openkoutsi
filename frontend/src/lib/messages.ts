@@ -15,3 +15,19 @@ export function messageTypeKey(type: string): KnownMessageType | 'unknown' {
     ? (type as KnownMessageType)
     : 'unknown'
 }
+
+/**
+ * Coerce a message's `data` payload into safe interpolation values for
+ * next-intl. The backend may send `null` for optional fields (e.g. a join
+ * request's `display_name`/`message`); passing those straight into `t(...)`
+ * would render "null" or break formatting, so null/undefined become "".
+ */
+export function messageValues(
+  data: Record<string, string | null> | null | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(data ?? {})) {
+    out[k] = v ?? ''
+  }
+  return out
+}

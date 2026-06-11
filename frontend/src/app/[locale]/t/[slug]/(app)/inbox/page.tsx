@@ -8,7 +8,7 @@ import useSWR, { mutate as globalMutate } from 'swr'
 import { Trash2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { apiFetch, fetcher } from '@/lib/api'
-import { messageTypeKey } from '@/lib/messages'
+import { messageTypeKey, messageValues } from '@/lib/messages'
 import type { Message } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -86,12 +86,25 @@ export default function InboxPage() {
         <div className="space-y-2">
           {messages.map((m) => {
             const key = messageTypeKey(m.type)
-            const values = (m.data ?? {}) as Record<string, string>
+            const values = messageValues(m.data)
+            const interactive = !m.read_at
             return (
               <Card
                 key={m.id}
-                className={`p-4 cursor-default ${m.read_at ? 'opacity-70' : ''}`}
-                onClick={() => !m.read_at && markRead(m.id)}
+                className={`p-4 ${interactive ? 'cursor-pointer' : 'cursor-default opacity-70'}`}
+                role={interactive ? 'button' : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                onClick={() => interactive && markRead(m.id)}
+                onKeyDown={
+                  interactive
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          markRead(m.id)
+                        }
+                      }
+                    : undefined
+                }
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">

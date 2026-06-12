@@ -291,9 +291,9 @@ export default function SuperadminPage() {
                       {!m.read_at && (
                         <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                       )}
-                      <p className="text-sm font-medium">{tm(`types.${key}.title` as never, values)}</p>
+                      <p className="text-sm font-medium">{tm(`types.${key}.title` as never, values as never)}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{tm(`types.${key}.body` as never, values)}</p>
+                    <p className="text-sm text-muted-foreground">{tm(`types.${key}.body` as never, values as never)}</p>
                     <p className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString()}</p>
                   </div>
                   <Button

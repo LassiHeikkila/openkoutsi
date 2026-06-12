@@ -113,11 +113,11 @@ export default function InboxPage() {
                         <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
                       )}
                       <p className="text-sm font-medium">
-                        {t(`types.${key}.title` as never, values)}
+                        {t(`types.${key}.title` as never, values as never)}
                       </p>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {t(`types.${key}.body` as never, values)}
+                      {t(`types.${key}.body` as never, values as never)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(m.created_at).toLocaleString()}

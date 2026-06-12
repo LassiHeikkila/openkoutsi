@@ -25,7 +25,7 @@ Create `.env` in the project root:
 SECRET_KEY=<hex-64-chars>          # python -c "import secrets; print(secrets.token_hex(32))"
 
 # Optional – defaults shown
-DATA_DIR=data                      # root directory; holds registry.db and teams/
+DATA_DIR=data                      # root directory; holds registry.db, teams/, and users/ (per-user message DBs)
 FRONTEND_URL=https://your-domain
 API_URL=https://api.your-domain
 ACCESS_TOKEN_EXPIRE_MINUTES=60

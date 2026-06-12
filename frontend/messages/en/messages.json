@@ -1,0 +1,45 @@
+{
+  "inbox": {
+    "title": "Inbox",
+    "empty": "No messages.",
+    "markAllRead": "Mark all read",
+    "delete": "Delete",
+    "deleteFailed": "Failed to delete message"
+  },
+  "types": {
+    "team_request": {
+      "title": "New team request",
+      "body": "{admin_username} requested a new team \"{team_name}\" ({team_slug}). Approval is required before its members can sign in."
+    },
+    "invite_used": {
+      "title": "Invite used",
+      "body": "{username} joined {team_name} via an invite link."
+    },
+    "join_request": {
+      "title": "Join request",
+      "body": "{username} requested to join {team_name}. Review it under Admin → Join requests."
+    },
+    "unknown": {
+      "title": "Notification",
+      "body": "You have a new notification."
+    }
+  },
+  "join": {
+    "title": "Request to join",
+    "description": "Send a request to join this team. An administrator will review it.",
+    "username": "Username",
+    "usernamePlaceholder": "username",
+    "password": "Password",
+    "passwordHint": "At least 12 characters, one uppercase letter, and one digit.",
+    "displayName": "Display name",
+    "displayNamePlaceholder": "Optional",
+    "message": "Message",
+    "messagePlaceholder": "Optional — anything the admins should know",
+    "submit": "Send request",
+    "submitting": "Sending…",
+    "successTitle": "Request sent",
+    "successDesc": "An administrator will review your request. You'll be able to sign in once it's approved.",
+    "failed": "Failed to send request",
+    "backToLogin": "Back to sign in"
+  }
+}

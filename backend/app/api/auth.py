@@ -24,6 +24,7 @@ from backend.app.core.config import settings
 from backend.app.core.limiter import limiter
 from backend.app.db.registry import get_registry_session
 from backend.app.db.team_session import init_team_db, get_team_session_factory
+from backend.app.db.user_session import delete_user_db
 from backend.app.models.registry_orm import (
     Invitation,
     PasswordResetToken,
@@ -40,6 +41,7 @@ from backend.app.schemas.auth import (
     ResetPasswordRequest,
     TokenResponse,
 )
+from backend.app.services import notifications
 from backend.app.services.providers.registry import PROVIDERS
 
 log = logging.getLogger(__name__)
@@ -199,6 +201,18 @@ async def register(
         team_session.add(athlete)
         await team_session.commit()
 
+    await notifications.notify_team_admins(
+        session,
+        team.id,
+        notifications.INVITE_USED,
+        {
+            "username": user.username,
+            "display_name": body.display_name or None,
+            "team_name": team.name,
+            "team_slug": team.slug,
+        },
+    )
+
     _set_refresh_cookie(response, slug, create_refresh_token(user.id, team.id))
     return TokenResponse(access_token=create_access_token(user.id, team.id, roles))
 
@@ -304,6 +318,12 @@ async def delete_account(
     # Hard-delete the user; cascades to provider connections and reset tokens
     await session.delete(user)
     await session.commit()
+
+    # Remove the user's per-user DB (message inbox, etc.) so nothing is orphaned.
+    try:
+        await delete_user_db(ctx.user_id)
+    except Exception:
+        log.exception("Failed to delete per-user DB for user %s", ctx.user_id)
 
     _clear_refresh_cookie(response, slug)
 

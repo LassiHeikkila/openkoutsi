@@ -38,6 +38,24 @@ _TEST_ATHLETE_ID = "test-athlete-0000"
 _TEST_ROLES = ["administrator", "user"]
 
 
+# ── Per-user DB isolation ────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def isolate_user_dbs(tmp_path, monkeypatch):
+    """Point per-user DB files at a temp dir and reset the engine cache per test.
+
+    Per-user mailbox DBs (backend.app.db.user_session) are file-based, so each
+    test gets its own data_dir and a cleared engine cache for isolation.
+    """
+    from backend.app.core.config import settings
+    from backend.app.db import user_session
+
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path))
+    user_session._get_user_engine.cache_clear()
+    yield
+    user_session._get_user_engine.cache_clear()
+
+
 # ── DB fixtures ────────────────────────────────────────────────────────────
 
 @pytest.fixture

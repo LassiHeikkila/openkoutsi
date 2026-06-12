@@ -35,5 +35,7 @@
   "deleteConfirmAction": "Poista",
   "approveFailed": "Hyväksyntä epäonnistui",
   "deleteFailed": "Poistaminen epäonnistui",
-  "authFailed": "Virheellinen salaisuus"
+  "authFailed": "Virheellinen salaisuus",
+  "messagesTitle": "Viestit",
+  "noMessages": "Ei viestejä."
 }

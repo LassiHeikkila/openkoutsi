@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     def team_db_path(self, team_id: str) -> str:
         return str(Path(self.data_dir) / "teams" / team_id / "team.db")
 
+    def user_data_dir(self, user_id: str) -> Path:
+        return Path(self.data_dir) / "users" / user_id
+
+    def user_db_path(self, user_id: str) -> str:
+        # Generic name ("user.db") so other per-user data can live in this file.
+        return str(self.user_data_dir(user_id) / "user.db")
+
     def team_fit_dir(self, team_id: str, global_user_id: str) -> Path:
         return Path(self.data_dir) / "teams" / team_id / "uploads" / global_user_id
 

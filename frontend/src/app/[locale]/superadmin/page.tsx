@@ -2,7 +2,10 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { Trash2 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
+import { messageTypeKey, messageValues } from '@/lib/messages'
+import type { Message } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -57,13 +60,21 @@ async function fetchUsers(secret: string): Promise<SuperadminUser[]> {
   }, false)
 }
 
+async function fetchMessages(secret: string): Promise<Message[]> {
+  return apiFetch<Message[]>('/api/superadmin/messages', {
+    headers: { 'X-Superadmin-Secret': secret },
+  }, false)
+}
+
 export default function SuperadminPage() {
   const t = useTranslations('superadmin')
+  const tm = useTranslations('messages')
 
   const [secret, setSecret] = useState('')
   const [authedSecret, setAuthedSecret] = useState('')
   const [teams, setTeams] = useState<SuperadminTeam[] | null>(null)
   const [users, setUsers] = useState<SuperadminUser[] | null>(null)
+  const [messages, setMessages] = useState<Message[] | null>(null)
   const [authError, setAuthError] = useState('')
   const [unlocking, setUnlocking] = useState(false)
 
@@ -75,12 +86,14 @@ export default function SuperadminPage() {
     setUnlocking(true)
     setAuthError('')
     try {
-      const [teamsData, usersData] = await Promise.all([
+      const [teamsData, usersData, messagesData] = await Promise.all([
         fetchTeams(secret),
         fetchUsers(secret),
+        fetchMessages(secret),
       ])
       setTeams(teamsData)
       setUsers(usersData)
+      setMessages(messagesData)
       setAuthedSecret(secret)
     } catch {
       setAuthError(t('authFailed'))
@@ -117,6 +130,34 @@ export default function SuperadminPage() {
       setActionError(t('deleteFailed'))
     } finally {
       setDeleteTarget(null)
+    }
+  }
+
+  async function markMessageRead(id: string) {
+    try {
+      await apiFetch(
+        `/api/superadmin/messages/${id}/read`,
+        { method: 'POST', headers: { 'X-Superadmin-Secret': authedSecret } },
+        false,
+      )
+      setMessages((prev) =>
+        prev?.map((m) => (m.id === id ? { ...m, read_at: new Date().toISOString() } : m)) ?? null,
+      )
+    } catch {
+      // best-effort
+    }
+  }
+
+  async function deleteMessage(id: string) {
+    try {
+      await apiFetch(
+        `/api/superadmin/messages/${id}`,
+        { method: 'DELETE', headers: { 'X-Superadmin-Secret': authedSecret } },
+        false,
+      )
+      setMessages((prev) => prev?.filter((m) => m.id !== id) ?? null)
+    } catch {
+      // best-effort
     }
   }
 
@@ -212,6 +253,63 @@ export default function SuperadminPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Messages */}
+      <div>
+        <h2 className="mb-3 text-base font-medium">{t('messagesTitle')}</h2>
+        {!messages || messages.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('noMessages')}</p>
+        ) : (
+          <div className="space-y-2">
+            {messages.map((m) => {
+              const key = messageTypeKey(m.type)
+              const values = messageValues(m.data)
+              const interactive = !m.read_at
+              return (
+                <div
+                  key={m.id}
+                  className={`flex items-start justify-between gap-3 rounded-md border px-4 py-3 ${interactive ? 'cursor-pointer' : 'opacity-70'}`}
+                  role={interactive ? 'button' : undefined}
+                  tabIndex={interactive ? 0 : undefined}
+                  onClick={() => interactive && markMessageRead(m.id)}
+                  onKeyDown={
+                    interactive
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            markMessageRead(m.id)
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {!m.read_at && (
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+                      )}
+                      <p className="text-sm font-medium">{tm(`types.${key}.title` as never, values)}</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{tm(`types.${key}.body` as never, values)}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString()}</p>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={tm('inbox.delete')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteMessage(m.id)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

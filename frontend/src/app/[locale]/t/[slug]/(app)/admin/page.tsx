@@ -7,7 +7,7 @@ import { useRouter } from '@/navigation'
 import useSWR, { mutate as globalMutate } from 'swr'
 import { useAuth } from '@/lib/auth'
 import { apiFetch, fetcher } from '@/lib/api'
-import type { MemberResponse, InvitationResponse, TeamSettingsResponse } from '@/lib/types'
+import type { MemberResponse, InvitationResponse, TeamSettingsResponse, JoinRequest } from '@/lib/types'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -519,6 +519,61 @@ function InvitationsTab({ slug }: { slug: string }) {
   )
 }
 
+// ── Join requests tab ───────────────────────────────────────────────────────────
+
+function JoinRequestsTab({ slug }: { slug: string }) {
+  const t = useTranslations('admin')
+  const { data: requests, mutate } = useSWR<JoinRequest[]>(
+    `/api/teams/${slug}/join-requests?status=pending`,
+    fetcher,
+  )
+
+  async function decide(id: string, action: 'approve' | 'reject') {
+    try {
+      await apiFetch(`/api/teams/${slug}/join-requests/${id}/${action}`, { method: 'POST' })
+      toast({ title: t(action === 'approve' ? 'joinRequests.approved' : 'joinRequests.rejected') })
+      mutate()
+      globalMutate('/api/messages/unread-count')
+    } catch (err) {
+      toast({
+        title: t(action === 'approve' ? 'joinRequests.approveFailed' : 'joinRequests.rejectFailed'),
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  if (!requests) return <p className="text-sm text-muted-foreground py-4">Loading…</p>
+  if (requests.length === 0)
+    return <p className="text-sm text-muted-foreground py-4">{t('joinRequests.none')}</p>
+
+  return (
+    <div className="space-y-2">
+      {requests.map((r) => (
+        <div
+          key={r.id}
+          className="flex flex-wrap items-center gap-3 rounded-md border px-4 py-3 text-sm"
+        >
+          <span className="font-mono font-medium">{r.username}</span>
+          {r.display_name && <span className="text-muted-foreground">{r.display_name}</span>}
+          {r.message && <span className="italic text-muted-foreground">“{r.message}”</span>}
+          <span className="text-muted-foreground">
+            {t('joinRequests.requestedAt')} {new Date(r.created_at).toLocaleDateString()}
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" onClick={() => decide(r.id, 'approve')}>
+              {t('joinRequests.approve')}
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => decide(r.id, 'reject')}>
+              {t('joinRequests.reject')}
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Settings tab ───────────────────────────────────────────────────────────────
 
 interface LlmTestResult {
@@ -732,6 +787,7 @@ export default function AdminPage() {
         <TabsList>
           <TabsTrigger value="members">{t('tabs.members')}</TabsTrigger>
           <TabsTrigger value="invitations">{t('tabs.invitations')}</TabsTrigger>
+          <TabsTrigger value="joinRequests">{t('tabs.joinRequests')}</TabsTrigger>
           <TabsTrigger value="settings">{t('tabs.settings')}</TabsTrigger>
         </TabsList>
         <TabsContent value="members" className="mt-4">
@@ -739,6 +795,9 @@ export default function AdminPage() {
         </TabsContent>
         <TabsContent value="invitations" className="mt-4">
           <InvitationsTab slug={slug} />
+        </TabsContent>
+        <TabsContent value="joinRequests" className="mt-4">
+          <JoinRequestsTab slug={slug} />
         </TabsContent>
         <TabsContent value="settings" className="mt-4">
           <SettingsTab slug={slug} />

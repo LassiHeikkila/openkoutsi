@@ -11,6 +11,7 @@ from backend.app.db.registry import get_registry_session
 from backend.app.db.team_session import init_team_db, get_team_session_factory
 from backend.app.models.registry_orm import Team, TeamMembership, User
 from backend.app.schemas.teams import TeamSignupRequest, TeamSignupResponse
+from backend.app.services import notifications
 
 router = APIRouter(prefix="/teams", tags=["signup"])
 
@@ -70,6 +71,16 @@ async def create_team(
         )
         team_session.add(athlete)
         await team_session.commit()
+
+    await notifications.notify_superadmin(
+        notifications.TEAM_REQUEST,
+        {
+            "team_id": team.id,
+            "team_name": team.name,
+            "team_slug": team.slug,
+            "admin_username": user.username,
+        },
+    )
 
     return TeamSignupResponse(
         id=team.id,

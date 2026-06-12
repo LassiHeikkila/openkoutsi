@@ -784,7 +784,7 @@ export default function AdminPage() {
     <div className="max-w-4xl space-y-6">
       <h1 className="text-2xl font-semibold">{t('title')}</h1>
       <Tabs defaultValue="members">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="members">{t('tabs.members')}</TabsTrigger>
           <TabsTrigger value="invitations">{t('tabs.invitations')}</TabsTrigger>
           <TabsTrigger value="joinRequests">{t('tabs.joinRequests')}</TabsTrigger>

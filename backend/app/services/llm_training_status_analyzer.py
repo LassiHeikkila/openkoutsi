@@ -150,12 +150,29 @@ def _build_status_prompt(
         )
         lines.append(f"  Current week: {week_num}")
         if this_week_workouts:
+            # Start of the current plan week (a rolling 7-day block from plan_start).
+            week_start = plan_start + timedelta(days=(week_num - 1) * 7)
             lines.append("  This week's planned workouts:")
             for w in this_week_workouts:
+                # Map day_of_week (1=Mon..7=Sun, isoweekday convention) to the actual
+                # calendar date within this plan week, so the weekday label is explicit
+                # and unambiguous in the athlete's local timezone.
+                workout_date = next(
+                    (
+                        week_start + timedelta(days=offset)
+                        for offset in range(7)
+                        if (week_start + timedelta(days=offset)).isoweekday()
+                        == w.day_of_week
+                    ),
+                    week_start,
+                )
+                weekday_name = workout_date.strftime("%A")
+                today_marker = " (today)" if workout_date == today else ""
                 completed = "completed" if w.completed_activity_id else "not completed"
                 tss_str = f", target TSS {w.target_tss}" if w.target_tss else ""
                 lines.append(
-                    f"    Day {w.day_of_week}: {w.workout_type or 'workout'}{tss_str} — {completed}"
+                    f"    {weekday_name} {workout_date.isoformat()}{today_marker}: "
+                    f"{w.workout_type or 'workout'}{tss_str} — {completed}"
                 )
         else:
             lines.append("  No workouts planned for this week")

@@ -36,7 +36,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Goals** — set training/event goals with optional target metrics and dates; when marking a goal achieved, record the final achieved value and a free-text outcome note capturing whether the target was reached
 - **Activity labels & notes** — tag activities as "race" or "commute" and add free-text notes (included in AI analysis context)
 - **AI coaching analysis** — per-activity analysis and plan support with OpenAI-compatible backends
-- **Koutsi daily feedback** — dashboard card with LLM-generated daily training status covering load trends, recovery state, plan adherence, and goal progress; auto-triggers after uploads/syncs when enabled. The current week's planned workouts are labelled with explicit weekday names and dates in the athlete's timezone (with today marked) so Koutsi never confuses which day is which
+- **Koutsi daily feedback** — dashboard card with LLM-generated daily training status covering load trends, recovery state, plan adherence, and goal progress; auto-triggers after uploads/syncs when enabled
 - **PATCH support on `/api/athlete/`** — athlete profile endpoint now accepts both `PUT` and `PATCH` for partial updates
 - **Privacy-first** — export your data and delete your account at any time
 - **Cycling-themed 404 page** — localized "Wrong Turn!" not-found page with cycling flavour

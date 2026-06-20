@@ -148,6 +148,12 @@ export interface FitnessCurrent {
   form: 'peak' | 'fresh' | 'neutral' | 'tired' | 'overreached'
 }
 
+export interface ActivitySummary {
+  num_activities: number
+  total_duration_s: number
+  total_distance_m: number
+}
+
 export interface Goal {
   id: string
   athlete_id: string

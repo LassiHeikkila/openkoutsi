@@ -15,6 +15,11 @@
   },
   "ftpValue": "{value} W",
   "fitnessHistory": "Kuntohistoria",
+  "activitySummary": {
+    "numActivities": "Suoritukset",
+    "activeTime": "Aktiivinen aika",
+    "distance": "Matka"
+  },
   "weeklyTss": "Viikottainen TSS",
   "weeklyTssActual": "Toteutunut TSS",
   "weeklyTssPlanned": "Suunniteltu TSS",

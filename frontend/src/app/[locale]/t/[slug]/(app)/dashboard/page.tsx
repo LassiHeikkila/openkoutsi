@@ -5,7 +5,8 @@ import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/lib/auth'
 import { fetcher, apiFetch } from '@/lib/api'
-import type { FitnessPoint, FitnessCurrent, TrainingPlan, TrainingStatus } from '@/lib/types'
+import type { FitnessPoint, FitnessCurrent, TrainingPlan, TrainingStatus, ActivitySummary } from '@/lib/types'
+import { formatHoursMinutes, formatDistance } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FitnessChart } from '@/components/charts/FitnessChart'
@@ -188,6 +189,10 @@ export default function DashboardPage() {
     `/api/metrics/fitness?days=${days}`,
     fetcher,
   )
+  const { data: summary } = useSWR<ActivitySummary>(
+    `/api/metrics/activity-summary?days=${days}`,
+    fetcher,
+  )
   const { data: plans } = useSWR<TrainingPlan[]>('/api/plans/', fetcher)
   const activePlan = plans?.find((p) => p.status === 'active')
   const _rawPlanned = plans ? aggregatePlannedTssByWeek(plans) : undefined
@@ -264,6 +269,26 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground py-12 text-center">
               {t('noHistory')}
             </p>
+          )}
+          {summary && (
+            <div className="mt-4 overflow-hidden rounded-lg border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-muted-foreground">
+                    <th className="px-3 py-2 text-right font-medium">{t('activitySummary.numActivities')}</th>
+                    <th className="px-3 py-2 text-right font-medium">{t('activitySummary.activeTime')}</th>
+                    <th className="px-3 py-2 text-right font-medium">{t('activitySummary.distance')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="px-3 py-2 text-right tabular-nums">{summary.num_activities}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatHoursMinutes(summary.total_duration_s)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatDistance(summary.total_distance_m)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>

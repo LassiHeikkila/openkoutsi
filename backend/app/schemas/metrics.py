@@ -47,3 +47,11 @@ class FitnessCurrentResponse(FitnessMetricResponse):
         self.daily_tss = self.tss_day if self.daily_tss == 0.0 else self.daily_tss
         self.form = _tsb_to_form(self.tsb)
         return self
+
+
+class ActivitySummaryResponse(BaseModel):
+    """Totals for cycling activities over a selected time period."""
+
+    num_activities: int = 0
+    total_duration_s: int = 0
+    total_distance_m: float = 0.0

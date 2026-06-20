@@ -2,14 +2,19 @@ from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.deps import get_ctx_and_session
 from backend.app.db.team_session import get_team_session_factory
 from backend.app.models.team_orm import Activity, ActivityStream, Athlete, DailyMetric
-from backend.app.schemas.metrics import FitnessCurrentResponse, FitnessMetricResponse
+from backend.app.schemas.metrics import (
+    ActivitySummaryResponse,
+    FitnessCurrentResponse,
+    FitnessMetricResponse,
+)
 from backend.app.services.metrics_engine import catch_up_metrics
+from openkoutsi.sport_matching import CYCLING_SPORT_TYPES
 from openkoutsi.zones import Zones
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
@@ -45,6 +50,42 @@ async def get_fitness(
 
     result = await session.execute(query.order_by(DailyMetric.date))
     return [FitnessMetricResponse.model_validate(m) for m in result.scalars().all()]
+
+
+@router.get("/activity-summary", response_model=ActivitySummaryResponse)
+async def get_activity_summary(
+    start: Optional[date] = Query(None),
+    end: Optional[date] = Query(None),
+    days: Optional[int] = Query(None, ge=1, le=3650),
+    ctx_session=Depends(get_ctx_and_session),
+):
+    """Totals (count, active time, distance) for cycling activities in a period."""
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+
+    if days is not None and start is None:
+        start = date.today() - timedelta(days=days)
+
+    query = select(
+        func.count(Activity.id),
+        func.coalesce(func.sum(Activity.duration_s), 0),
+        func.coalesce(func.sum(Activity.distance_m), 0.0),
+    ).where(
+        Activity.athlete_id == athlete.id,
+        Activity.sport_type.in_(CYCLING_SPORT_TYPES),
+    )
+
+    if start:
+        query = query.where(Activity.start_time >= datetime.combine(start, time.min))
+    if end:
+        query = query.where(Activity.start_time <= datetime.combine(end, time.max))
+
+    num, total_duration, total_distance = (await session.execute(query)).one()
+    return ActivitySummaryResponse(
+        num_activities=num,
+        total_duration_s=int(total_duration),
+        total_distance_m=float(total_distance),
+    )
 
 
 @router.get("/fitness/current", response_model=FitnessCurrentResponse)

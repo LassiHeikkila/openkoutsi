@@ -15,6 +15,11 @@
   },
   "ftpValue": "{value} W",
   "fitnessHistory": "Fitness history",
+  "activitySummary": {
+    "numActivities": "Activities",
+    "activeTime": "Active time",
+    "distance": "Distance"
+  },
   "weeklyTss": "Weekly TSS",
   "weeklyTssActual": "Actual TSS",
   "weeklyTssPlanned": "Planned TSS",

@@ -4,6 +4,7 @@ import {
   formatDate,
   formatDistance,
   formatDuration,
+  formatHoursMinutes,
   formatHR,
   formatPower,
 } from '@/lib/utils'
@@ -57,6 +58,15 @@ describe('formatDuration', () => {
 
   it('omits zero hours', () => {
     expect(formatDuration(120)).not.toContain('h')
+  })
+})
+
+describe('formatHoursMinutes', () => {
+  it('always shows hours and minutes', () => {
+    expect(formatHoursMinutes(45 * 60)).toBe('0h 45m')
+    expect(formatHoursMinutes(3600)).toBe('1h 0m')
+    expect(formatHoursMinutes(45296)).toBe('12h 34m')
+    expect(formatHoursMinutes(0)).toBe('0h 0m')
   })
 })
 

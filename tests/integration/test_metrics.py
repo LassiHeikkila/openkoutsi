@@ -206,6 +206,80 @@ class TestRecalculate:
         assert activity.tss is not None
 
 
+# ── Activity summary ───────────────────────────────────────────────────────────
+
+class TestActivitySummary:
+    async def _add_activity(self, client, auth_headers, sport_type, start_time, duration_s, distance_m):
+        resp = await client.post(
+            "/api/activities/",
+            json={
+                "sport_type": sport_type,
+                "start_time": start_time,
+                "duration_s": duration_s,
+                "distance_m": distance_m,
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+        return resp.json()["id"]
+
+    async def test_empty_for_new_athlete(self, client, auth_headers):
+        resp = await client.get("/api/metrics/activity-summary", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data == {"num_activities": 0, "total_duration_s": 0, "total_distance_m": 0.0}
+
+    async def test_totals_only_cycling(self, client, auth_headers):
+        today = date.today()
+        recent = (today - timedelta(days=5)).isoformat() + "T10:00:00Z"
+        # Two cycling rides (counted)
+        await self._add_activity(client, auth_headers, "Ride", recent, 3600, 30000.0)
+        await self._add_activity(client, auth_headers, "VirtualRide", recent, 1800, 15000.0)
+        # Non-cycling activities (excluded)
+        await self._add_activity(client, auth_headers, "Run", recent, 1200, 5000.0)
+        await self._add_activity(client, auth_headers, "Yoga", recent, 2400, 0.0)
+
+        resp = await client.get("/api/metrics/activity-summary?days=30", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["num_activities"] == 2
+        assert data["total_duration_s"] == 5400
+        assert data["total_distance_m"] == 45000.0
+
+    async def test_days_filter_excludes_older_activities(self, client, auth_headers):
+        today = date.today()
+        recent = (today - timedelta(days=5)).isoformat() + "T10:00:00Z"
+        old = (today - timedelta(days=120)).isoformat() + "T10:00:00Z"
+        await self._add_activity(client, auth_headers, "Ride", recent, 3600, 30000.0)
+        await self._add_activity(client, auth_headers, "Ride", old, 7200, 60000.0)
+
+        resp = await client.get("/api/metrics/activity-summary?days=30", headers=auth_headers)
+        data = resp.json()
+        assert data["num_activities"] == 1
+        assert data["total_duration_s"] == 3600
+        assert data["total_distance_m"] == 30000.0
+
+    async def test_start_and_end_range(self, client, auth_headers):
+        today = date.today()
+        in_range = (today - timedelta(days=40)).isoformat() + "T10:00:00Z"
+        out_range = (today - timedelta(days=5)).isoformat() + "T10:00:00Z"
+        await self._add_activity(client, auth_headers, "Ride", in_range, 3600, 30000.0)
+        await self._add_activity(client, auth_headers, "Ride", out_range, 1800, 15000.0)
+
+        start = str(today - timedelta(days=60))
+        end = str(today - timedelta(days=20))
+        resp = await client.get(
+            f"/api/metrics/activity-summary?start={start}&end={end}", headers=auth_headers
+        )
+        data = resp.json()
+        assert data["num_activities"] == 1
+        assert data["total_duration_s"] == 3600
+
+    async def test_unauthenticated_returns_401(self, client):
+        resp = await client.get("/api/metrics/activity-summary")
+        assert resp.status_code == 401
+
+
 # ── Zones ──────────────────────────────────────────────────────────────────────
 
 class TestZonesEndpoint:

@@ -22,6 +22,13 @@ export function formatDuration(seconds: number): string {
   return `${s}s`
 }
 
+/** Format a duration in seconds as hours and minutes, always: 2700 → "0h 45m", 45296 → "12h 34m" */
+export function formatHoursMinutes(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return `${h}h ${m}m`
+}
+
 export function formatDistance(meters: number): string {
   if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`
   return `${meters.toFixed(0)} m`

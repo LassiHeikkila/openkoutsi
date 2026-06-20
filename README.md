@@ -27,7 +27,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Strava + Wahoo sync** — OAuth integrations with history import and webhook updates through bridge services
 - **Zone sync** — sync HR/power zones and FTP from connected providers
 - **FTP estimation** — estimate FTP from your power curve via the 20-minute (95%) or Critical Power method, shown on the Power view, and accept either to set your profile FTP
-- **Fitness metrics** — CTL/ATL/TSB computed and shown as interactive charts; stale metrics caused by deleted activities are detected and corrected automatically on dashboard load
+- **Fitness metrics** — CTL/ATL/TSB computed and shown as interactive charts; stale metrics caused by deleted activities are detected and corrected automatically on dashboard load. The fitness history card also shows cycling totals — number of activities, active time, and covered distance — for the selected time period
 - **Training calendar** — dashboard calendar shows both performed and planned workouts with distinct visual markers (completed, pending, skipped), and lets you mark a planned workout as done or skipped straight from the day view without opening the plan
 - **Training plan generation** — periodized plans (Base → Build → Peak → Taper)
 - **Activity → plan linking** — uploaded activities are automatically matched to the day's planned workout (sport, TSS ≥ 60%, duration ≥ 60%); manual link/unlink via the plan calendar or the dashboard activity calendar

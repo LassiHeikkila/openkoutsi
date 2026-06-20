@@ -34,6 +34,11 @@ _ACTIVITY_SPORT_TO_CATEGORY: dict[str, str] = {
     "Badminton": "racket_sport",
 }
 
+# Sport types that count as cycling, derived from the category map above.
+CYCLING_SPORT_TYPES = frozenset(
+    sport for sport, category in _ACTIVITY_SPORT_TO_CATEGORY.items() if category == "cycling"
+)
+
 # Workout types that are sport-agnostic (apply to whatever sport the plan is for)
 _GENERIC_WORKOUT_TYPES = {
     "easy",

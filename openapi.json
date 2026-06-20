@@ -2510,6 +2510,97 @@
         }
       }
     },
+    "/api/metrics/activity-summary": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Get Activity Summary",
+        "description": "Totals (count, active time, distance) for cycling activities in a period.",
+        "operationId": "get_activity_summary_api_metrics_activity_summary_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 3650,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivitySummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/metrics/fitness": {
       "get": {
         "tags": [
@@ -4550,6 +4641,27 @@
         },
         "type": "object",
         "title": "ActivityStreamsResponse"
+      },
+      "ActivitySummaryResponse": {
+        "properties": {
+          "num_activities": {
+            "type": "integer",
+            "title": "Num Activities",
+            "default": 0
+          },
+          "total_duration_s": {
+            "type": "integer",
+            "title": "Total Duration S",
+            "default": 0
+          },
+          "total_distance_m": {
+            "type": "number",
+            "title": "Total Distance M",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "ActivitySummaryResponse"
       },
       "ActivityUpdate": {
         "properties": {

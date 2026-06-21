@@ -316,3 +316,9 @@ Zone syncing requires new OAuth scopes. **Existing users who already connected S
 - **Wahoo** now requests `power_zones_read` (in addition to the existing scopes) to access power zones.
 
 Existing activity syncing is **unaffected** — only zone sync will fail with a "reconnect required" message until the user re-authorises.
+
+### Upgrading: push workouts to Wahoo (added in this release)
+
+Sending structured workouts to Wahoo requires the additional `plans_read`, `plans_write`, and `workouts_write` OAuth scopes. **Existing users who connected Wahoo before this release must disconnect and reconnect** to grant them. Until they do, pushing a workout fails with an `insufficient_scope` error and the UI shows a "reconnect Wahoo" prompt; activity and zone syncing are unaffected.
+
+A new per-team table `wahoo_workout_uploads` tracks pushed workouts for idempotent re-pushes. It is created automatically for new teams and added to existing team databases by the team migration step (`backend/scripts/migrate_teams.py`), which already runs as part of deployment.

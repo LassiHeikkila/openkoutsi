@@ -344,3 +344,38 @@ class WorkoutDefinition(TeamBase):
     athlete: Mapped["Athlete"] = relationship(
         "Athlete", back_populates="workout_definitions"
     )
+
+
+class WahooWorkoutUpload(TeamBase):
+    """Tracks structured workouts pushed to Wahoo so re-pushes update in place.
+
+    The ``external_id`` is deterministic per workout definition, letting Wahoo
+    de-duplicate the plan record; the returned plan/workout ids are stored so we
+    can issue PUT updates instead of creating duplicates.
+    """
+
+    __tablename__ = "wahoo_workout_uploads"
+    __table_args__ = (
+        UniqueConstraint("athlete_id", "external_id", name="uq_wahoo_upload_external"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    athlete_id: Mapped[str] = mapped_column(
+        String, ForeignKey("athletes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    workout_definition_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("workout_definitions.id", ondelete="SET NULL"), nullable=True
+    )
+    external_id: Mapped[str] = mapped_column(String, nullable=False)
+    wahoo_plan_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    wahoo_workout_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    starts: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    provider_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )

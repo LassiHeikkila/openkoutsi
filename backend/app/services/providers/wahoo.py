@@ -6,6 +6,7 @@ the /v1/workouts endpoint; time-series streams are obtained by downloading the
 FIT file for each workout and parsing it with fitdecode.
 """
 
+import base64
 import io
 import json
 import logging
@@ -27,7 +28,10 @@ _AUTH_URL = f"{_BASE}/oauth/authorize"
 _TOKEN_URL = f"{_BASE}/oauth/token"
 _API_BASE = f"{_BASE}/v1"
 
-_SCOPES = "user_read workouts_read offline_data power_zones_read"
+_SCOPES = (
+    "user_read workouts_read workouts_write "
+    "plans_read plans_write offline_data power_zones_read"
+)
 _PAGE_SIZE = 30
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
@@ -95,6 +99,26 @@ _SPORT_TYPES: dict[int, str] = {
     71:  "VirtualRun",
     255: "Other",
 }
+
+# sport_type → Wahoo workout_type_id for the workout record created when pushing a
+# structured workout. Indoor/virtual rides use the indoor-trainer type so the
+# plan plays against a smart trainer; everything else defaults to outdoor biking.
+_PUSH_WORKOUT_TYPE_IDS: dict[str, int] = {
+    "Ride": 0,            # BIKING
+    "VirtualRide": 61,    # BIKING_INDOOR_TRAINER
+    "MountainBikeRide": 13,
+    "Run": 1,             # RUNNING
+    "VirtualRun": 71,
+    "TrackRun": 3,
+    "TrailRun": 4,
+    "Treadmill": 5,
+}
+_DEFAULT_PUSH_WORKOUT_TYPE_ID = 0
+
+
+def workout_type_id_for(sport_type: str | None) -> int:
+    """Return the Wahoo workout_type_id to use when scheduling a pushed workout."""
+    return _PUSH_WORKOUT_TYPE_IDS.get(sport_type or "", _DEFAULT_PUSH_WORKOUT_TYPE_ID)
 
 
 class WahooClient(BaseProviderClient):
@@ -303,6 +327,112 @@ class WahooClient(BaseProviderClient):
         power_zones = _normalize_wahoo_zones(thresholds)
 
         return ZoneData(ftp=ftp, power_zones=power_zones or None)
+
+    # ── Structured workout upload ───────────────────────────────────────────
+
+    async def find_plan_by_external_id(
+        self, access_token: str, external_id: str
+    ) -> dict | None:
+        """Return the existing plan record for an external_id, or None."""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            r = await client.get(
+                f"{_API_BASE}/plans",
+                headers=headers,
+                params={"external_id": external_id},
+            )
+            r.raise_for_status()
+            data = r.json()
+
+        plans = data.get("plans", data) if isinstance(data, dict) else data
+        if isinstance(plans, list):
+            for plan in plans:
+                if str(plan.get("external_id")) == str(external_id):
+                    return plan
+            return plans[0] if plans else None
+        return None
+
+    async def create_or_update_plan(
+        self,
+        access_token: str,
+        *,
+        plan_json: dict,
+        external_id: str,
+        provider_updated_at: datetime,
+        filename: str | None = None,
+    ) -> str:
+        """Create or update a plan in the user's library; return the plan id.
+
+        The plan file is uploaded as a base64-encoded data URI. When a plan with
+        the same external_id already exists it is updated (PUT) rather than
+        duplicated.
+        """
+        headers = {"Authorization": f"Bearer {access_token}"}
+        encoded = base64.b64encode(
+            json.dumps(plan_json).encode("utf-8")
+        ).decode("ascii")
+        data = {
+            "plan[file]": f"data:application/json;base64,{encoded}",
+            "plan[external_id]": external_id,
+            "plan[provider_updated_at]": provider_updated_at.isoformat(),
+        }
+        if filename:
+            data["plan[filename]"] = filename
+
+        existing = await self.find_plan_by_external_id(access_token, external_id)
+
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            if existing and existing.get("id"):
+                r = await client.put(
+                    f"{_API_BASE}/plans/{existing['id']}", headers=headers, data=data
+                )
+            else:
+                r = await client.post(
+                    f"{_API_BASE}/plans", headers=headers, data=data
+                )
+            r.raise_for_status()
+            result = r.json()
+        return str(result["id"])
+
+    async def create_or_update_workout(
+        self,
+        access_token: str,
+        *,
+        name: str,
+        workout_token: str,
+        workout_type_id: int,
+        starts: datetime,
+        minutes: int,
+        plan_id: str,
+        existing_id: str | None = None,
+    ) -> str:
+        """Create or update a workout record referencing a plan; return its id.
+
+        Scheduling ``starts`` within today→+6 days is what makes the plan visible
+        on ELEMNT / RIVAL devices.
+        """
+        headers = {"Authorization": f"Bearer {access_token}"}
+        data = {
+            "workout[name]": name,
+            "workout[workout_token]": workout_token,
+            "workout[workout_type_id]": str(workout_type_id),
+            "workout[starts]": starts.isoformat(),
+            "workout[minutes]": str(minutes),
+            "workout[plan_id]": str(plan_id),
+        }
+
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            if existing_id:
+                r = await client.put(
+                    f"{_API_BASE}/workouts/{existing_id}", headers=headers, data=data
+                )
+            else:
+                r = await client.post(
+                    f"{_API_BASE}/workouts", headers=headers, data=data
+                )
+            r.raise_for_status()
+            result = r.json()
+        return str(result["id"])
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────

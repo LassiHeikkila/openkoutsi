@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import React from 'react'
 
 // next-intl: translate keys to themselves so we can assert on key names.
 vi.mock('next-intl', () => ({
@@ -30,13 +31,15 @@ describe('PushToWahooDialog', () => {
 
   it('renders nothing when Wahoo is not connected', () => {
     swrData = { connected: ['strava'] }
-    const { container } = render(<PushToWahooDialog workoutId="w1" />)
+    const { container } = render(
+      React.createElement(PushToWahooDialog, { workoutId: 'w1' }),
+    )
     expect(container).toBeEmptyDOMElement()
   })
 
   it('renders the send action when Wahoo is connected', () => {
     swrData = { connected: ['wahoo'] }
-    render(<PushToWahooDialog workoutId="w1" />)
+    render(React.createElement(PushToWahooDialog, { workoutId: 'w1' }))
     expect(screen.getByText('sendToWahoo')).toBeInTheDocument()
   })
 })

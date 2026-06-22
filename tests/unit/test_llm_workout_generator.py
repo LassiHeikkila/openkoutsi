@@ -73,6 +73,23 @@ class TestParseSteps:
             _parse_steps(bad)
 
     def test_nested_repeat_rejected(self):
+        # Depth-1 nesting (a repeat inside a repeat) is allowed, matching
+        # workouts._validate_steps; only deeper nesting (depth > 1) is rejected.
+        nested = json.dumps({"steps": [
+            {"kind": "repeat", "repeat_count": 2, "steps": [
+                {"kind": "repeat", "repeat_count": 2, "steps": [
+                    {"kind": "repeat", "repeat_count": 2, "steps": [
+                        {"kind": "step", "step_type": "active",
+                         "duration": {"type": "time", "seconds": 60}},
+                    ]},
+                ]},
+            ]},
+        ]})
+        with pytest.raises(WorkoutGenerationError, match="nested"):
+            _parse_steps(nested)
+
+    def test_single_level_repeat_nesting_allowed(self):
+        # A repeat nested one level deep is within the depth-1 limit.
         nested = json.dumps({"steps": [
             {"kind": "repeat", "repeat_count": 2, "steps": [
                 {"kind": "repeat", "repeat_count": 2, "steps": [
@@ -81,8 +98,8 @@ class TestParseSteps:
                 ]},
             ]},
         ]})
-        with pytest.raises(WorkoutGenerationError, match="nested"):
-            _parse_steps(nested)
+        steps = _parse_steps(nested)
+        assert steps[0]["kind"] == "repeat"
 
 
 class TestBuildUserPrompt:

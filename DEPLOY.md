@@ -241,6 +241,10 @@ https://wahoo-bridge.your-domain/webhook
 
 Set the webhook token to the same value as `WAHOO_WEBHOOK_TOKEN` in `wahoo_bridge/.env`. Wahoo will start sending `workout_summary` events to the bridge immediately.
 
+### Pushing workouts and plans to Wahoo
+
+Sending structured workouts to Wahoo (the single-workout "Send to Wahoo" action and the plan-level "Push this week to Wahoo" action) requires the OAuth scopes `plans_read`, `plans_write`, and `workouts_write`. These are requested automatically; users who connected Wahoo before this feature shipped must reconnect to grant them. The "Push this week to Wahoo" action also synthesizes the structured workouts server-side via an OpenAI-compatible LLM, so a base URL must be reachable from the backend (resolved athlete → team → global `LLM_BASE_URL`).
+
 ---
 
 ## 6. systemd Services

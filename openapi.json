@@ -3997,6 +3997,63 @@
         }
       }
     },
+    "/api/workouts/{workout_id}/push/wahoo": {
+      "post": {
+        "tags": [
+          "workouts"
+        ],
+        "summary": "Push Workout To Wahoo",
+        "operationId": "push_workout_to_wahoo_api_workouts__workout_id__push_wahoo_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Workout Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WahooPushRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WahooPushResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/teams/{slug}/consent": {
       "post": {
         "tags": [
@@ -7292,6 +7349,49 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WahooPushRequest": {
+        "properties": {
+          "starts": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts",
+            "description": "When to schedule the workout. Must be within today\u2192+6 days. Defaults to now."
+          }
+        },
+        "type": "object",
+        "title": "WahooPushRequest"
+      },
+      "WahooPushResponse": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "workout_id": {
+            "type": "string",
+            "title": "Workout Id"
+          },
+          "starts": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan_id",
+          "workout_id",
+          "starts"
+        ],
+        "title": "WahooPushResponse"
       },
       "WorkoutCreate": {
         "properties": {

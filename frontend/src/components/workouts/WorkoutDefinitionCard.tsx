@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import type { WorkoutDefinition } from '@/lib/types'
 import { formatDuration } from '@/lib/utils'
 import { ExportDialog } from '@/components/workouts/ExportDialog'
+import { PushToWahooDialog } from '@/components/workouts/PushToWahooDialog'
 
 interface Props {
   workout: WorkoutDefinition
@@ -34,6 +35,7 @@ export function WorkoutDefinitionCard({ workout, onEdit, onDelete }: Props) {
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <ExportDialog workoutId={workout.id} workoutName={workout.name} />
+            <PushToWahooDialog workoutId={workout.id} />
             {confirmDelete ? (
               <>
                 <Button size="sm" variant="destructive" onClick={() => onDelete(workout.id)}>

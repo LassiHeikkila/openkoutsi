@@ -1,23 +1,35 @@
 import uuid
+from datetime import datetime, time, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.deps import get_ctx_and_session
-from backend.app.models.team_orm import Athlete, WorkoutDefinition
+from backend.app.db.registry import get_registry_session
+from backend.app.models.registry_orm import ProviderConnection
+from backend.app.models.team_orm import Athlete, WahooWorkoutUpload, WorkoutDefinition
 from backend.app.schemas.workouts import (
     ExportFormatInfo,
+    WahooPushRequest,
+    WahooPushResponse,
     WorkoutDefinitionCreate,
     WorkoutDefinitionResponse,
     WorkoutDefinitionUpdate,
 )
+from backend.app.services.provider_sync import ensure_fresh_token
+from backend.app.services.providers.wahoo import WahooClient, workout_type_id_for
 from openkoutsi.workout_estimator import estimate_duration_s, estimate_tss
 from openkoutsi.workout_formats.registry import EXPORTERS
+from openkoutsi.workout_formats.wahoo_plan import build_wahoo_plan
 from openkoutsi.workout_schema import WorkoutStepOrRepeat
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
+
+# Wahoo only displays plans attached to a workout scheduled today → +6 days.
+_WAHOO_VISIBILITY_DAYS = 6
 
 
 async def _get_athlete(global_user_id: str, session: AsyncSession) -> Athlete:
@@ -186,3 +198,107 @@ async def export_workout(
         media_type=exporter_cls.meta.mime_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/{workout_id}/push/wahoo", response_model=WahooPushResponse)
+async def push_workout_to_wahoo(
+    workout_id: str,
+    body: WahooPushRequest,
+    ctx_session=Depends(get_ctx_and_session),
+    registry_session: AsyncSession = Depends(get_registry_session),
+):
+    """Push a structured workout to Wahoo as a plan + scheduled workout pair.
+
+    Creates (or updates, by ``external_id``) a plan in the athlete's Wahoo
+    library and a workout scheduled within the today→+6 day visibility window so
+    it appears under "Planned Workouts" on ELEMNT / RIVAL devices.
+    """
+    ctx, session = ctx_session
+    athlete = await _get_athlete(ctx.user_id, session)
+    workout = await _get_workout(workout_id, athlete.id, session)
+
+    # Resolve the Wahoo connection and a fresh access token.
+    conn_result = await registry_session.execute(
+        select(ProviderConnection).where(
+            ProviderConnection.user_id == ctx.user_id,
+            ProviderConnection.provider == "wahoo",
+        )
+    )
+    conn = conn_result.scalar_one_or_none()
+    if conn is None:
+        raise HTTPException(status_code=400, detail="wahoo is not connected")
+    access_token = await ensure_fresh_token(conn, registry_session)
+
+    # Validate the schedule falls within Wahoo's visibility window.
+    starts = body.starts or datetime.now(timezone.utc)
+    if starts.tzinfo is None:
+        starts = starts.replace(tzinfo=timezone.utc)
+    today = datetime.now(timezone.utc).date()
+    window_end = datetime.combine(
+        today + timedelta(days=_WAHOO_VISIBILITY_DAYS), time.max, tzinfo=timezone.utc
+    )
+    if not (today <= starts.date() and starts <= window_end):
+        raise HTTPException(
+            status_code=422,
+            detail=f"starts must be within today and {_WAHOO_VISIBILITY_DAYS} days from now",
+        )
+
+    plan_json = build_wahoo_plan(
+        steps=workout.steps,
+        workout_name=workout.name,
+        workout_description=workout.description,
+        sport_type=workout.sport_type,
+        athlete_ftp=athlete.ftp,
+        athlete_power_zones=athlete.power_zones,
+    )
+
+    external_id = f"okoutsi-wd-{workout.id}"
+
+    # Look up any prior upload so we update in place instead of duplicating.
+    upload_result = await session.execute(
+        select(WahooWorkoutUpload).where(
+            WahooWorkoutUpload.athlete_id == athlete.id,
+            WahooWorkoutUpload.external_id == external_id,
+        )
+    )
+    upload = upload_result.scalar_one_or_none()
+
+    minutes = max(1, round((workout.estimated_duration_s or 0) / 60)) or 1
+    client = WahooClient()
+    try:
+        plan_id = await client.create_or_update_plan(
+            access_token,
+            plan_json=plan_json,
+            external_id=external_id,
+            provider_updated_at=workout.updated_at,
+            filename=f"{external_id}.json",
+        )
+        wahoo_workout_id = await client.create_or_update_workout(
+            access_token,
+            name=workout.name,
+            workout_token=external_id,
+            workout_type_id=workout_type_id_for(workout.sport_type),
+            starts=starts,
+            minutes=minutes,
+            plan_id=plan_id,
+            existing_id=upload.wahoo_workout_id if upload else None,
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            raise HTTPException(status_code=403, detail="insufficient_scope")
+        raise HTTPException(status_code=502, detail="Wahoo API error during push")
+
+    if upload is None:
+        upload = WahooWorkoutUpload(
+            athlete_id=athlete.id,
+            workout_definition_id=workout.id,
+            external_id=external_id,
+        )
+        session.add(upload)
+    upload.wahoo_plan_id = plan_id
+    upload.wahoo_workout_id = wahoo_workout_id
+    upload.starts = starts
+    upload.provider_updated_at = workout.updated_at
+    await session.commit()
+
+    return WahooPushResponse(plan_id=plan_id, workout_id=wahoo_workout_id, starts=starts)

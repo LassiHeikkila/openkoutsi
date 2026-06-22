@@ -33,6 +33,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Activity → plan linking** — uploaded activities are automatically matched to the day's planned workout (sport, TSS ≥ 60%, duration ≥ 60%); manual link/unlink via the plan calendar or the dashboard activity calendar
 - **Workout skip tracking** — mark planned workouts as skipped with a reason (illness, injury, fatigue, travel, weather, etc.) for accurate training log and LLM coaching context
 - **Structured workouts** — create interval workouts and export as Zwift `.zwo` or FIT workout files for head units (FIT export flattens repeat blocks into individual consecutive steps for reliable display on Wahoo/Garmin devices)
+- **Push workouts to Wahoo** — send a structured workout straight to a connected Wahoo account as a plan + scheduled workout, so it appears in Planned Workouts on ELEMNT/RIVAL (schedule within today→+6 days; re-pushing updates instead of duplicating)
 - **Goals** — set training/event goals with optional target metrics and dates; when marking a goal achieved, record the final achieved value and a free-text outcome note capturing whether the target was reached
 - **Activity labels & notes** — tag activities as "race" or "commute" and add free-text notes (included in AI analysis context)
 - **AI coaching analysis** — per-activity analysis and plan support with OpenAI-compatible backends
@@ -158,7 +159,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ## Integrations
 
 - **Strava:** configure Strava app credentials in `.env` and deploy `strava_bridge/` to a public HTTPS URL.
-- **Wahoo:** configure Wahoo credentials in `.env` and deploy `wahoo_bridge/` to a public HTTPS URL.
+- **Wahoo:** configure Wahoo credentials in `.env` and deploy `wahoo_bridge/` to a public HTTPS URL. Pushing structured workouts to Wahoo requires the `plans_read`, `plans_write`, and `workouts_write` scopes; users connected before this feature must reconnect Wahoo to grant them.
 
 Detailed production setup, reverse proxy examples, systemd units, bridge registration steps, and GitHub Actions automated deployment are in [DEPLOY.md](DEPLOY.md).
 

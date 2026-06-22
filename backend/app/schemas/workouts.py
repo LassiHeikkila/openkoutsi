@@ -42,3 +42,17 @@ class ExportFormatInfo(BaseModel):
     label: str
     file_extension: str
     mime_type: str
+
+
+class WahooPushRequest(BaseModel):
+    starts: Optional[datetime] = Field(
+        None,
+        description="When to schedule the workout. Must be within today→+6 days. "
+        "Defaults to now.",
+    )
+
+
+class WahooPushResponse(BaseModel):
+    plan_id: str
+    workout_id: str
+    starts: datetime

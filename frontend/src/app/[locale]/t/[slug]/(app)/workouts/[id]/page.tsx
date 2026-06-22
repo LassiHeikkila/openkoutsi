@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
 import { WorkoutStepList } from '@/components/workouts/WorkoutStepList'
 import { ExportDialog } from '@/components/workouts/ExportDialog'
+import { PushToWahooDialog } from '@/components/workouts/PushToWahooDialog'
 
 function estimateDuration(steps: WorkoutStepOrRepeat[]): number {
   let total = 0
@@ -145,6 +146,7 @@ export default function WorkoutEditorPage() {
         </Button>
         <h1 className="text-2xl font-bold flex-1 truncate">{name || t('untitled')}</h1>
         <ExportDialog workoutId={id} workoutName={name || t('untitled')} />
+        <PushToWahooDialog workoutId={id} />
         <Button onClick={handleSave} disabled={saving || !dirty}>
           {saving ? tCommon('saving') : tCommon('save')}
         </Button>

@@ -502,7 +502,7 @@ export default function PlanPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <PlanCalendar plan={activePlan} currentWeek={currentWeek} />
+            <PlanCalendar plan={activePlan} currentWeek={currentWeek} showPushAction />
           </CardContent>
         </Card>
       )}

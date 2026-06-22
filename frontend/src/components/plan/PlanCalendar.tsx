@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import type { TrainingPlan, PlannedWorkout } from '@/lib/types'
 import { WorkoutCard } from './WorkoutCard'
 import { WorkoutActionsPanel } from './WorkoutActionsPanel'
+import { PushWeekToWahooDialog } from './PushWeekToWahooDialog'
 import { addDays, format } from 'date-fns'
 import {
   Dialog,
@@ -17,6 +18,8 @@ interface Props {
   plan: TrainingPlan
   currentWeek?: number
   onWorkoutUpdated?: (workout: PlannedWorkout) => void
+  /** Show the "Push this week to Wahoo" action (only meaningful for the active plan). */
+  showPushAction?: boolean
 }
 
 interface SelectedDay {
@@ -27,7 +30,7 @@ interface SelectedDay {
   date: string
 }
 
-export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props) {
+export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, showPushAction = false }: Props) {
   const t = useTranslations('app')
   const dayLabels = t.raw('plan.generate.dayNames') as string[]
   const [selected, setSelected] = useState<SelectedDay | null>(null)
@@ -56,6 +59,11 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated }: Props)
 
   return (
     <>
+      {showPushAction && (
+        <div className="flex justify-end mb-3">
+          <PushWeekToWahooDialog planId={plan.id} />
+        </div>
+      )}
       <div className="space-y-6">
         {weekNums.map((wn) => {
           const workouts = weeks.get(wn)!

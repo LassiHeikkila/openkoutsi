@@ -38,7 +38,7 @@ function DurationEditor({
 }) {
   const t = useTranslations('workouts')
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Select
         value={duration.type}
         onValueChange={(v) => {
@@ -182,29 +182,29 @@ export function StepEditor({ step, index, total, onChange, onDelete, onMoveUp, o
 
   return (
     <div className="border rounded-md p-3 bg-background space-y-3">
-      <div className="flex items-center gap-2">
-        <Select
-          value={step.step_type}
-          onValueChange={(v) => setField('step_type', v as StepType)}
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STEP_TYPES.map((s) => (
-              <SelectItem key={s} value={s}>{t(`stepType.${s}`)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-start gap-2">
+        <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
+          <Select
+            value={step.step_type}
+            onValueChange={(v) => setField('step_type', v as StepType)}
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STEP_TYPES.map((s) => (
+                <SelectItem key={s} value={s}>{t(`stepType.${s}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <div className="flex-1">
           <DurationEditor
             duration={step.duration}
             onChange={(d) => setField('duration', d)}
           />
         </div>
 
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1 shrink-0">
           <Button size="icon" variant="ghost" onClick={onMoveUp} disabled={index === 0}>
             <ChevronUp className="h-4 w-4" />
           </Button>

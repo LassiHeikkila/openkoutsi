@@ -55,7 +55,7 @@ export function RepeatBlockEditor({ block, index, total, onChange, onDelete, onM
 
   return (
     <div className="border-2 border-dashed border-primary/30 rounded-md p-3 bg-primary/5 space-y-3">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Label className="text-sm font-medium">{t('repeat')}</Label>
         <Input
           type="number"
@@ -66,7 +66,7 @@ export function RepeatBlockEditor({ block, index, total, onChange, onDelete, onM
         />
         <span className="text-sm text-muted-foreground">{t('times')}</span>
 
-        <div className="flex items-center gap-1 ml-auto">
+        <div className="flex items-center gap-1 ml-auto shrink-0">
           <Button size="icon" variant="ghost" onClick={onMoveUp} disabled={index === 0}>
             <ChevronUp className="h-4 w-4" />
           </Button>

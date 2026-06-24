@@ -455,32 +455,32 @@ async def regenerate_plan(
     num_weeks = body.weeks if body.weeks is not None else (plan.weeks or 8)
     goal = body.goal if body.goal is not None else plan.goal
 
-    # Preserve completed workouts; drop everything else and rebuild.
-    preserved: list[PlannedWorkout] = []
-    for pw in list(plan.workouts):
-        if pw.completed_activity_id is not None:
-            preserved.append(pw)
-        else:
-            await session.delete(pw)
+    # Preserve completed workouts; drop the rest. Reassigning the delete-orphan
+    # collection schedules the removed (non-completed) rows for deletion — calling
+    # session.delete() while they remain in the loaded collection does not stick.
+    preserved = [pw for pw in plan.workouts if pw.completed_activity_id is not None]
+    occupied = {(pw.week_number, pw.day_of_week) for pw in preserved}
+    plan.workouts = list(preserved)
     await session.flush()
 
-    occupied = {(pw.week_number, pw.day_of_week) for pw in preserved}
+    def _add(week_num: int, day_of_week: int, **fields) -> None:
+        if (week_num, day_of_week) in occupied:
+            return
+        plan.workouts.append(PlannedWorkout(
+            week_number=week_num, day_of_week=day_of_week, **fields,
+        ))
 
     if body.llm_weeks:
         plan.generation_method = "llm"
         for week_num, week_days in enumerate(body.llm_weeks, start=1):
             for day in week_days:
-                if (week_num, day.day_of_week) in occupied:
-                    continue
-                session.add(PlannedWorkout(
-                    plan_id=plan.id,
-                    week_number=week_num,
-                    day_of_week=day.day_of_week,
+                _add(
+                    week_num, day.day_of_week,
                     workout_type=day.workout_type,
                     description=day.description,
                     duration_min=day.duration_min,
                     target_tss=day.target_tss,
-                ))
+                )
     elif body.use_llm:
         if not body.config:
             raise HTTPException(400, "A plan config (training days and types) is required for LLM generation")
@@ -504,15 +504,13 @@ async def regenerate_plan(
         plan.generation_method = "llm"
         for week_num, week_days in enumerate(weeks_data, start=1):
             for day in week_days:
-                if (week_num, day["day_of_week"]) in occupied:
-                    continue
-                session.add(PlannedWorkout(plan_id=plan.id, week_number=week_num, **day))
+                _add(week_num, **day)
     else:
         plan.generation_method = "rule_based"
         for pw in build_workout_rows(plan.id, num_weeks, goal, body.config):
             if (pw.week_number, pw.day_of_week) in occupied:
                 continue
-            session.add(pw)
+            plan.workouts.append(pw)
 
     plan.weeks = num_weeks
     plan.goal = goal

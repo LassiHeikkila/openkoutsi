@@ -12,6 +12,25 @@ from openkoutsi.plan_schema import PlanConfig
 from openkoutsi.plan_builder import week_template, build_week_from_config
 
 
+def build_workout_rows(
+    plan_id: str,
+    num_weeks: int,
+    goal: Optional[str],
+    config: Optional[PlanConfig] = None,
+) -> list[PlannedWorkout]:
+    """Build (unsaved) PlannedWorkout rows for a plan from a template/config."""
+    workouts: list[PlannedWorkout] = []
+    for week_num in range(1, num_weeks + 1):
+        if config is not None:
+            template = build_week_from_config(config, week_num, num_weeks)
+        else:
+            template = week_template(week_num, num_weeks, goal)
+
+        for day in template:
+            workouts.append(PlannedWorkout(plan_id=plan_id, week_number=week_num, **day))
+    return workouts
+
+
 async def generate_plan(
     athlete_id: str,
     name: str,
@@ -39,17 +58,7 @@ async def generate_plan(
     session.add(plan)
     await session.flush()
 
-    workouts: list[PlannedWorkout] = []
-    for week_num in range(1, num_weeks + 1):
-        if config is not None:
-            template = build_week_from_config(config, week_num, num_weeks)
-        else:
-            template = week_template(week_num, num_weeks, goal)
-
-        for day in template:
-            workouts.append(PlannedWorkout(plan_id=plan.id, week_number=week_num, **day))
-
-    session.add_all(workouts)
+    session.add_all(build_workout_rows(plan.id, num_weeks, goal, config))
     await session.commit()
     await session.refresh(plan)
     return plan

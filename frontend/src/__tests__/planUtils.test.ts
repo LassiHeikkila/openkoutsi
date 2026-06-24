@@ -5,8 +5,54 @@ import {
   aggregatePlannedTssByWeek,
   groupPlannedWorkoutsByDate,
   plannedWorkoutStatus,
+  workoutFormToPayload,
 } from '@/lib/planUtils'
 import type { PlannedWorkout, TrainingPlan } from '@/lib/types'
+
+describe('workoutFormToPayload', () => {
+  it('coerces filled numeric fields to integers', () => {
+    expect(
+      workoutFormToPayload({
+        workout_type: 'threshold',
+        description: '4x8min',
+        duration_min: '75',
+        target_tss: '90',
+      }),
+    ).toEqual({
+      workout_type: 'threshold',
+      description: '4x8min',
+      duration_min: 75,
+      target_tss: 90,
+    })
+  })
+
+  it('coerces blank/whitespace values to null', () => {
+    expect(
+      workoutFormToPayload({
+        workout_type: 'recovery',
+        description: '   ',
+        duration_min: '',
+        target_tss: '  ',
+      }),
+    ).toEqual({
+      workout_type: 'recovery',
+      description: null,
+      duration_min: null,
+      target_tss: null,
+    })
+  })
+
+  it('treats non-numeric duration/tss as null', () => {
+    const payload = workoutFormToPayload({
+      workout_type: 'long',
+      description: 'ride',
+      duration_min: 'abc',
+      target_tss: '',
+    })
+    expect(payload.duration_min).toBeNull()
+    expect(payload.target_tss).toBeNull()
+  })
+})
 
 function makeWorkout(overrides: Partial<PlannedWorkout> = {}): PlannedWorkout {
   return {

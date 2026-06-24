@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import { fetcher, apiFetch } from '@/lib/api'
@@ -18,14 +18,11 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { PlanCalendar } from '@/components/plan/PlanCalendar'
+import {
+  PlanStructureFields,
+  DEFAULT_DAY_TYPES,
+} from '@/components/plan/PlanStructureFields'
 import { toast } from '@/components/ui/use-toast'
 import {
   AlertDialog,
@@ -41,13 +38,32 @@ import {
 import { Plus, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { differenceInWeeks } from 'date-fns'
 
-const DAY_NUMBERS = [1, 2, 3, 4, 5, 6, 7]
+interface PlanStructureState {
+  selectedDays: Set<number>
+  setSelectedDays: (updater: (prev: Set<number>) => Set<number>) => void
+  dayTypes: Record<number, string>
+  setDayTypes: (updater: (prev: Record<number, string>) => Record<number, string>) => void
+}
 
-const DEFAULT_DAY_TYPES: Record<number, string> = {
-  2: 'threshold',
-  4: 'endurance',
-  6: 'long',
-  7: 'recovery',
+/** Shared toggle: add/remove a training day and seed a default type for new days. */
+function toggleDayIn(
+  day: number,
+  setSelectedDays: PlanStructureState['setSelectedDays'],
+  dayTypes: Record<number, string>,
+  setDayTypes: PlanStructureState['setDayTypes'],
+) {
+  setSelectedDays((prev) => {
+    const next = new Set(prev)
+    if (next.has(day)) {
+      next.delete(day)
+    } else {
+      next.add(day)
+      if (!dayTypes[day]) {
+        setDayTypes((t) => ({ ...t, [day]: 'recovery' }))
+      }
+    }
+    return next
+  })
 }
 
 function GeneratePlanDialog({
@@ -80,9 +96,6 @@ function GeneratePlanDialog({
   const [longDescription, setLongDescription] = useState('')
   const [generating, setGenerating] = useState(false)
 
-  const dayNames = t.raw('plan.generate.dayNames') as string[]
-  const workoutTypeKeys = ['recovery', 'tempo', 'threshold', 'vo2max', 'endurance', 'long', 'strength', 'yoga', 'cross-training'] as const
-
   function resetDialog() {
     setStep(1)
     setName('')
@@ -95,21 +108,6 @@ function GeneratePlanDialog({
     setPeriodization('base_building')
     setIntensityPref('moderate')
     setLongDescription('')
-  }
-
-  function toggleDay(day: number) {
-    setSelectedDays((prev) => {
-      const next = new Set(prev)
-      if (next.has(day)) {
-        next.delete(day)
-      } else {
-        next.add(day)
-        if (!dayTypes[day]) {
-          setDayTypes((t) => ({ ...t, [day]: 'recovery' }))
-        }
-      }
-      return next
-    })
   }
 
   async function handleSubmit() {
@@ -286,101 +284,19 @@ function GeneratePlanDialog({
 
         {step === 2 && (
           <div className="space-y-4 mt-2">
-            {/* Day picker */}
-            <div className="space-y-2">
-              <Label>{t('plan.generate.trainingDays')}</Label>
-              <div className="grid grid-cols-7 gap-1">
-                {DAY_NUMBERS.map((day, i) => (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => toggleDay(day)}
-                    className={`rounded-md py-1.5 text-xs font-medium border transition-colors ${
-                      selectedDays.has(day)
-                        ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-input text-muted-foreground hover:border-muted-foreground'
-                    }`}
-                  >
-                    {dayNames[i]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Per-day workout type */}
-            {DAY_NUMBERS.filter((d) => selectedDays.has(d)).length > 0 && (
-              <div className="space-y-2">
-                <Label>{t('plan.generate.workoutPerDay')}</Label>
-                <div className="space-y-2">
-                  {DAY_NUMBERS.filter((d) => selectedDays.has(d)).map((day) => (
-                    <div key={day} className="flex items-center gap-2">
-                      <span className="w-8 text-xs text-muted-foreground shrink-0">
-                        {dayNames[day - 1]}
-                      </span>
-                      <Select
-                        value={dayTypes[day] ?? 'recovery'}
-                        onValueChange={(v) => setDayTypes((t) => ({ ...t, [day]: v }))}
-                      >
-                        <SelectTrigger className="h-8 text-sm flex-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {workoutTypeKeys.map((key) => (
-                            <SelectItem key={key} value={key}>
-                              {t(`plan.generate.workoutTypes.${key}` as never)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Periodization */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>{t('plan.generate.periodization')}</Label>
-                <Select value={periodization} onValueChange={setPeriodization}>
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="base_building">{t('plan.generate.periodizationOptions.base_building')}</SelectItem>
-                    <SelectItem value="race_prep">{t('plan.generate.periodizationOptions.race_prep')}</SelectItem>
-                    <SelectItem value="maintenance">{t('plan.generate.periodizationOptions.maintenance')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>{t('plan.generate.intensity')}</Label>
-                <Select value={intensityPref} onValueChange={setIntensityPref}>
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">{t('plan.generate.intensityOptions.low')}</SelectItem>
-                    <SelectItem value="moderate">{t('plan.generate.intensityOptions.moderate')}</SelectItem>
-                    <SelectItem value="high">{t('plan.generate.intensityOptions.high')}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* LLM description */}
-            {useLlm && (
-              <div className="space-y-2">
-                <Label htmlFor="llm-desc">{t('plan.generate.aiDescLabel')}</Label>
-                <textarea
-                  id="llm-desc"
-                  value={longDescription}
-                  onChange={(e) => setLongDescription(e.target.value)}
-                  placeholder={t('plan.generate.aiDescPlaceholder')}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] resize-y focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            )}
+            <PlanStructureFields
+              selectedDays={selectedDays}
+              onToggleDay={(d) => toggleDayIn(d, setSelectedDays, dayTypes, setDayTypes)}
+              dayTypes={dayTypes}
+              onDayTypeChange={(d, v) => setDayTypes((t) => ({ ...t, [d]: v }))}
+              periodization={periodization}
+              onPeriodizationChange={setPeriodization}
+              intensityPref={intensityPref}
+              onIntensityChange={setIntensityPref}
+              useLlm={useLlm}
+              longDescription={longDescription}
+              onLongDescriptionChange={setLongDescription}
+            />
 
             <DialogFooter className="gap-2 sm:gap-0">
               <Button
@@ -405,6 +321,291 @@ function GeneratePlanDialog({
             </DialogFooter>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditPlanDialog({
+  plan,
+  onSaved,
+}: {
+  plan: TrainingPlan
+  onSaved: () => void
+}) {
+  const t = useTranslations('app')
+  const tCommon = useTranslations('common')
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(plan.name)
+  const [goal, setGoal] = useState(plan.goal ?? '')
+  const [startDate, setStartDate] = useState(plan.start_date)
+  const [weeks, setWeeks] = useState(String(plan.weeks ?? ''))
+  const [saving, setSaving] = useState(false)
+
+  function reset() {
+    setName(plan.name)
+    setGoal(plan.goal ?? '')
+    setStartDate(plan.start_date)
+    setWeeks(String(plan.weeks ?? ''))
+  }
+
+  const dirty =
+    name !== plan.name ||
+    goal !== (plan.goal ?? '') ||
+    startDate !== plan.start_date ||
+    weeks !== String(plan.weeks ?? '')
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await apiFetch(`/api/plans/${plan.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name,
+          goal: goal || null,
+          start_date: startDate,
+          weeks: parseInt(weeks),
+        }),
+      })
+      toast({ title: t('plan.edit.success') })
+      setOpen(false)
+      onSaved()
+    } catch (err) {
+      toast({
+        title: tCommon('error'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v)
+    if (!v) reset()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          {t('plan.edit.button')}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t('plan.edit.title')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-name">{t('plan.generate.planName')}</Label>
+            <Input id="edit-name" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="edit-start">{t('plan.generate.startDate')}</Label>
+              <Input
+                id="edit-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-weeks">{t('plan.generate.weeks')}</Label>
+              <Input
+                id="edit-weeks"
+                type="number"
+                min="1"
+                max="52"
+                value={weeks}
+                onChange={(e) => setWeeks(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-goal">{t('plan.generate.goalEvent')}</Label>
+            <Input id="edit-goal" value={goal} onChange={(e) => setGoal(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSave} disabled={!dirty || !name || !weeks || saving}>
+              {saving ? t('plan.edit.saving') : tCommon('save')}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RegeneratePlanDialog({
+  plan,
+  athlete,
+  onRegenerated,
+}: {
+  plan: TrainingPlan
+  athlete: AthleteProfile | undefined
+  onRegenerated: () => void
+}) {
+  const t = useTranslations('app')
+  const tCommon = useTranslations('common')
+  const llmConfig = getLlmConfig(athlete?.app_settings)
+  const [open, setOpen] = useState(false)
+  const [useLlm, setUseLlm] = useState(plan.generation_method === 'llm')
+  const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set([2, 4, 6, 7]))
+  const [dayTypes, setDayTypes] = useState<Record<number, string>>(DEFAULT_DAY_TYPES)
+  const [periodization, setPeriodization] = useState('base_building')
+  const [intensityPref, setIntensityPref] = useState('moderate')
+  const [longDescription, setLongDescription] = useState('')
+  const [generating, setGenerating] = useState(false)
+
+  // Prefill structure from the plan's existing config when the dialog opens.
+  useEffect(() => {
+    if (!open) return
+    const cfg = plan.config as
+      | {
+          day_configs?: Array<{ day_of_week: number; workout_type: string }>
+          periodization?: string
+          intensity_preference?: string
+          long_description?: string
+        }
+      | null
+    if (!cfg) return
+    if (Array.isArray(cfg.day_configs) && cfg.day_configs.length > 0) {
+      setSelectedDays(new Set(cfg.day_configs.map((d) => d.day_of_week)))
+      setDayTypes(
+        Object.fromEntries(cfg.day_configs.map((d) => [d.day_of_week, d.workout_type])),
+      )
+    }
+    if (cfg.periodization) setPeriodization(cfg.periodization)
+    if (cfg.intensity_preference) setIntensityPref(cfg.intensity_preference)
+    if (cfg.long_description) setLongDescription(cfg.long_description)
+  }, [open, plan.config])
+
+  async function handleRegenerate() {
+    setGenerating(true)
+    try {
+      const dayConfigs = [...selectedDays].map((d) => ({
+        day_of_week: d,
+        workout_type: dayTypes[d] ?? 'recovery',
+      }))
+      const config = {
+        days_per_week: selectedDays.size,
+        day_configs: dayConfigs,
+        periodization,
+        intensity_preference: intensityPref,
+        long_description: useLlm && longDescription ? longDescription : undefined,
+      }
+      const numWeeks = plan.weeks ?? 8
+
+      if (useLlm && llmConfig && athlete) {
+        const llmWeeks = await generatePlanWeeks(config, numWeeks, plan.goal ?? null, athlete)
+        await apiFetch(`/api/plans/${plan.id}/regenerate`, {
+          method: 'POST',
+          body: JSON.stringify({ config, llm_weeks: llmWeeks }),
+        })
+      } else {
+        await apiFetch(`/api/plans/${plan.id}/regenerate`, {
+          method: 'POST',
+          body: JSON.stringify({ config, use_llm: useLlm }),
+        })
+      }
+
+      toast({ title: t('plan.regenerate.success') })
+      setOpen(false)
+      onRegenerated()
+    } catch (err) {
+      toast({
+        title: tCommon('error'),
+        description: err instanceof Error ? err.message : tCommon('unknownError'),
+        variant: 'destructive',
+      })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          {t('plan.regenerate.button')}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t('plan.regenerate.title')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div className="space-y-2">
+            <Label>{t('plan.generate.method')}</Label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setUseLlm(false)}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm text-left transition-colors ${
+                  !useLlm
+                    ? 'border-primary bg-primary/5 text-primary font-medium'
+                    : 'border-input text-muted-foreground hover:border-muted-foreground'
+                }`}
+              >
+                <div className="font-medium">{t('plan.generate.structured')}</div>
+                <div className="text-xs mt-0.5 opacity-70">{t('plan.generate.structuredDesc')}</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseLlm(true)}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm text-left transition-colors ${
+                  useLlm
+                    ? 'border-primary bg-primary/5 text-primary font-medium'
+                    : 'border-input text-muted-foreground hover:border-muted-foreground'
+                }`}
+              >
+                <div className="font-medium">{t('plan.generate.aiGenerated')}</div>
+                <div className="text-xs mt-0.5 opacity-70">
+                  {llmConfig ? t('plan.generate.aiDescBrowser') : t('plan.generate.aiDescServer')}
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <PlanStructureFields
+            selectedDays={selectedDays}
+            onToggleDay={(d) => toggleDayIn(d, setSelectedDays, dayTypes, setDayTypes)}
+            dayTypes={dayTypes}
+            onDayTypeChange={(d, v) => setDayTypes((t) => ({ ...t, [d]: v }))}
+            periodization={periodization}
+            onPeriodizationChange={setPeriodization}
+            intensityPref={intensityPref}
+            onIntensityChange={setIntensityPref}
+            useLlm={useLlm}
+            longDescription={longDescription}
+            onLongDescriptionChange={setLongDescription}
+          />
+
+          <DialogFooter>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button disabled={generating || selectedDays.size === 0}>
+                  {generating ? t('plan.generate.generating') : t('plan.regenerate.button')}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t('plan.regenerate.confirmTitle')}</AlertDialogTitle>
+                  <AlertDialogDescription>{t('plan.regenerate.confirmDesc')}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{tCommon('cancel')}</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleRegenerate}>
+                    {t('plan.regenerate.confirm')}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -483,26 +684,40 @@ export default function PlanPage() {
       {activePlan && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">{activePlan.name}</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CardTitle className="text-base truncate">{activePlan.name}</CardTitle>
                 {activePlan.generation_method === 'llm' && (
-                  <span className="text-xs rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-2 py-0.5 font-medium">
+                  <span className="text-xs rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-2 py-0.5 font-medium shrink-0">
                     {t('plan.aiTag')}
                   </span>
                 )}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleArchive(activePlan.id)}
-              >
-                {t('plan.archive')}
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <EditPlanDialog plan={activePlan} onSaved={() => mutate()} />
+                <RegeneratePlanDialog
+                  plan={activePlan}
+                  athlete={athlete}
+                  onRegenerated={() => mutate()}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleArchive(activePlan.id)}
+                >
+                  {t('plan.archive')}
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            <PlanCalendar plan={activePlan} currentWeek={currentWeek} showPushAction />
+            <PlanCalendar
+              key={`${activePlan.id}:${activePlan.workouts.map((w) => w.id).join(',')}`}
+              plan={activePlan}
+              currentWeek={currentWeek}
+              showPushAction
+              onChanged={() => mutate()}
+            />
           </CardContent>
         </Card>
       )}
@@ -576,7 +791,7 @@ export default function PlanPage() {
                       </div>
                       {isOpen && (
                         <div className="mt-4 border-t pt-4">
-                          <PlanCalendar plan={plan} currentWeek={planWeek} />
+                          <PlanCalendar key={plan.id} plan={plan} currentWeek={planWeek} />
                         </div>
                       )}
                     </CardContent>

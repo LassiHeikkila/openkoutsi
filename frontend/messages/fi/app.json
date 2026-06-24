@@ -182,6 +182,44 @@
         "La",
         "Su"
       ]
+    },
+    "edit": {
+      "button": "Muokkaa",
+      "title": "Muokkaa ohjelmaa",
+      "saving": "Tallennetaan…",
+      "success": "Ohjelma päivitetty"
+    },
+    "regenerate": {
+      "button": "Luo uudelleen",
+      "title": "Luo ohjelma uudelleen",
+      "confirmTitle": "Luodaanko ohjelma uudelleen?",
+      "confirmDesc": "Tämä korvaa kaikki harjoitukset, joita ei ole vielä suoritettu. Suoritetut harjoitukset säilytetään.",
+      "confirm": "Luo uudelleen",
+      "success": "Ohjelma luotu uudelleen"
+    },
+    "editWorkout": {
+      "button": "Muokkaa",
+      "type": "Tyyppi",
+      "duration": "Kesto (min)",
+      "tss": "Tavoite-TSS",
+      "description": "Kuvaus",
+      "save": "Tallenna",
+      "success": "Harjoitus päivitetty",
+      "failed": "Harjoituksen päivitys epäonnistui"
+    },
+    "addWorkout": {
+      "button": "Lisää harjoitus",
+      "prompt": "Ei suunniteltua harjoitusta. Lisää sellainen:",
+      "success": "Harjoitus lisätty",
+      "failed": "Harjoituksen lisäys epäonnistui"
+    },
+    "deleteWorkout": {
+      "button": "Poista",
+      "title": "Poistetaanko harjoitus?",
+      "desc": "Tämä poistaa suunnitellun harjoituksen pysyvästi.",
+      "confirm": "Poista",
+      "success": "Harjoitus poistettu",
+      "failed": "Harjoituksen poisto epäonnistui"
     }
   },
   "profile": {

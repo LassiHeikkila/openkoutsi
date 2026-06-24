@@ -46,6 +46,38 @@ class TrainingPlanCreate(BaseModel):
 class TrainingPlanUpdate(BaseModel):
     status: Optional[str] = None
     name: Optional[str] = None
+    goal: Optional[str] = None
+    start_date: Optional[date] = None
+    weeks: Optional[int] = None
+
+
+class PlannedWorkoutUpdate(BaseModel):
+    """Editable fields of a single planned workout."""
+    workout_type: Optional[str] = None
+    description: Optional[str] = None
+    duration_min: Optional[int] = None
+    target_tss: Optional[int] = None
+    day_of_week: Optional[int] = None
+    week_number: Optional[int] = None
+
+
+class PlannedWorkoutCreate(BaseModel):
+    """A new planned workout added to an existing plan."""
+    week_number: int
+    day_of_week: int
+    workout_type: str
+    description: Optional[str] = None
+    duration_min: Optional[int] = None
+    target_tss: Optional[int] = None
+
+
+class RegeneratePlanRequest(BaseModel):
+    """Re-run generation for an existing plan, preserving completed workouts."""
+    config: Optional[PlanConfig] = None
+    use_llm: bool = False
+    weeks: Optional[int] = None
+    goal: Optional[str] = None
+    llm_weeks: Optional[list[list[WorkoutCreate]]] = None
 
 
 class LinkActivityRequest(BaseModel):

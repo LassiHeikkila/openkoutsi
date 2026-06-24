@@ -41,6 +41,36 @@ export function plannedWorkoutStatus(workout: PlannedWorkout): PlannedWorkoutSta
   return 'planned'
 }
 
+/** Editable workout fields as held in form state (all strings for inputs). */
+export interface WorkoutFormValues {
+  workout_type: string
+  description: string
+  duration_min: string
+  target_tss: string
+}
+
+/** Converts a workout edit/add form's string values into an API payload,
+ *  coercing blank numeric inputs to null. */
+export function workoutFormToPayload(values: WorkoutFormValues): {
+  workout_type: string
+  description: string | null
+  duration_min: number | null
+  target_tss: number | null
+} {
+  const toInt = (s: string): number | null => {
+    const trimmed = s.trim()
+    if (trimmed === '') return null
+    const n = parseInt(trimmed, 10)
+    return Number.isNaN(n) ? null : n
+  }
+  return {
+    workout_type: values.workout_type,
+    description: values.description.trim() || null,
+    duration_min: toInt(values.duration_min),
+    target_tss: toInt(values.target_tss),
+  }
+}
+
 /** Groups workouts of the active plan by date key (yyyy-MM-dd). */
 export function groupPlannedWorkoutsByDate(plan: TrainingPlan | undefined): Map<string, PlannedWorkout[]> {
   const map = new Map<string, PlannedWorkout[]>()

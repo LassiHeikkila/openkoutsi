@@ -182,6 +182,44 @@
         "Sat",
         "Sun"
       ]
+    },
+    "edit": {
+      "button": "Edit",
+      "title": "Edit plan",
+      "saving": "Saving…",
+      "success": "Plan updated"
+    },
+    "regenerate": {
+      "button": "Regenerate",
+      "title": "Regenerate plan",
+      "confirmTitle": "Regenerate this plan?",
+      "confirmDesc": "This replaces all workouts that haven't been completed yet. Completed workouts are kept.",
+      "confirm": "Regenerate",
+      "success": "Plan regenerated"
+    },
+    "editWorkout": {
+      "button": "Edit",
+      "type": "Type",
+      "duration": "Duration (min)",
+      "tss": "Target TSS",
+      "description": "Description",
+      "save": "Save",
+      "success": "Workout updated",
+      "failed": "Could not update workout"
+    },
+    "addWorkout": {
+      "button": "Add workout",
+      "prompt": "No workout planned. Add one:",
+      "success": "Workout added",
+      "failed": "Could not add workout"
+    },
+    "deleteWorkout": {
+      "button": "Delete",
+      "title": "Delete workout?",
+      "desc": "This permanently removes this planned workout.",
+      "confirm": "Delete",
+      "success": "Workout deleted",
+      "failed": "Could not delete workout"
     }
   },
   "profile": {

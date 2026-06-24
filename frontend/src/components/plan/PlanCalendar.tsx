@@ -5,7 +5,12 @@ import { useTranslations } from 'next-intl'
 import type { TrainingPlan, PlannedWorkout } from '@/lib/types'
 import { WorkoutCard } from './WorkoutCard'
 import { WorkoutActionsPanel } from './WorkoutActionsPanel'
+import { WorkoutFormFields } from './WorkoutFormFields'
 import { PushWeekToWahooDialog } from './PushWeekToWahooDialog'
+import { Button } from '@/components/ui/button'
+import { apiFetch } from '@/lib/api'
+import { workoutFormToPayload, type WorkoutFormValues } from '@/lib/planUtils'
+import { toast } from '@/components/ui/use-toast'
 import { addDays, format } from 'date-fns'
 import {
   Dialog,
@@ -18,6 +23,8 @@ interface Props {
   plan: TrainingPlan
   currentWeek?: number
   onWorkoutUpdated?: (workout: PlannedWorkout) => void
+  /** Called after a workout is added or deleted (e.g. to refresh server data). */
+  onChanged?: () => void
   /** Show the "Push this week to Wahoo" action (only meaningful for the active plan). */
   showPushAction?: boolean
 }
@@ -28,9 +35,61 @@ interface SelectedDay {
   dateStr: string
   /** ISO date string yyyy-MM-dd for the calendar cell */
   date: string
+  weekNumber: number
+  dayOfWeek: number
 }
 
-export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, showPushAction = false }: Props) {
+/** Inline form for adding a workout to an empty calendar day. */
+function AddWorkoutPanel({
+  planId,
+  weekNumber,
+  dayOfWeek,
+  onAdded,
+}: {
+  planId: string
+  weekNumber: number
+  dayOfWeek: number
+  onAdded: (workout: PlannedWorkout) => void
+}) {
+  const t = useTranslations('app')
+  const [form, setForm] = useState<WorkoutFormValues>({
+    workout_type: 'endurance', description: '', duration_min: '', target_tss: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleAdd = async () => {
+    setSaving(true)
+    try {
+      const created = await apiFetch<PlannedWorkout>(`/api/plans/${planId}/workouts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          week_number: weekNumber,
+          day_of_week: dayOfWeek,
+          ...workoutFormToPayload(form),
+        }),
+      })
+      onAdded(created)
+      toast({ title: t('plan.addWorkout.success') })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('plan.addWorkout.failed')
+      toast({ title: msg, variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">{t('plan.addWorkout.prompt')}</p>
+      <WorkoutFormFields values={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
+      <Button size="sm" className="w-full text-xs" disabled={saving} onClick={handleAdd}>
+        {saving ? '…' : t('plan.addWorkout.button')}
+      </Button>
+    </div>
+  )
+}
+
+export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, onChanged, showPushAction = false }: Props) {
   const t = useTranslations('app')
   const dayLabels = t.raw('plan.generate.dayNames') as string[]
   const [selected, setSelected] = useState<SelectedDay | null>(null)
@@ -40,6 +99,18 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, showPush
     setWorkoutsState((prev) => prev.map((w) => (w.id === updated.id ? updated : w)))
     setSelected((s) => s && s.workout?.id === updated.id ? { ...s, workout: updated } : s)
     onWorkoutUpdated?.(updated)
+  }
+
+  const _addWorkout = (created: PlannedWorkout) => {
+    setWorkoutsState((prev) => [...prev, created])
+    setSelected((s) => s ? { ...s, workout: created } : s)
+    onChanged?.()
+  }
+
+  const _deleteWorkout = (deleted: PlannedWorkout) => {
+    setWorkoutsState((prev) => prev.filter((w) => w.id !== deleted.id))
+    setSelected(null)
+    onChanged?.()
   }
 
   const handleDialogClose = (open: boolean) => {
@@ -95,6 +166,8 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, showPush
                           label,
                           dateStr: format(date, 'MMM d'),
                           date: format(date, 'yyyy-MM-dd'),
+                          weekNumber: wn,
+                          dayOfWeek: dayNum,
                         })
                       }}
                     >
@@ -135,10 +208,16 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, showPush
                 workout={selected.workout}
                 date={selected.date}
                 onWorkoutUpdated={_updateWorkout}
+                onWorkoutDeleted={_deleteWorkout}
               />
-            ) : (
-              <p className="text-sm text-muted-foreground">{t('plan.rest')}</p>
-            )}
+            ) : selected ? (
+              <AddWorkoutPanel
+                planId={plan.id}
+                weekNumber={selected.weekNumber}
+                dayOfWeek={selected.dayOfWeek}
+                onAdded={_addWorkout}
+              />
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

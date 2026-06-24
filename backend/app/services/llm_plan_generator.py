@@ -152,20 +152,21 @@ async def _call_llm(user_prompt: str, base_url: str, model: str, api_key: str | 
     )
 
 
-async def generate_plan_llm(
+async def generate_plan_weeks_llm(
     athlete: Athlete,
     config: PlanConfig,
-    name: str,
-    start_date: date,
     num_weeks: int,
     goal: Optional[str],
     session: AsyncSession,
     team: Team | None = None,
     team_id: str = "",
     user_id: str = "",
-) -> TrainingPlan:
-    """Generate a TrainingPlan using an LLM via OpenAI-compatible API."""
+) -> list[list[dict]]:
+    """Call the LLM and return parsed weeks (list of weeks, each a list of day dicts).
 
+    Persistence-free so callers can build PlannedWorkout rows for either a new or
+    an existing plan.
+    """
     base_url, model, api_key = _resolve_llm_config(athlete, team, team_id, user_id)
 
     # Fetch athlete's latest CTL for context
@@ -185,7 +186,7 @@ async def generate_plan_llm(
     # Call LLM with one retry on parse failure
     raw = await _call_llm(user_prompt, base_url, model, api_key)
     try:
-        weeks_data = _parse_response(raw, num_weeks)
+        return _parse_response(raw, num_weeks)
     except (json.JSONDecodeError, KeyError, ValueError):
         # Retry with a correction nudge
         correction = (
@@ -194,7 +195,33 @@ async def generate_plan_llm(
             "the required schema. Respond with ONLY the JSON object, nothing else."
         )
         raw = await _call_llm(correction, base_url, model, api_key)
-        weeks_data = _parse_response(raw, num_weeks)  # raises HTTP 503 if still invalid
+        return _parse_response(raw, num_weeks)  # raises HTTP 503 if still invalid
+
+
+async def generate_plan_llm(
+    athlete: Athlete,
+    config: PlanConfig,
+    name: str,
+    start_date: date,
+    num_weeks: int,
+    goal: Optional[str],
+    session: AsyncSession,
+    team: Team | None = None,
+    team_id: str = "",
+    user_id: str = "",
+) -> TrainingPlan:
+    """Generate a TrainingPlan using an LLM via OpenAI-compatible API."""
+
+    weeks_data = await generate_plan_weeks_llm(
+        athlete=athlete,
+        config=config,
+        num_weeks=num_weeks,
+        goal=goal,
+        session=session,
+        team=team,
+        team_id=team_id,
+        user_id=user_id,
+    )
 
     end_date = start_date + timedelta(weeks=num_weeks) - timedelta(days=1)
 

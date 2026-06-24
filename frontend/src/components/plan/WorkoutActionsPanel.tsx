@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { Activity, PlannedWorkout } from '@/lib/types'
 import { WorkoutCard } from './WorkoutCard'
+import { WorkoutFormFields } from './WorkoutFormFields'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -13,7 +14,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { apiFetch } from '@/lib/api'
+import { workoutFormToPayload, type WorkoutFormValues } from '@/lib/planUtils'
 import { formatDuration } from '@/lib/utils'
 import { toast } from '@/components/ui/use-toast'
 
@@ -31,6 +44,8 @@ interface Props {
   /** ISO date string yyyy-MM-dd of the workout's calendar day. */
   date: string
   onWorkoutUpdated: (workout: PlannedWorkout) => void
+  /** Called after the workout is deleted, so the parent can drop it from view. */
+  onWorkoutDeleted?: (workout: PlannedWorkout) => void
 }
 
 /**
@@ -38,7 +53,7 @@ interface Props {
  * WorkoutCard and the mark-as-completed / skip / unlink / clear-skip flows.
  * Used by both the Plan view (PlanCalendar) and the dashboard ActivityCalendar.
  */
-export function WorkoutActionsPanel({ workout, date, onWorkoutUpdated }: Props) {
+export function WorkoutActionsPanel({ workout, date, onWorkoutUpdated, onWorkoutDeleted }: Props) {
   const t = useTranslations('app')
 
   // Mark-as-completed state
@@ -53,6 +68,58 @@ export function WorkoutActionsPanel({ workout, date, onWorkoutUpdated }: Props) 
   const [selectedSkipKey, setSelectedSkipKey] = useState<string>('')
   const [customReason, setCustomReason] = useState('')
   const [skipping, setSkipping] = useState(false)
+
+  // Edit / delete state
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<WorkoutFormValues>({
+    workout_type: '', description: '', duration_min: '', target_tss: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const openEdit = () => {
+    setEditForm({
+      workout_type: workout.workout_type,
+      description: workout.description ?? '',
+      duration_min: workout.duration_min != null ? String(workout.duration_min) : '',
+      target_tss: workout.target_tss != null ? String(workout.target_tss) : '',
+    })
+    setEditing(true)
+  }
+
+  const handleSaveEdit = async () => {
+    setSavingEdit(true)
+    try {
+      const updated = await apiFetch<PlannedWorkout>(
+        `/api/plans/${workout.plan_id}/workouts/${workout.id}`,
+        { method: 'PUT', body: JSON.stringify(workoutFormToPayload(editForm)) },
+      )
+      onWorkoutUpdated(updated)
+      setEditing(false)
+      toast({ title: t('plan.editWorkout.success') })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('plan.editWorkout.failed')
+      toast({ title: msg, variant: 'destructive' })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await apiFetch(`/api/plans/${workout.plan_id}/workouts/${workout.id}`, {
+        method: 'DELETE',
+      })
+      onWorkoutDeleted?.(workout)
+      toast({ title: t('plan.deleteWorkout.success') })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('plan.deleteWorkout.failed')
+      toast({ title: msg, variant: 'destructive' })
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleUnlink = async (w: PlannedWorkout) => {
     try {
@@ -160,8 +227,36 @@ export function WorkoutActionsPanel({ workout, date, onWorkoutUpdated }: Props) 
         onClearSkip={handleClearSkip}
       />
 
+      {/* Inline edit form (completed workouts are locked from editing) */}
+      {editing && (
+        <div className="space-y-2">
+          <WorkoutFormFields
+            values={editForm}
+            onChange={(patch) => setEditForm((f) => ({ ...f, ...patch }))}
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className="flex-1 text-xs"
+              disabled={savingEdit}
+              onClick={handleSaveEdit}
+            >
+              {savingEdit ? '…' : t('plan.editWorkout.save')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => setEditing(false)}
+            >
+              {t('plan.unlinkCancel')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Action buttons — only when not yet completed and not skipped */}
-      {workout.completed_activity_id == null && workout.skip_reason == null && (
+      {!editing && workout.completed_activity_id == null && workout.skip_reason == null && (
         <div className="space-y-2">
           {!showLinkPicker && !showSkipForm ? (
             <>
@@ -267,6 +362,49 @@ export function WorkoutActionsPanel({ workout, date, onWorkoutUpdated }: Props) 
                 </Button>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Edit / delete — available whenever the workout is not completed */}
+      {!editing && workout.completed_activity_id == null && !showLinkPicker && !showSkipForm && (
+        <div className="flex gap-2 border-t pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={openEdit}
+          >
+            {t('plan.editWorkout.button')}
+          </Button>
+          {onWorkoutDeleted && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  disabled={deleting}
+                >
+                  {t('plan.deleteWorkout.button')}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t('plan.deleteWorkout.title')}</AlertDialogTitle>
+                  <AlertDialogDescription>{t('plan.deleteWorkout.desc')}</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t('plan.unlinkCancel')}</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleDelete}
+                  >
+                    {t('plan.deleteWorkout.confirm')}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       )}

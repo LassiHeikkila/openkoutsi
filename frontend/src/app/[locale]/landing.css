@@ -653,3 +653,9 @@
     display: inline-flex;
   }
 }
+
+@media (max-width: 640px) {
+  .lp .nav-right a {
+    display: none;
+  }
+}

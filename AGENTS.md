@@ -37,3 +37,9 @@ When new mandatory environment variables are added, ensure that CI runs apply a 
 
 When adding new pieces of text to the frontend, make sure they are translated into the currently available languages.
 Internationalization is implemented with next-i18n.
+
+## Frontend must be mobile-friendly
+
+The frontend must be mobile-friendly and be usable on small screens.
+UI elements should not overflow their containers.
+There should be no horizontal scrolling occurring for the page.

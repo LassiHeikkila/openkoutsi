@@ -6,7 +6,7 @@ import type { TrainingPlan, PlannedWorkout } from '@/lib/types'
 import { WorkoutCard } from './WorkoutCard'
 import { WorkoutActionsPanel } from './WorkoutActionsPanel'
 import { WorkoutFormFields } from './WorkoutFormFields'
-import { PushWeekToWahooDialog } from './PushWeekToWahooDialog'
+import { GenerateWorkoutsDialog } from './GenerateWorkoutsDialog'
 import { Button } from '@/components/ui/button'
 import { apiFetch } from '@/lib/api'
 import { workoutFormToPayload, type WorkoutFormValues } from '@/lib/planUtils'
@@ -25,8 +25,8 @@ interface Props {
   onWorkoutUpdated?: (workout: PlannedWorkout) => void
   /** Called after a workout is added or deleted (e.g. to refresh server data). */
   onChanged?: () => void
-  /** Show the "Push this week to Wahoo" action (only meaningful for the active plan). */
-  showPushAction?: boolean
+  /** Show the "Generate workouts" action (only meaningful for the active plan). */
+  showGenerateAction?: boolean
 }
 
 interface SelectedDay {
@@ -89,7 +89,7 @@ function AddWorkoutPanel({
   )
 }
 
-export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, onChanged, showPushAction = false }: Props) {
+export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, onChanged, showGenerateAction = false }: Props) {
   const t = useTranslations('app')
   const dayLabels = t.raw('plan.generate.dayNames') as string[]
   const [selected, setSelected] = useState<SelectedDay | null>(null)
@@ -130,9 +130,9 @@ export function PlanCalendar({ plan, currentWeek = 1, onWorkoutUpdated, onChange
 
   return (
     <>
-      {showPushAction && (
+      {showGenerateAction && (
         <div className="flex justify-end mb-3">
-          <PushWeekToWahooDialog planId={plan.id} />
+          <GenerateWorkoutsDialog planId={plan.id} onGenerated={onChanged} />
         </div>
       )}
       <div className="space-y-6">

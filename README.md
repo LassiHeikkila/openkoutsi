@@ -35,7 +35,7 @@ Most cycling coaching tools are cloud-only SaaS. openkoutsi is different: you ru
 - **Workout skip tracking** — mark planned workouts as skipped with a reason (illness, injury, fatigue, travel, weather, etc.) for accurate training log and LLM coaching context
 - **Structured workouts** — create interval workouts and export as Zwift `.zwo` or FIT workout files for head units (FIT export flattens repeat blocks into individual consecutive steps for reliable display on Wahoo/Garmin devices)
 - **Push workouts to Wahoo** — send a structured workout straight to a connected Wahoo account as a plan + scheduled workout, so it appears in Planned Workouts on ELEMNT/RIVAL (schedule within today→+6 days; re-pushing updates instead of duplicating)
-- **Push this week to Wahoo** — auto-synthesize structured interval workouts (via LLM) for a training plan's upcoming days and push them to Wahoo in one action; generated workouts are cached on the planned workout so re-pushing reuses them (no extra LLM calls), rest/out-of-window days are skipped, and a per-day result summary shows what was pushed, skipped, or failed
+- **Generate workouts from a plan** — auto-synthesize structured interval workouts (via LLM) for a training plan's upcoming days in one action; generated workouts are cached on the planned workout (already-generated days are skipped, so no extra LLM calls), rest/out-of-window days are skipped, and a per-day result summary shows what was generated, skipped, or failed. The generated workouts appear in the Workouts tab, where you can review, edit, and upload them to Wahoo individually
 - **Goals** — set training/event goals with optional target metrics and dates; when marking a goal achieved, record the final achieved value and a free-text outcome note capturing whether the target was reached
 - **Activity labels & notes** — tag activities as "race" or "commute" and add free-text notes (included in AI analysis context)
 - **AI coaching analysis** — per-activity analysis and plan support with OpenAI-compatible backends
@@ -161,7 +161,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ## Integrations
 
 - **Strava:** configure Strava app credentials in `.env` and deploy `strava_bridge/` to a public HTTPS URL.
-- **Wahoo:** configure Wahoo credentials in `.env` and deploy `wahoo_bridge/` to a public HTTPS URL. Pushing structured workouts to Wahoo requires the `plans_read`, `plans_write`, and `workouts_write` scopes; users connected before this feature must reconnect Wahoo to grant them. The "Push this week to Wahoo" plan action additionally needs a server-reachable LLM (resolved athlete → team → global) to synthesize the structured workouts.
+- **Wahoo:** configure Wahoo credentials in `.env` and deploy `wahoo_bridge/` to a public HTTPS URL. Pushing structured workouts to Wahoo requires the `plans_read`, `plans_write`, and `workouts_write` scopes; users connected before this feature must reconnect Wahoo to grant them. The "Generate workouts" plan action needs a server-reachable LLM (resolved athlete → team → global) to synthesize the structured workouts; uploading the generated workouts to Wahoo is then done individually from the Workouts tab.
 
 Detailed production setup, reverse proxy examples, systemd units, bridge registration steps, and GitHub Actions automated deployment are in [DEPLOY.md](DEPLOY.md).
 

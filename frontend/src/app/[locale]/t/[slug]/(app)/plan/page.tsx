@@ -715,7 +715,7 @@ export default function PlanPage() {
               key={`${activePlan.id}:${activePlan.workouts.map((w) => w.id).join(',')}`}
               plan={activePlan}
               currentWeek={currentWeek}
-              showPushAction
+              showGenerateAction
               onChanged={() => mutate()}
             />
           </CardContent>

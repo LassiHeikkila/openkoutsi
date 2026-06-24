@@ -5008,13 +5008,13 @@
         }
       }
     },
-    "/api/plans/{plan_id}/push-upcoming/wahoo": {
+    "/api/plans/{plan_id}/generate-upcoming/workouts": {
       "post": {
         "tags": [
           "plans"
         ],
-        "summary": "Push Upcoming To Wahoo",
-        "operationId": "push_upcoming_to_wahoo_api_plans__plan_id__push_upcoming_wahoo_post",
+        "summary": "Generate Upcoming Workouts",
+        "operationId": "generate_upcoming_workouts_api_plans__plan_id__generate_upcoming_workouts_post",
         "security": [
           {
             "OAuth2PasswordBearer": []
@@ -5035,7 +5035,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PushUpcomingWahooRequest"
+                "$ref": "#/components/schemas/GenerateUpcomingWorkoutsRequest"
               }
             }
           },
@@ -5047,7 +5047,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PushUpcomingWahooResponse"
+                  "$ref": "#/components/schemas/GenerateUpcomingWorkoutsResponse"
                 }
               }
             }
@@ -6445,6 +6445,112 @@
         ],
         "title": "FtpTestSchema"
       },
+      "GenerateUpcomingResultItem": {
+        "properties": {
+          "planned_workout_id": {
+            "type": "string",
+            "title": "Planned Workout Id"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "workout_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workout Type"
+          },
+          "workout_definition_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workout Definition Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "planned_workout_id",
+          "date",
+          "status"
+        ],
+        "title": "GenerateUpcomingResultItem"
+      },
+      "GenerateUpcomingWorkoutsRequest": {
+        "properties": {
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "refresh": {
+            "type": "boolean",
+            "title": "Refresh",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "GenerateUpcomingWorkoutsRequest"
+      },
+      "GenerateUpcomingWorkoutsResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/GenerateUpcomingResultItem"
+            },
+            "type": "array",
+            "title": "Results",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "GenerateUpcomingWorkoutsResponse"
+      },
       "GoalCreate": {
         "properties": {
           "title": {
@@ -7615,101 +7721,6 @@
           "activity_start_time"
         ],
         "title": "PowerBestEntry"
-      },
-      "PushUpcomingResultItem": {
-        "properties": {
-          "planned_workout_id": {
-            "type": "string",
-            "title": "Planned Workout Id"
-          },
-          "date": {
-            "type": "string",
-            "format": "date",
-            "title": "Date"
-          },
-          "workout_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workout Type"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          }
-        },
-        "type": "object",
-        "required": [
-          "planned_workout_id",
-          "date",
-          "status"
-        ],
-        "title": "PushUpcomingResultItem"
-      },
-      "PushUpcomingWahooRequest": {
-        "properties": {
-          "start": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Start"
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "End"
-          },
-          "refresh": {
-            "type": "boolean",
-            "title": "Refresh",
-            "default": false
-          }
-        },
-        "type": "object",
-        "title": "PushUpcomingWahooRequest"
-      },
-      "PushUpcomingWahooResponse": {
-        "properties": {
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/PushUpcomingResultItem"
-            },
-            "type": "array",
-            "title": "Results",
-            "default": []
-          }
-        },
-        "type": "object",
-        "title": "PushUpcomingWahooResponse"
       },
       "RangeSpec": {
         "properties": {

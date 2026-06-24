@@ -243,7 +243,7 @@ Set the webhook token to the same value as `WAHOO_WEBHOOK_TOKEN` in `wahoo_bridg
 
 ### Pushing workouts and plans to Wahoo
 
-Sending structured workouts to Wahoo (the single-workout "Send to Wahoo" action and the plan-level "Push this week to Wahoo" action) requires the OAuth scopes `plans_read`, `plans_write`, and `workouts_write`. These are requested automatically; users who connected Wahoo before this feature shipped must reconnect to grant them. The "Push this week to Wahoo" action also synthesizes the structured workouts server-side via an OpenAI-compatible LLM, so a base URL must be reachable from the backend (resolved athlete → team → global `LLM_BASE_URL`).
+Sending structured workouts to Wahoo (the single-workout "Send to Wahoo" action in the Workouts tab) requires the OAuth scopes `plans_read`, `plans_write`, and `workouts_write`. These are requested automatically; users who connected Wahoo before this feature shipped must reconnect to grant them. The plan-level "Generate workouts" action synthesizes structured workouts server-side via an OpenAI-compatible LLM, so a base URL must be reachable from the backend (resolved athlete → team → global `LLM_BASE_URL`); it does not upload anything itself — the generated workouts are uploaded to Wahoo individually from the Workouts tab.
 
 ---
 

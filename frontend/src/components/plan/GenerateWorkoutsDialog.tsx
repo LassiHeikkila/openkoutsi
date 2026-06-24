@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import useSWR from 'swr'
-import { Send } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,53 +11,52 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { apiFetch, fetcher, getTeamSlug } from '@/lib/api'
+import { apiFetch } from '@/lib/api'
 
 interface Props {
   planId: string
+  /** Called after workouts are generated, e.g. to refresh the workouts list. */
+  onGenerated?: () => void
 }
 
-interface PushResultItem {
+interface GenerateResultItem {
   planned_workout_id: string
   date: string
   workout_type?: string | null
-  status: 'pushed' | 'skipped' | 'failed'
+  workout_definition_id?: string | null
+  status: 'generated' | 'skipped' | 'failed'
   reason?: string | null
 }
 
 /**
- * "Push this week to Wahoo" action: synthesizes structured workouts for the
- * plan's upcoming (today→+6) days and pushes them to Wahoo. Only rendered when
- * Wahoo is connected; reuses the insufficient_scope → reconnect messaging.
+ * "Generate workouts" action: synthesizes structured workouts for the plan's
+ * upcoming (today→+6) days and caches them on the planned workouts. The
+ * generated workouts appear in the Workouts tab, where they can be uploaded to
+ * Wahoo individually. Generation is independent of any device connection.
  */
-export function PushWeekToWahooDialog({ planId }: Props) {
+export function GenerateWorkoutsDialog({ planId, onGenerated }: Props) {
   const t = useTranslations('app')
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<PushResultItem[] | null>(null)
+  const [results, setResults] = useState<GenerateResultItem[] | null>(null)
 
-  // Only show the action when Wahoo is connected.
-  const { data: status } = useSWR<{ connected: string[] }>(
-    '/api/integrations/status',
-    fetcher,
-  )
-  const connected = status?.connected?.includes('wahoo') ?? false
-  if (!connected) return null
-
-  async function handlePush() {
+  async function handleGenerate() {
     setLoading(true)
     setError(null)
     setResults(null)
     try {
-      const data = await apiFetch<{ results: PushResultItem[] }>(
-        `/api/plans/${planId}/push-upcoming/wahoo`,
+      const data = await apiFetch<{ results: GenerateResultItem[] }>(
+        `/api/plans/${planId}/generate-upcoming/workouts`,
         { method: 'POST', body: JSON.stringify({}) },
       )
       setResults(data.results)
+      if (data.results.some((r) => r.status === 'generated')) {
+        onGenerated?.()
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : t('plan.pushWeekError')
-      setError(msg === 'insufficient_scope' ? t('plan.reconnectWahoo') : msg)
+      const msg = e instanceof Error ? e.message : t('plan.generateWorkoutsError')
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -72,16 +70,13 @@ export function PushWeekToWahooDialog({ planId }: Props) {
     }
   }
 
-  const slug = getTeamSlug()
-  const profileHref = slug ? `/t/${slug}/profile` : '/'
-
-  const statusLabel: Record<PushResultItem['status'], string> = {
-    pushed: t('plan.statusPushed'),
+  const statusLabel: Record<GenerateResultItem['status'], string> = {
+    generated: t('plan.statusGenerated'),
     skipped: t('plan.statusSkipped'),
     failed: t('plan.statusFailed'),
   }
-  const statusColor: Record<PushResultItem['status'], string> = {
-    pushed: 'text-green-600',
+  const statusColor: Record<GenerateResultItem['status'], string> = {
+    generated: 'text-green-600',
     skipped: 'text-muted-foreground',
     failed: 'text-destructive',
   }
@@ -89,18 +84,18 @@ export function PushWeekToWahooDialog({ planId }: Props) {
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Send className="h-4 w-4" />
-        <span className="ml-1 hidden sm:inline">{t('plan.pushWeekToWahoo')}</span>
+        <Sparkles className="h-4 w-4" />
+        <span className="ml-1 hidden sm:inline">{t('plan.generateWorkouts')}</span>
       </Button>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('plan.pushWeekToWahoo')}</DialogTitle>
+            <DialogTitle>{t('plan.generateWorkouts')}</DialogTitle>
           </DialogHeader>
 
           {results ? (
             results.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t('plan.pushWeekNothing')}</p>
+              <p className="text-sm text-muted-foreground">{t('plan.generateWorkoutsNothing')}</p>
             ) : (
               <ul className="space-y-1 text-sm">
                 {results.map((r) => (
@@ -115,27 +110,18 @@ export function PushWeekToWahooDialog({ planId }: Props) {
               </ul>
             )
           ) : (
-            <p className="text-sm text-muted-foreground">{t('plan.pushWeekDescription')}</p>
+            <p className="text-sm text-muted-foreground">{t('plan.generateWorkoutsDescription')}</p>
           )}
 
-          {error && (
-            <p className="text-sm text-destructive">
-              {error}{' '}
-              {error === t('plan.reconnectWahoo') && (
-                <a href={profileHref} className="underline">
-                  {t('plan.goToProfile')}
-                </a>
-              )}
-            </p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => handleOpenChange(false)}>
               {results ? t('plan.close') : t('plan.unlinkCancel')}
             </Button>
             {!results && (
-              <Button disabled={loading} onClick={handlePush}>
-                {loading ? t('plan.pushing') : t('plan.pushWeekToWahoo')}
+              <Button disabled={loading} onClick={handleGenerate}>
+                {loading ? t('plan.generating') : t('plan.generateWorkouts')}
               </Button>
             )}
           </DialogFooter>

@@ -84,23 +84,24 @@ class LinkActivityRequest(BaseModel):
     activity_id: str
 
 
-class PushUpcomingWahooRequest(BaseModel):
-    """Optional explicit date range (within Wahoo's today→+6 window) and refresh flag."""
+class GenerateUpcomingWorkoutsRequest(BaseModel):
+    """Optional explicit date range (within the upcoming-week window) and refresh flag."""
     start: Optional[date] = None
     end: Optional[date] = None
     refresh: bool = False  # regenerate cached workout definitions instead of reusing
 
 
-class PushUpcomingResultItem(BaseModel):
+class GenerateUpcomingResultItem(BaseModel):
     planned_workout_id: str
     date: date
     workout_type: Optional[str] = None
-    status: str  # "pushed" | "skipped" | "failed"
+    workout_definition_id: Optional[str] = None
+    status: str  # "generated" | "skipped" | "failed"
     reason: Optional[str] = None
 
 
-class PushUpcomingWahooResponse(BaseModel):
-    results: list[PushUpcomingResultItem] = []
+class GenerateUpcomingWorkoutsResponse(BaseModel):
+    results: list[GenerateUpcomingResultItem] = []
 
 
 class TrainingPlanResponse(BaseModel):

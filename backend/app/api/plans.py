@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,30 +8,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.deps import get_ctx_and_session
 from backend.app.db.registry import get_registry_session
-from backend.app.models.registry_orm import ProviderConnection, Team
+from backend.app.models.registry_orm import Team
 from backend.app.models.team_orm import (
-    Athlete, TrainingPlan, PlannedWorkout, WahooWorkoutUpload, WorkoutDefinition,
+    Athlete, TrainingPlan, PlannedWorkout, WorkoutDefinition,
 )
 from backend.app.models.team_orm import Activity
 from backend.app.schemas.plans import (
     TrainingPlanCreate, TrainingPlanUpdate, TrainingPlanResponse,
     LinkActivityRequest, PlannedWorkoutResponse, SkipWorkoutRequest,
     PlannedWorkoutCreate, PlannedWorkoutUpdate, RegeneratePlanRequest,
-    PushUpcomingWahooRequest, PushUpcomingWahooResponse, PushUpcomingResultItem,
+    GenerateUpcomingWorkoutsRequest, GenerateUpcomingWorkoutsResponse,
+    GenerateUpcomingResultItem,
 )
 from backend.app.services.plan_generator import generate_plan, build_workout_rows
 from backend.app.services.llm_plan_generator import generate_plan_llm, generate_plan_weeks_llm
 from backend.app.services.llm_workout_generator import (
     generate_workout_definition_llm, WorkoutGenerationError,
 )
-from backend.app.services.provider_sync import ensure_fresh_token
-from backend.app.services.providers.wahoo import WahooClient, workout_type_id_for
-from openkoutsi.workout_formats.wahoo_plan import build_wahoo_plan
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
-# Wahoo only displays plans attached to a workout scheduled today → +6 days.
-_WAHOO_VISIBILITY_DAYS = 6
+# Workouts are generated for the upcoming week (today → +6 days) by default.
+_GENERATE_WINDOW_DAYS = 6
 
 
 def _planned_date(start_date, week_number: int, day_of_week: int):
@@ -530,21 +528,21 @@ async def regenerate_plan(
     return TrainingPlanResponse.model_validate(plan)
 
 
-@router.post("/{plan_id}/push-upcoming/wahoo", response_model=PushUpcomingWahooResponse)
-async def push_upcoming_to_wahoo(
+@router.post("/{plan_id}/generate-upcoming/workouts", response_model=GenerateUpcomingWorkoutsResponse)
+async def generate_upcoming_workouts(
     plan_id: str,
-    body: PushUpcomingWahooRequest,
+    body: GenerateUpcomingWorkoutsRequest,
     ctx_session=Depends(get_ctx_and_session),
     registry_session: AsyncSession = Depends(get_registry_session),
 ):
-    """Synthesize structured workouts for the plan's upcoming days and push them to Wahoo.
+    """Synthesize structured workouts for the plan's upcoming days (no upload).
 
-    For each planned workout falling within Wahoo's today→+6 visibility window
-    (rest days and unstructured rows excluded), ensure a structured
+    For each planned workout falling within the upcoming-week window (today→+6;
+    rest days and unstructured rows excluded), ensure a structured
     ``WorkoutDefinition`` exists — generating one via the LLM and caching it on
-    ``PlannedWorkout.workout_definition_id`` when missing — then create/update a
-    Wahoo plan + scheduled workout pair (mirroring the single-workout push from
-    #114). Returns a per-workout summary.
+    ``PlannedWorkout.workout_definition_id`` when missing. The generated workouts
+    show up in the Workouts tab, where they can be reviewed, edited, and uploaded
+    individually. Returns a per-workout summary.
     """
     ctx, session = ctx_session
     athlete = await _get_athlete(ctx.user_id, session)
@@ -560,22 +558,10 @@ async def push_upcoming_to_wahoo(
     if not plan.start_date:
         raise HTTPException(400, "Plan has no start date")
 
-    # Resolve the Wahoo connection and a fresh access token.
-    conn_result = await registry_session.execute(
-        select(ProviderConnection).where(
-            ProviderConnection.user_id == ctx.user_id,
-            ProviderConnection.provider == "wahoo",
-        )
-    )
-    conn = conn_result.scalar_one_or_none()
-    if conn is None:
-        raise HTTPException(status_code=400, detail="wahoo is not connected")
-    access_token = await ensure_fresh_token(conn, registry_session)
-
     # Compute the [start, end] selection window, clamped to today→+6 days.
     today = datetime.now(timezone.utc).date()
     window_start = today
-    window_end = today + timedelta(days=_WAHOO_VISIBILITY_DAYS)
+    window_end = today + timedelta(days=_GENERATE_WINDOW_DAYS)
     if body.start and body.start > window_start:
         window_start = body.start
     if body.end and body.end < window_end:
@@ -592,20 +578,19 @@ async def push_upcoming_to_wahoo(
             selected.append((pw, pdate))
     selected.sort(key=lambda item: item[1])
 
-    client = WahooClient()
-    results: list[PushUpcomingResultItem] = []
+    results: list[GenerateUpcomingResultItem] = []
 
     for pw, pdate in selected:
         wtype = (pw.workout_type or "").lower()
         if wtype in ("", "rest") or (pw.duration_min is None and pw.target_tss is None):
-            results.append(PushUpcomingResultItem(
+            results.append(GenerateUpcomingResultItem(
                 planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
                 status="skipped", reason="rest_or_unstructured",
             ))
             continue
 
         # Reuse a cached definition unless missing or a refresh was requested.
-        workout: WorkoutDefinition | None = None
+        existing: WorkoutDefinition | None = None
         if pw.workout_definition_id and not body.refresh:
             wd_result = await session.execute(
                 select(WorkoutDefinition).where(
@@ -613,106 +598,49 @@ async def push_upcoming_to_wahoo(
                     WorkoutDefinition.athlete_id == athlete.id,
                 )
             )
-            workout = wd_result.scalar_one_or_none()
+            existing = wd_result.scalar_one_or_none()
 
-        if workout is None:
-            try:
-                workout = await generate_workout_definition_llm(
-                    athlete=athlete,
-                    planned_workout=pw,
-                    session=session,
-                    team=team,
-                    team_id=ctx.team_id,
-                    user_id=ctx.user_id,
-                )
-            except ValueError as exc:
-                # LLM not configured — no workout can be generated; fail clearly.
-                raise HTTPException(400, str(exc)) from exc
-            except WorkoutGenerationError as exc:
-                results.append(PushUpcomingResultItem(
-                    planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
-                    status="failed", reason=f"generation_failed: {exc}",
-                ))
-                continue
-            except httpx.HTTPError:
-                # Transient LLM connectivity/HTTP error — skip this day, keep the batch going.
-                results.append(PushUpcomingResultItem(
-                    planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
-                    status="failed", reason="generation_failed: llm_unavailable",
-                ))
-                continue
-
-        external_id = f"okoutsi-pw-{pw.id}"
-        starts = datetime.combine(pdate, time(12, 0), tzinfo=timezone.utc)
-
-        upload_result = await session.execute(
-            select(WahooWorkoutUpload).where(
-                WahooWorkoutUpload.athlete_id == athlete.id,
-                WahooWorkoutUpload.external_id == external_id,
-            )
-        )
-        upload = upload_result.scalar_one_or_none()
-
-        plan_json = build_wahoo_plan(
-            steps=workout.steps,
-            workout_name=workout.name,
-            workout_description=workout.description,
-            sport_type=workout.sport_type,
-            athlete_ftp=athlete.ftp,
-            athlete_power_zones=athlete.power_zones,
-        )
-        minutes = max(1, round((workout.estimated_duration_s or 0) / 60)) or 1
-
-        try:
-            wahoo_plan_id = await client.create_or_update_plan(
-                access_token,
-                plan_json=plan_json,
-                external_id=external_id,
-                provider_updated_at=workout.updated_at,
-                filename=f"{external_id}.json",
-            )
-            wahoo_workout_id = await client.create_or_update_workout(
-                access_token,
-                name=workout.name,
-                workout_token=external_id,
-                workout_type_id=workout_type_id_for(workout.sport_type),
-                starts=starts,
-                minutes=minutes,
-                plan_id=wahoo_plan_id,
-                existing_id=upload.wahoo_workout_id if upload else None,
-            )
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code in (401, 403):
-                # An auth/scope failure affects every push — persist any workouts
-                # generated so far and surface the reconnect signal, as in #114.
-                await session.commit()
-                raise HTTPException(status_code=403, detail="insufficient_scope")
-            results.append(PushUpcomingResultItem(
+        if existing is not None:
+            results.append(GenerateUpcomingResultItem(
                 planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
-                status="failed", reason="wahoo_error",
+                workout_definition_id=existing.id,
+                status="skipped", reason="already_generated",
             ))
             continue
 
-        if upload is None:
-            upload = WahooWorkoutUpload(
-                athlete_id=athlete.id,
-                workout_definition_id=workout.id,
-                external_id=external_id,
+        try:
+            workout = await generate_workout_definition_llm(
+                athlete=athlete,
+                planned_workout=pw,
+                session=session,
+                team=team,
+                team_id=ctx.team_id,
+                user_id=ctx.user_id,
             )
-            session.add(upload)
-        upload.workout_definition_id = workout.id
-        upload.wahoo_plan_id = wahoo_plan_id
-        upload.wahoo_workout_id = wahoo_workout_id
-        upload.starts = starts
-        upload.provider_updated_at = workout.updated_at
+        except ValueError as exc:
+            # LLM not configured — no workout can be generated; fail clearly.
+            raise HTTPException(400, str(exc)) from exc
+        except WorkoutGenerationError as exc:
+            results.append(GenerateUpcomingResultItem(
+                planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
+                status="failed", reason=f"generation_failed: {exc}",
+            ))
+            continue
+        except httpx.HTTPError:
+            # Transient LLM connectivity/HTTP error — skip this day, keep the batch going.
+            results.append(GenerateUpcomingResultItem(
+                planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
+                status="failed", reason="generation_failed: llm_unavailable",
+            ))
+            continue
 
-        results.append(PushUpcomingResultItem(
+        results.append(GenerateUpcomingResultItem(
             planned_workout_id=pw.id, date=pdate, workout_type=pw.workout_type,
-            status="pushed",
+            workout_definition_id=workout.id, status="generated",
         ))
 
     await session.commit()
-    return PushUpcomingWahooResponse(results=results)
+    return GenerateUpcomingWorkoutsResponse(results=results)
 
 
 @router.delete("/{plan_id}", status_code=204)

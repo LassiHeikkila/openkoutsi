@@ -11,9 +11,9 @@ import {
 } from 'recharts'
 import type { PowerBestEntry } from '@/lib/types'
 
-// All 24 standard durations in seconds
+// All standard durations in seconds
 const DURATIONS = [
-  1, 3, 5, 10, 15, 30, 45, 60, 120, 180, 300, 480,
+  1, 3, 5, 10, 15, 30, 45, 60, 120, 180, 300, 480, 600,
   900, 1200, 1800, 2700, 3600, 7200, 10800, 14400,
   18000, 21600, 25200, 28800,
 ]

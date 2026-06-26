@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PowerCurveChart, formatDuration } from '@/components/charts/PowerCurveChart'
 
-// All 24 standard power durations
+// All standard power durations
 const POWER_DURATIONS = [
-  1, 3, 5, 10, 15, 30, 45, 60, 120, 180, 300, 480,
+  1, 3, 5, 10, 15, 30, 45, 60, 120, 180, 300, 480, 600,
   900, 1200, 1800, 2700, 3600, 7200, 10800, 14400,
   18000, 21600, 25200, 28800,
 ]
